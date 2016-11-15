@@ -1,0 +1,5 @@
+# coding:utf-8
+
+PATH_TRACE_FILES = 'bin/trace/'
+LENGTH_SEQUENCE_INPUT = 10
+LENGTH_SEQUENCE_OUTPUT = 10
