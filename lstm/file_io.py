@@ -1,8 +1,8 @@
 # coding:utf-8
 import numpy
-# import math
 import os  # 文件夹操作
 import config
+import theano
 
 
 def read_triples_from_file(filename):
@@ -26,7 +26,6 @@ def read_triples_from_file(filename):
 
 
 def read_traces_from_path(path):
-    # todo exception handler for invalid path
     # todo add filename filter
     """
     对给定目录下的所有文件，读取轨迹序列，放入返回 dict。
@@ -38,8 +37,7 @@ def read_traces_from_path(path):
     dict_traces = {}
 
     if not os.path.exists(path):
-        print 'Invalid Path: ' + path
-        return
+        raise IOError('read_traces_from_path @ file_io: \n\tInvalid Path: ' + path)
     else:
         list_subdir = os.listdir(path)
         list_files = [subdir for subdir in list_subdir if os.path.isfile(path + subdir)]
@@ -73,8 +71,10 @@ def generate_input_sequences(dict_traces, node_identifiers, i_line_entry, with_t
     # 选中所有节点的轨迹
     else:
         nodes_requested = dict_traces.keys()
-    # todo exception handler if no value found by given key
-    dict_traces_requested = {node_id: dict_traces[node_id] for node_id in nodes_requested}
+    try:
+        dict_traces_requested = {node_id: dict_traces[node_id] for node_id in nodes_requested}
+    except KeyError:
+        raise KeyError("generate_input_sequences @ file_io: \n\tNo value found by given key")
 
     # 计算不同节点轨迹长度的最小值
     min_len_trace = min([len(trace) for trace in dict_traces_requested.values()])
@@ -209,6 +209,9 @@ def generate_input_sequences(dict_traces, node_identifiers, i_line_entry, with_t
 #     return vector_dim, X_train, Y_train, X_test, Y_test, min_x, min_y, disperse_matrix_width, disperse_matrix_height
 
 
+__all__ = ["generate_input_sequences"]
+
+
 def test_file_io():
     demo_list_triples = read_triples_from_file('data/2.trace')
     dict_all_traces = read_traces_from_path('data/')
@@ -221,5 +224,5 @@ def test_file_io():
     return
 
 
-if __name__ == '__main__':
-    test_file_io()
+# if __name__ == '__main__':
+#     test_file_io()
