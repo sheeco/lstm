@@ -64,3 +64,9 @@
 
 - ADD: 加载 batch 的函数 `load_batch_for_nodes`；
 - RFCT: 重命名文件 `file_io.py` 为 `sample.py`，及一些函数重命名；
+
+###### 2016-11-25
+
+- MOD: 调整函数 `load_batch_for_nodes` 返回数组的维度次序为：节点->批->序列->采样维度；
+- FIX: `sample.py` 中的输出错误；
+- ADD: `config.py` 中的参数；

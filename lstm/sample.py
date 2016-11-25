@@ -1,7 +1,7 @@
 # coding:utf-8
 import numpy
 import os  # 文件夹操作
-import config
+from config import *
 
 
 def read_triples_from_file(filename):
@@ -36,7 +36,7 @@ def read_traces_from_path(path):
     dict_traces = {}
 
     if not os.path.exists(path):
-        raise IOError('read_traces_from_path @ file_io: \n\tInvalid Path: ' + path)
+        raise IOError('read_traces_from_path @ file_io: \n\tInvalid Path: ' + str(path))
     else:
         list_subdir = os.listdir(path)
         list_files = [subdir for subdir in list_subdir if os.path.isfile(path + subdir)]
@@ -55,7 +55,7 @@ def read_traces_from_path(path):
 
 def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target=True):
     """
-    从指定节点的轨迹中，以指定位置作为起始 instant，为网络的训练/测试生成输入序列（及目标序列），放入返回的 array。
+    指定起始位置，为单次训练/测试生成所有节点的输入序列（及目标序列）。
     注意：如果超出最大采样数，将返回 2 个空值，因此需要对返回值进行验证之后再使用
     :param dict_traces: 由 @read_traces_from_path 返回的 dict{轨迹文件名 string: 采样三元组 list}
     :param filter_nodes: 用于指定所选节点集合的 array/list[string 节点标识符]
@@ -82,13 +82,14 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
     traces_requested = numpy.array([numpy.array(trace)[:min_len_trace, :] for trace in dict_traces_requested.values()],
                                    dtype=numpy.float64)
 
-    # 不使用 time 作为输入元组的一部分，删除第 0 列
-    traces_requested = traces_requested[:, :, 1:]
+    if DIMENSION_INPUT == 2:
+        # 不使用 time 作为输入元组的一部分，删除第 0 列
+        traces_requested = traces_requested[:, :, 1:]
 
     begin_line_input = idx_line_entry
-    end_line_input = begin_line_input + config.LENGTH_SEQUENCE_INPUT
+    end_line_input = begin_line_input + LENGTH_SEQUENCE_INPUT
     begin_line_target = end_line_input
-    end_line_target = begin_line_target + config.LENGTH_SEQUENCE_OUTPUT
+    end_line_target = begin_line_target + LENGTH_SEQUENCE_OUTPUT
 
     # 如果超出采样数，返回 [], []
     sequences_input = numpy.zeros((0, 0, 0))
@@ -105,6 +106,16 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
 
 
 def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, with_target=True):
+    """
+    指定起始位置及批大小，为单批次的训练/测试生成所有节点的输入序列（及目标序列）。
+    注意：如果超出最大采样数，将返回 2 个空值，因此需要对返回值进行验证之后再使用
+    :param dict_traces: 由 @read_traces_from_path 返回的 dict{轨迹文件名 string: 采样三元组 list}
+    :param size_batch: int 批大小
+    :param filter_nodes: 用于指定所选节点集合的 array/list[string 节点标识符]
+    :param idx_line_entry: int 指定序列起始 instant 在轨迹文件中对应的行号（由 0 开始）
+    :param with_target: bool 是否返回学习目标，默认 True；如果为 False，第二个返回值即为空
+    :return: array[:所选节点数, size_batch, :LENGTH_SEQUENCE_INPUT, :2], array[:所选节点数, size_batch, :LENGTH_SEQUENCE_OUTPUT， :2]
+    """
     batch_input = numpy.zeros((0, 0, 0, 0))
     batch_target = numpy.zeros((0, 0, 0, 0))
     for i in range(size_batch):
@@ -112,17 +123,18 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
                                                             with_target)
         if len(sample_input) > 0:
             shape_in = sample_input.shape
-            batch_input = numpy.resize(batch_input, (i + 1, shape_in[0], shape_in[1], shape_in[2]))
-            batch_input[i] = sample_input
-            # batch_input = numpy.concatenate((batch_input, sample_input), 1) if len(batch_input) > 0 else sample_input
+            batch_input = numpy.resize(batch_input, (shape_in[0], i + 1, shape_in[1], shape_in[2]))
+            for inode in range(shape_in[0]):
+                batch_input[inode, i] = sample_input[inode]
             if with_target:
                 shape_target = sample_target.shape
-                batch_target = numpy.resize(batch_target, (i + 1, shape_target[0], shape_target[1], shape_target[2]))
-                batch_target[i] = sample_target
+                batch_target = numpy.resize(batch_target, (shape_target[0], i + 1, shape_target[1], shape_target[2]))
+                for inode in range(shape_target[0]):
+                    batch_target[inode, i] = sample_target[inode]
         elif len(batch_input) == 0:
             return batch_input, batch_target
         else:
-            print "Warning: Insufficient batch, only " + len(batch_input) + " samples left"
+            print "Warning: Insufficient batch, only ", batch_input.shape[1], " samples left"
             break
     return batch_input, batch_target
 
@@ -134,22 +146,20 @@ __all__ = ["read_traces_from_path",
 def test_sample():
     demo_list_triples = read_triples_from_file('res/trace/2.trace')
     print numpy.shape(demo_list_triples)
-    dict_all_traces = read_traces_from_path(config.PATH_TRACE_FILES)
+    dict_all_traces = read_traces_from_path(PATH_TRACE_FILES)
     in_sample, target_sample = load_sample_for_nodes(dict_all_traces, [], 0, True)
     print numpy.shape(in_sample), numpy.shape(target_sample)
     in_sample, target_sample = load_sample_for_nodes(dict_all_traces, ['1', '2'], 0, True)
-    print numpy.shape(in_sample), numpy.shape(target_sample)
-    in_sample, target_sample = load_sample_for_nodes(dict_all_traces, numpy.array(['1', '2']), 0, True)
     print numpy.shape(in_sample), numpy.shape(target_sample)
     in_sample, target_sample = load_sample_for_nodes(dict_all_traces, [], 1, True)
     print numpy.shape(in_sample), numpy.shape(target_sample)
     in_sample, target_sample = load_sample_for_nodes(dict_all_traces, [], 0, False)
     print numpy.shape(in_sample), numpy.shape(target_sample)
-    in_batch, target_batch = load_batch_for_nodes(dict_all_traces, 3, [], 0, True)
+    in_batch, target_batch = load_batch_for_nodes(dict_all_traces, 11, [], 0, True)
     print numpy.shape(in_batch), numpy.shape(target_batch)
 
     return
 
 
-if __name__ == '__main__':
-    test_sample()
+# if __name__ == '__main__':
+#     test_sample()
