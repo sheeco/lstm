@@ -65,8 +65,13 @@
 - ADD: 加载 batch 的函数 `load_batch_for_nodes`；
 - RFCT: 重命名文件 `file_io.py` 为 `sample.py`，及一些函数重命名；
 
-###### 2016-11-25
+###### [ 2016-11-25 ]( b9ab414351b1855919b3672874da2932c096d05c )
 
 - MOD: 调整函数 `load_batch_for_nodes` 返回数组的维度次序为：节点->批->序列->采样维度；
 - FIX: `sample.py` 中的输出错误；
 - ADD: `config.py` 中的参数；
+
+###### 2016-11-25
+
+- ADD: 修改自 [lstm_text_generation](https://github.com/Lasagne/Recipes/blob/master/examples/lstm_text_generation.py) 的 demo；
+- [ ] BUG: 能够正常运行，但有时会得到 `NaN`；
