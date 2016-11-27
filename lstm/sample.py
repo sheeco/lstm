@@ -82,7 +82,7 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
     traces_requested = numpy.array([numpy.array(trace)[:min_len_trace, :] for trace in dict_traces_requested.values()],
                                    dtype=numpy.float64)
 
-    if DIMENSION_INPUT == 2:
+    if DIMENSION_SAMPLE == 2:
         # 不使用 time 作为输入元组的一部分，删除第 0 列
         traces_requested = traces_requested[:, :, 1:]
 

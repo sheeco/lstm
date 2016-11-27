@@ -26,19 +26,77 @@ def demo():
     # Recurrent layers expect input of shape
     # (batch_size, SEQ_LENGTH, num_features)
 
-    l_in = lasagne.layers.InputLayer(shape=(None, None, DIMENSION_INPUT))  # None?
+    # (x, y)
+    l_in = lasagne.layers.InputLayer(shape=(SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
+    # e = relu(x, y; We)
+    l_e = lasagne.layers.NonlinearityLayer(l_in, nonlinearity=lasagne.nonlinearities.rectify)
+
+    l_social_pooling = lasagne.layers.InputLayer(shape=(SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
+
+    all_samples, all_targets = sample.load_batch_for_nodes(sample.read_traces_from_path(PATH_TRACE_FILES),
+                                                           SIZE_BATCH, [], 0, True)
+
+    mn_pool = numpy.zeros((1, 2), dtype=int)
+    distance_xy = numpy.zeros((1, 2), dtype=float)
+    # todo test
+    # True / False
+    within_grid = sum((distance_xy >= SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2)) \
+                                    & (distance_xy < SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2 + 1))) == 2
+    # distance_xy = other_xy - my_xy
+    # m, n in [0, RANGE_NEIGHBORHOOD)
+    indication = theano.function([mn_pool, distance_xy], within_grid)
+
+    # my_xy = numpy.zeros((1, 2), dtype=float)
+    # other_xys = numpy.zeros((N_NODES, 2), dtype=float)
+    # matrix_indicator = numpy.zeros((RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD), dtype=int)
+    # for inode in xrange(N_NODES):
+    #     for m in xrange(RANGE_NEIGHBORHOOD):
+    #         for n in xrange(RANGE_NEIGHBORHOOD):
+    #             matrix_indicator[m, n] = indication([m, n], other_xys[inode] - my_xy)
+    # # todo test
+    # indicator = theano.function([my_xy, other_xys], matrix_indicator)
+
+    def social_hidden_tensor(traces, i_my_node, lstm_hiddens):
+        """
+
+        :param traces: [N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 2]
+        :param i_my_node: int
+        :param lstm_hiddens: [N_NODES, SIZE_BATCH, DIMENSION_HIDDEN_LAYERS]
+        :return:
+        """
+        # whats shape of lstm_hiddens?
+        ret = numpy.zeros((SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, DIMENSION_HIDDEN_LAYERS))
+        my_trace = traces[i_my_node]
+        other_traces = numpy.concatenate((traces[:i_my_node], traces[i_my_node + 1:]), 0)
+        for ibatch in xrange(SIZE_BATCH):
+            for iseq in xrange(LENGTH_SEQUENCE_INPUT):
+                for m in xrange(RANGE_NEIGHBORHOOD):
+                    for n in xrange(RANGE_NEIGHBORHOOD):
+                        for jnode in xrange(traces.shape[0]):
+                            if jnode == i_my_node:
+                                continue
+                            ret[ibatch, iseq, m ,n] += indication([m, n], traces[jnode, ibatch, iseq] - my_trace[jnode, ibatch, iseq]) \
+                                                       * lstm_hiddens[jnode, ibatch]
+        return ret
+
+    l_a = lasagne.layers.DenseLayer(social_hidden_tensor(all_samples, inode, lstm_hiddens), nonlinearity=lasagne.nonlinearities.rectify)
+
+    l_hidden = lasagne.layers.LSTMLayer([l_e, l_a], DIMENSION_HIDDEN_LAYERS, nonlinearity=lasagne.nonlinearities.tanh)
+
+    # l_in_hid = lasagne.layers.DenseLayer(n_batch, n_steps, n_in = (2, 3, 4)
+    # n_hid = 5
+    # l_in = lasagne.layers.InputLayer((n_batch, n_steps, n_in))
+    # lasagne.layers.InputLayer((None, n_in)), n_hid)
+    # l_hid_hid = lasagne.layers.DenseLayer(lasagne.layers.InputLayer((None, n_hid)), n_hid)
+    # l_rec = lasagne.layers.CustomRecurrentLayer(l_in, l_in_hid, l_hid_hid)
 
     # We now build the LSTM layer which takes l_in as the input layer
     # We clip the gradients at GRAD_CLIP to prevent the problem of exploding gradients.
 
+    # only_return_final = True?
     l_forward_1 = lasagne.layers.LSTMLayer(
-        l_in, DIMENSION_HIDDEN_LAYERS[0], grad_clipping=GRAD_CLIP,
+        l_in, DIMENSION_HIDDEN_LAYERS, grad_clipping=GRAD_CLIP,
         nonlinearity=lasagne.nonlinearities.tanh)
-
-    l_forward_2 = lasagne.layers.LSTMLayer(
-        l_forward_1, DIMENSION_HIDDEN_LAYERS[1], grad_clipping=GRAD_CLIP,
-        nonlinearity=lasagne.nonlinearities.tanh,
-        only_return_final=True)  # whats only_return_final?
 
     # Parameter sharing between multiple layers can be achieved by using the same Theano shared variable instance
     # for their parameters. e.g.
@@ -67,7 +125,7 @@ def demo():
 
     # Compute RMSProp updates for training
     print("Computing updates ...")
-    updates = lasagne.updates.rmsprop(cost, all_params, LEARNING_RATE)
+    updates = lasagne.updates.rmsprop(cost, all_params, LEARNING_RATE_RMSPROP)
 
     # Theano functions for training and computing cost
     print("Compiling functions ...")
@@ -77,7 +135,7 @@ def demo():
     predict = theano.function([l_in.input_var], network_output, allow_input_downcast=True)
 
     def try_it_out():
-        preds = numpy.zeros((node_count, DIMENSION_INPUT))
+        preds = numpy.zeros((node_count, DIMENSION_SAMPLE))
         ins, tars = sample.load_batch_for_nodes(all_traces, 1, [], 0, True)
 
         for i in range(LENGTH_SEQUENCE_OUTPUT):

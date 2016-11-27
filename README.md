@@ -71,7 +71,11 @@
 - FIX: `sample.py` 中的输出错误；
 - ADD: `config.py` 中的参数；
 
-###### 2016-11-25
+###### [ 2016-11-25 ]( e06e548390787b7f073534d2f07affd7fdf18897 )
 
 - ADD: 修改自 [lstm_text_generation](https://github.com/Lasagne/Recipes/blob/master/examples/lstm_text_generation.py) 的 demo；
 - [ ] BUG: 能够正常运行，但有时会得到 `NaN`；
+
+###### 2016-11-28
+
+- 
