@@ -8,9 +8,9 @@ DIMENSION_SAMPLE = 2
 LENGTH_SEQUENCE_INPUT = 10
 # Length of predicted sequence
 LENGTH_SEQUENCE_OUTPUT = 1
-# Number of units in input layer
-# DIMENSION_INPUT_LAYER = 64
-DIMENSION_INPUT_LAYER = 3
+# Number of units in embedding layer ([x, y] -> e)
+# DIMENSION_EMBED_LAYER = 64
+DIMENSION_EMBED_LAYER = 3
 # Number of units in each hidden (LSTM) layers
 # DIMENSION_HIDDEN_LAYERS = 128
 DIMENSION_HIDDEN_LAYERS = 5

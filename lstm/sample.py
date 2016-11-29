@@ -114,8 +114,11 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
     :param filter_nodes: 用于指定所选节点集合的 array/list[string 节点标识符]
     :param idx_line_entry: int 指定序列起始 instant 在轨迹文件中对应的行号（由 0 开始）
     :param with_target: bool 是否返回学习目标，默认 True；如果为 False，第二个返回值即为空
-    :return: array[:所选节点数, size_batch, :LENGTH_SEQUENCE_INPUT, :2], array[:所选节点数, size_batch, :LENGTH_SEQUENCE_OUTPUT， :2]
+    # :return: array[size_batch, N_NODES, LENGTH_SEQUENCE_INPUT, 2], array[size_batch, N_NODES, LENGTH_SEQUENCE_OUTPUT, 2]
+    :return: array[N_NODES, size_batch, LENGTH_SEQUENCE_INPUT, 2], array[N_NODES, size_batch, LENGTH_SEQUENCE_OUTPUT, 2]
     """
+    # todo add boolean arg redundant_batch
+
     batch_input = numpy.zeros((0, 0, 0, 0))
     batch_target = numpy.zeros((0, 0, 0, 0))
     for i in range(size_batch):
@@ -123,6 +126,15 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
                                                             with_target)
         if len(sample_input) > 0:
             shape_in = sample_input.shape
+
+        #     batch_input = numpy.resize(batch_input, (i + 1, shape_in[0], shape_in[1], shape_in[2]))
+        #     batch_input[i] = sample_input
+        #     # batch_input = numpy.concatenate((batch_input, sample_input), 1) if len(batch_input) > 0 else sample_input
+        #     if with_target:
+        #         shape_target = sample_target.shape
+        #         batch_target = numpy.resize(batch_target, (i + 1, shape_target[0], shape_target[1], shape_target[2]))
+        #         batch_target[i] = sample_target
+
             batch_input = numpy.resize(batch_input, (shape_in[0], i + 1, shape_in[1], shape_in[2]))
             for inode in range(shape_in[0]):
                 batch_input[inode, i] = sample_input[inode]
@@ -131,6 +143,7 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
                 batch_target = numpy.resize(batch_target, (shape_target[0], i + 1, shape_target[1], shape_target[2]))
                 for inode in range(shape_target[0]):
                     batch_target[inode, i] = sample_target[inode]
+
         elif len(batch_input) == 0:
             return batch_input, batch_target
         else:
