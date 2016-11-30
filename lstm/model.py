@@ -106,24 +106,116 @@ class SocialPoolingLayer(lasagne.layers.MergeLayer):
         #     self.get_output_kwargs = []
 
 
+def match(shape1, shape2):
+    return (len(shape1) == len(shape2) and
+            all(s1 is None or s2 is None or s1 == s2
+                for s1, s2 in zip(shape1, shape2)))
+
+
+# todo test
+def get_shape_dot_product(in_shapes):
+    in_shapes = [in_shapes]
+    if len(in_shapes) == 0:
+        return tuple()
+    left = in_shapes[0]
+    for right in (in_shapes[1:]):
+        if left[-1] == right[0]:
+            left = left[:-1]
+            left += (right[1],) if len(right) > 1 else (1,)
+        else:
+            raise ValueError("get_shape_dot_product @ model: \n\tDimensions are not matched: " + str(left[-1]) + " != "
+                             + str(right[0]))
+    return left
+
+
 class ListMergeLayer(lasagne.layers.MergeLayer):
+    """
+    Merge inputs of exactly the same shape into one single list (creating an additional axis to concatenate by).
+    """
     def get_output_for(self, inputs, **kwargs):
         return inputs
 
     def get_output_shape_for(self, input_shapes):
-        def match(shape1, shape2):
-            return (len(shape1) == len(shape2) and
-                    all(s1 is None or s2 is None or s1 == s2
-                        for s1, s2 in zip(shape1, shape2)))
-
         assert all(match(shape, input_shapes[0]) for shape in input_shapes)
         output_shape = (len(input_shapes), )
         return output_shape + input_shapes[0]
 
 
+# Snippet from https://github.com/Lasagne/Lasagne/issues/584 by @trungnt13
+class ExpressionMergeLayer(lasagne.layers.MergeLayer):
+
+    """
+    This layer performs an custom expressions on list of inputs to merge them.
+    This layer is different from ElemwiseMergeLayer by not required all
+    input_shapes are equal
+
+    Parameters
+    ----------
+    incomings : a list of :class:`Layer` instances or tuples
+        the layers feeding into this layer, or expected input shapes
+
+    merge_function : callable
+        the merge function to use. Should take two arguments and return the
+        updated value. Some possible merge functions are ``theano.tensor``:
+        ``mul``, ``add``, ``maximum`` and ``minimum``.
+
+    output_shape : None, callable, tuple, or 'auto'
+        Specifies the output shape of this layer. If a tuple, this fixes the
+        output shape for any input shape (the tuple can contain None if some
+        dimensions may vary). If a callable, it should return the calculated
+        output shape given the input shape. If None, the output shape is
+        assumed to be the same as the input shape. If 'auto', an attempt will
+        be made to automatically infer the correct output shape.
+
+    Notes
+    -----
+    if ``output_shape=None``, this layer chooses first input_shape as its
+    output_shape
+
+    Example
+    --------
+    >> from lasagne.layers import InputLayer, DimshuffleLayer, ExpressionMergeLayer
+    >> l_in = lasagne.layers.InputLayer(shape=(None, 500, 120))
+    >> l_mask = lasagne.layers.InputLayer(shape=(None, 500))
+    >> l_dim = lasagne.layers.DimshuffleLayer(l_mask, pattern=(0, 1, 'x'))
+    >> l_out = lasagne.layers.ExpressionMergeLayer(
+                                (l_in, l_dim), tensor.mul, output_shape='auto')
+    (None, 500, 120)
+    """
+
+    def __init__(self, incomings, merge_function, output_shape=None, **kwargs):
+        super(ExpressionMergeLayer, self).__init__(incomings, **kwargs)
+        if output_shape is None:
+            self._output_shape = None
+        elif output_shape == 'auto':
+            self._output_shape = 'auto'
+        elif hasattr(output_shape, '__call__'):
+            self.get_output_shape_for = output_shape
+        else:
+            self._output_shape = tuple(output_shape)
+
+        self.merge_function = merge_function
+
+    def get_output_shape_for(self, input_shapes):
+        if self._output_shape is None:
+            return input_shapes[0]
+        elif self._output_shape is 'auto':
+            input_shape = [(0 if s is None else s for s in ishape)
+                           for ishape in input_shapes]
+            Xs = [T.alloc(0, *ishape) for ishape in input_shape]
+            output_shape = self.merge_function(*Xs).shape.eval()
+            output_shape = tuple(s if s else None for s in output_shape)
+            return output_shape
+        else:
+            return self._output_shape
+
+    def get_output_for(self, inputs, **kwargs):
+        return self.merge_function(*inputs)
+
+
 def social_matrix(all_nodes):
     """
-    Calculate social hidden-state tensor H for one single training sample in the batch
+    Calculate social hidden-state tensor H for batch of training samples for all nodes
     :param all_nodes: [SIZE_BATCH, N_NODES, LENGTH_SEQUENCE_INPUT, 2]
     :return: [SIZE_BATCH, N_NODES, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES]
     """
@@ -154,54 +246,102 @@ def social_matrix(all_nodes):
     return ret
 
 
-# demo modified based on https://github.com/Lasagne/Recipes/blob/master/examples/lstm_text_generation.py
+
+# todo build the network
+# todo define initializers
+# todo add debug info & assertion
+# todo extract args into config
+# todo write config to .log
+# todo read config from command line args
 
 all_traces = sample.read_traces_from_path(PATH_TRACE_FILES)
-data_size = len(all_traces.items())
+N_SEQUENCES = len(all_traces.items())
+N_NODES = len(all_traces) if N_NODES == 0 else N_NODES
+# 1 batch for each node
+net_inputs, net_targets = sample.load_batch_for_nodes(all_traces, SIZE_BATCH, [], 0, True)
 
-# (x, y)
-l_in = lasagne.layers.InputLayer(name="input", shape=(None, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
+
+# [(x, y)]
+layer_in = lasagne.layers.InputLayer(name="input", shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
 # e = relu(x, y; We)
-l_e = lasagne.layers.DenseLayer(l_in, name="e", num_units=DIMENSION_EMBED_LAYER,
-                                nonlinearity=lasagne.nonlinearities.rectify, num_leading_axes=2)
-w_h_to_H = social_matrix(all_traces)
+layer_e = lasagne.layers.DenseLayer(layer_in, name="e", num_units=DIMENSION_EMBED_LAYER,
+                                    nonlinearity=lasagne.nonlinearities.rectify, num_leading_axes=3)
+assert match(layer_e.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
 
+# [N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES]
+layer_social = lasagne.layers.ExpressionLayer(layer_in, social_matrix)
+
+layer_shuffle = lasagne.layers.DimshuffleLayer(layer_social, (0, 3, 4, 1, 2, 5))
+
+layer_reshaped_left = lasagne.layers.ReshapeLayer(layer_shuffle, ([0], [1], [2], -1, [5]))
+assert match(layer_reshaped_left, (N_NODES, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, None, N_NODES))
+
+
+# w_h_to_H = social_matrix(net_inputs)
 # input layer should be lm_hidden
-l_H = lasagne.layers.DenseLayer(lasagne.layers.InputLayer(shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
-                                , 1, name="", W=w_h_to_H, nonlinearity=None, num_leading_axes=5)
+# [N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES] *
+# layer_H = lasagne.layers.DenseLayer(lasagne.layers.InputLayer(shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+#                                     , 1, name="", W=w_h_to_H, nonlinearity=None, num_leading_axes=3)
+# assert match(layer_H.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES, DIMENSION_HIDDEN_LAYERS))
 
-l_a = lasagne.layers.DenseLayer(l_H, name="", nonlinearity=lasagne.nonlinearities.rectify, num_leading_axes=5)
+# layer_right = lasagne.layers.DimshuffleLayer(lasagne.layers.InputLayer(shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS)), (0, 1, 2, 3))
+layer_reshaped_right = lasagne.layers.ReshapeLayer(lasagne.layers.InputLayer(shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+                                                   , ([0], -1, [3]))
+assert match(layer_reshaped_right, (N_NODES, None, DIMENSION_HIDDEN_LAYERS))
 
-l_lstm = lasagne.layers.LSTMLayer([l_e, l_a], DIMENSION_HIDDEN_LAYERS, name="LSTM-0", nonlinearity=lasagne.nonlinearities.tanh,
-                                  hid_init=lasagne.init.Constant(0.0), cell_init=lasagne.init.Constant(0.0), only_return_final=False)
-lstms = [l_lstm]
+layer_social_pool = ExpressionMergeLayer([layer_reshaped_left, layer_reshaped_right], T.dot, output_shape="auto")
+assert match(layer_social_pool, (N_NODES, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, None, DIMENSION_HIDDEN_LAYERS))
+
+layer_unreshape = lasagne.layers.ReshapeLayer(layer_social_pool, ([0], [1], [2], -1, LENGTH_SEQUENCE_INPUT, [4]))
+layer_H = layer_unshuffle = lasagne.layers.DimshuffleLayer(layer_unreshape, (0, 3, 4, 1, 2, 5))
+
+# todo reshape batch & node dim together all the time?
+
+layer_a = lasagne.layers.DenseLayer(layer_H, name="", nonlinearity=lasagne.nonlinearities.rectify, num_leading_axes=3)
+assert match(layer_a.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+
+layer_e_a = lasagne.layers.ConcatLayer([layer_e, layer_a], 3, name="")
+assert match(layer_e_a.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, None))
+
+layers_e_a = []
+for inode in xrange(0, N_NODES):
+    layers_e_a += [lasagne.layers.SliceLayer(layer_e_a, inode, axis=0)]
+
+layer_lstm = lasagne.layers.LSTMLayer(layers_e_a[0], DIMENSION_HIDDEN_LAYERS, name="LSTM-0", nonlinearity=lasagne.nonlinearities.tanh,
+                                      hid_init=lasagne.init.Constant(0.0), cell_init=lasagne.init.Constant(0.0), only_return_final=False)
+layers_lstm = [layer_lstm]
 
 for inode in xrange(1, N_NODES):
-    lstms += [lasagne.layers.LSTMLayer([l_e, l_a], DIMENSION_HIDDEN_LAYERS, name="LSTM-" + str(inode)
-                                       , nonlinearity=lasagne.nonlinearities.tanh,hid_init=lasagne.init.Constant(0.0),
-                                       cell_init=lasagne.init.Constant(0.0), only_return_final=False,
-                                       ingate=lasagne.layers.Gate(W_in=l_lstm.W_in_to_ingate,
-                                                                  W_hid=l_lstm.W_hid_to_ingate,
-                                                                  W_cell=l_lstm.W_cell_to_ingate,
-                                                                  b=l_lstm.b_ingate),
-                                       outgate=lasagne.layers.Gate(W_in=l_lstm.W_in_to_outgate,
-                                                                   W_hid=l_lstm.W_hid_to_outgate,
-                                                                   W_cell=l_lstm.W_cell_to_outgate,
-                                                                   b=l_lstm.b_outgate),
-                                       forgetgate=lasagne.layers.Gate(W_in=l_lstm.W_in_to_forgetgate,
-                                                                      W_hid=l_lstm.W_hid_to_forgetgate,
-                                                                      W_cell=l_lstm.W_cell_to_forgetgate,
-                                                                      b=l_lstm.b_forgetgate),
-                                       cell=lasagne.layers.Gate(W_in=l_lstm.W_in_to_cell,
-                                                                W_hid=l_lstm.W_hid_to_cell,
-                                                                W_cell=None,
-                                                                b=l_lstm.b_cell,
-                                                                nonlinearity=lasagne.nonlinearities.tanh
-                                                                ))]
+    layers_lstm += [lasagne.layers.LSTMLayer(layers_e_a[inode], DIMENSION_HIDDEN_LAYERS, name="LSTM-" + str(inode)
+                                             , nonlinearity=lasagne.nonlinearities.tanh, hid_init=lasagne.init.Constant(0.0),
+                                             cell_init=lasagne.init.Constant(0.0), only_return_final=False,
+                                             ingate=lasagne.layers.Gate(W_in=layer_lstm.W_in_to_ingate,
+                                                                    W_hid=layer_lstm.W_hid_to_ingate,
+                                                                    W_cell=layer_lstm.W_cell_to_ingate,
+                                                                    b=layer_lstm.b_ingate),
+                                             outgate=lasagne.layers.Gate(W_in=layer_lstm.W_in_to_outgate,
+                                                                     W_hid=layer_lstm.W_hid_to_outgate,
+                                                                     W_cell=layer_lstm.W_cell_to_outgate,
+                                                                     b=layer_lstm.b_outgate),
+                                             forgetgate=lasagne.layers.Gate(W_in=layer_lstm.W_in_to_forgetgate,
+                                                                        W_hid=layer_lstm.W_hid_to_forgetgate,
+                                                                        W_cell=layer_lstm.W_cell_to_forgetgate,
+                                                                        b=layer_lstm.b_forgetgate),
+                                             cell=lasagne.layers.Gate(W_in=layer_lstm.W_in_to_cell,
+                                                                  W_hid=layer_lstm.W_hid_to_cell,
+                                                                  W_cell=None,
+                                                                  b=layer_lstm.b_cell,
+                                                                  nonlinearity=lasagne.nonlinearities.tanh
+                                                                  ))]
 
-lm_hidden = ListMergeLayer(lstms, name="Merged LSTMs")
+layer_lstms = ListMergeLayer(layers_lstm, name="Merged LSTMs")
 
-compute = theano.function([], l_H(lm_hidden))
+# compute = theano.function([], layer_H(layer_lstms))
+
+
+def test_model():
+    print get_shape_dot_product([(2, 3, 4), (4, 5), (5, 1)])
+    print get_shape_dot_product([(2, 3, 4), (5, 4)])
 
 
 def demo():
@@ -239,7 +379,7 @@ def demo():
 
     # only_return_final = True?
     l_forward_1 = lasagne.layers.LSTMLayer(
-        l_in, DIMENSION_HIDDEN_LAYERS, grad_clipping=GRAD_CLIP,
+        layer_in, DIMENSION_HIDDEN_LAYERS, grad_clipping=GRAD_CLIP,
         nonlinearity=lasagne.nonlinearities.tanh)
 
     # Parameter sharing between multiple layers can be achieved by using the same Theano shared variable instance
@@ -273,10 +413,10 @@ def demo():
 
     # Theano functions for training and computing cost
     print("Compiling functions ...")
-    train = theano.function([l_in.input_var, target_values], cost, updates=updates, allow_input_downcast=True)
-    compute_cost = theano.function([l_in.input_var, target_values], cost, allow_input_downcast=True)
+    train = theano.function([layer_in.input_var, target_values], cost, updates=updates, allow_input_downcast=True)
+    compute_cost = theano.function([layer_in.input_var, target_values], cost, allow_input_downcast=True)
 
-    predict = theano.function([l_in.input_var], network_output, allow_input_downcast=True)
+    predict = theano.function([layer_in.input_var], network_output, allow_input_downcast=True)
 
     def try_it_out():
         preds = numpy.zeros((node_count, DIMENSION_SAMPLE))
@@ -290,23 +430,23 @@ def demo():
     print("Training ...")
     p = 0
     try:
-        for it in xrange(data_size * NUM_EPOCH / SIZE_BATCH):
+        for it in xrange(N_SEQUENCES * NUM_EPOCH / SIZE_BATCH):
             try_it_out()  # Generate text using the p^th character as the start.
 
             avg_cost = 0
             for _ in range(LOG_SLOT):
-                for node in range(node_count):
+                for node in range(N_NODES):
                     # 获取(输入序列,实际输出)配对
                     inputs, targets = sample.load_batch_for_nodes(all_traces, SIZE_BATCH, [], p, True)
 
                     p += LENGTH_SEQUENCE_INPUT + SIZE_BATCH - 1
-                    if p + SIZE_BATCH + LENGTH_SEQUENCE_INPUT >= data_size:
+                    if p + SIZE_BATCH + LENGTH_SEQUENCE_INPUT >= N_SEQUENCES:
                         print('Carriage Return')
                         p = 0
 
                     # 训练
                     avg_cost += train(inputs[node], targets[node, :, LENGTH_SEQUENCE_OUTPUT - 1, :])
-                print("Epoch {} average loss = {}".format(it * 1.0 * LOG_SLOT / data_size * SIZE_BATCH,
+                print("Epoch {} average loss = {}".format(it * 1.0 * LOG_SLOT / N_SEQUENCES * SIZE_BATCH,
                                                           avg_cost / LOG_SLOT))
         try_it_out()
 
@@ -315,4 +455,4 @@ def demo():
 
 
 if __name__ == '__main__':
-    demo()
+    test_model()

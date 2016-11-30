@@ -36,7 +36,7 @@ def read_traces_from_path(path):
     dict_traces = {}
 
     if not os.path.exists(path):
-        raise IOError('read_traces_from_path @ file_io: \n\tInvalid Path: ' + str(path))
+        raise IOError('read_traces_from_path @ sample: \n\tInvalid Path: ' + str(path))
     else:
         list_subdir = os.listdir(path)
         list_files = [subdir for subdir in list_subdir if os.path.isfile(path + subdir)]
@@ -73,7 +73,7 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
     try:
         dict_traces_requested = {node_id: dict_traces[node_id] for node_id in nodes_requested}
     except KeyError:
-        raise KeyError("generate_input_sequences @ file_io: \n\tNo value found by given key")
+        raise KeyError("generate_input_sequences @ sample: \n\tNo value found by given key")
 
     # 计算不同节点轨迹长度的最小值
     min_len_trace = min([len(trace) for trace in dict_traces_requested.values()])
