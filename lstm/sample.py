@@ -65,7 +65,9 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
     """
 
     # 仅选中 node_identifiers 中指定的节点的轨迹
-    if len(filter_nodes) > 0:
+    if type(filter_nodes) == int and filter_nodes > 0:
+        nodes_requested = dict_traces.keys()[:filter_nodes]
+    elif type(filter_nodes) == list and len(filter_nodes) > 0:
         nodes_requested = filter_nodes
     # 选中所有节点的轨迹
     else:

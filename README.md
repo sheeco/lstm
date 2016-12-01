@@ -76,6 +76,16 @@
 - ADD: 修改自 [lstm_text_generation](https://github.com/Lasagne/Recipes/blob/master/examples/lstm_text_generation.py) 的 demo；
 - [ ] BUG: 能够正常运行，但有时会得到 `NaN`；
 
-###### 2016-11-28
+###### [ 2016-11-27 ]( ea01df35e2619edf0ab0690dd67825187a6160e6 )
 
-- 
+###### [ 2016-11-29]( d8475aa25b4aa03a7c6ecd8c06ec48b9f1a5b9de )
+
+###### [ 2016-11-30 ]( c655f04af0fb13077deef1b958f9adb7873fe3c4 )
+
+###### 2016-12-01
+
+- ADD: Allow `load_batch_for_nodes` to have either `int` or `list` passed in for param `filter_nodes`;
+- ADD: Nano size configs for debugging; 
+- ADD: Forwarding connections through the network are built & tested;
+- [ ] TODO: While still having problems with the recurrent connection from previous LSTM hidden states to Social Pooling Layer;
+- [ ] TRY: Whether `RecurrentContainerLayer` proposed in [#629](https://github.com/Lasagne/Lasagne/pull/629) would suffice;
