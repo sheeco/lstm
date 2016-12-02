@@ -1,7 +1,9 @@
 # coding:utf-8
 
+# Path for trace files
 PATH_TRACE_FILES = 'res/trace/'
-N_NODES = 9
+# How many nodes to learn on
+N_NODES_EXPECTED = 9
 # How often should we check the output
 LOG_SLOT = 100
 
@@ -34,7 +36,7 @@ LOG_SLOT = 100
 # # How often should we check the output
 # LOG_SLOT = 100
 
-"""Config for debugging"""
+"""Nano-size net config for debugging"""
 # Batch Size
 SIZE_BATCH = 3
 # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]

@@ -9,7 +9,7 @@
 - scipy-0.18.1
 - mingw-4.7.0
 - Theano-0.9.0.dev4
-- Lasagne-0.2.dev1
+- [Lasagne latest version](639972e1496a3df331401de633f18be8b7ee9265)
 
 ### Platform
 
@@ -60,32 +60,38 @@
 ### 0.0.*
 
 
-###### [ 2016-11-25 ]( b35009fb246b93a56376a1122a12e5528d5cac19 )
+###### [2016-11-25](b35009fb246b93a56376a1122a12e5528d5cac19)
 
 - ADD: 加载 batch 的函数 `load_batch_for_nodes`；
 - RFCT: 重命名文件 `file_io.py` 为 `sample.py`，及一些函数重命名；
 
-###### [ 2016-11-25 ]( b9ab414351b1855919b3672874da2932c096d05c )
+###### [2016-11-25](b9ab414351b1855919b3672874da2932c096d05c)
 
 - MOD: 调整函数 `load_batch_for_nodes` 返回数组的维度次序为：节点->批->序列->采样维度；
 - FIX: `sample.py` 中的输出错误；
 - ADD: `config.py` 中的参数；
 
-###### [ 2016-11-25 ]( e06e548390787b7f073534d2f07affd7fdf18897 )
+###### [2016-11-25](e06e548390787b7f073534d2f07affd7fdf18897)
 
 - ADD: 修改自 [lstm_text_generation](https://github.com/Lasagne/Recipes/blob/master/examples/lstm_text_generation.py) 的 demo；
 - [ ] BUG: 能够正常运行，但有时会得到 `NaN`；
 
-###### [ 2016-11-27 ]( ea01df35e2619edf0ab0690dd67825187a6160e6 )
+###### [2016-11-27](ea01df35e2619edf0ab0690dd67825187a6160e6)
 
-###### [ 2016-11-29]( d8475aa25b4aa03a7c6ecd8c06ec48b9f1a5b9de )
+###### [2016-11-29](d8475aa25b4aa03a7c6ecd8c06ec48b9f1a5b9de)
 
-###### [ 2016-11-30 ]( c655f04af0fb13077deef1b958f9adb7873fe3c4 )
+###### [2016-11-30](c655f04af0fb13077deef1b958f9adb7873fe3c4)
 
-###### 2016-12-01
+###### [2016-12-01](e082892fc7e9d6d96adaa5f14cf0e6197d956e04)
 
 - ADD: Allow `load_batch_for_nodes` to have either `int` or `list` passed in for param `filter_nodes`;
 - ADD: Nano size configs for debugging; 
 - ADD: Forwarding connections through the network are built & tested;
 - [ ] TODO: While still having problems with the recurrent connection from previous LSTM hidden states to Social Pooling Layer;
-- [ ] TRY: Whether `RecurrentContainerLayer` proposed in [#629](https://github.com/Lasagne/Lasagne/pull/629) would suffice;
+- [x] TRY: Whether `RecurrentContainerLayer` proposed in [#629](https://github.com/Lasagne/Lasagne/pull/629) would suffice;
+
+###### 2016-12-02
+
+- Tried to apply PR [stevenxxiu/Lasagne:recurrent](1d23b4022455ef8449b98c3805f2f0c919836f61) & 
+  [skaae/Lasagne:merge_broadcast](8588929fba32b03e3df324b87fc451cc4b2ab225) via patch/git-format-patch approach. FAIL;
+- OPT: Import of lasagne;
