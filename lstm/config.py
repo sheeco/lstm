@@ -46,9 +46,9 @@ LENGTH_SEQUENCE_INPUT = 4
 # Length of predicted sequence
 LENGTH_SEQUENCE_OUTPUT = 1
 # Number of units in embedding layer ([x, y] -> e)
-DIMENSION_EMBED_LAYER = 5
+DIMENSION_EMBED_LAYER = 2
 # Number of units in each hidden (LSTM) layers
-DIMENSION_HIDDEN_LAYERS = 7
+DIMENSION_HIDDEN_LAYERS = 2
 # Number of hidden (LSTM) layers
 N_HIDDEN_LAYERS = 1
 # x * x of arean for each pool

@@ -74,84 +74,15 @@ import sample
 #         #     self.params = OrderedDict()
 #         #     self.get_output_kwargs = []
 
+
+class SocialLSTMCell(CellLayer):
+    pass
+
+
 def match(shape1, shape2):
     return (len(shape1) == len(shape2) and
             all(s1 is None or s2 is None or s1 == s2
                 for s1, s2 in zip(shape1, shape2)))
-
-
-"""
-Snippet from https://github.com/Lasagne/Lasagne/issues/584 by @trungnt13
-"""
-class ExpressionMergeLayer(MergeLayer):
-
-    """
-    This layer performs an custom expressions on list of inputs to merge them.
-    This layer is different from ElemwiseMergeLayer by not required all
-    input_shapes are equal
-
-    Parameters
-    ----------
-    incomings : a list of :class:`Layer` instances or tuples
-        the layers feeding into this layer, or expected input shapes
-
-    merge_function : callable
-        the merge function to use. Should take two arguments and return the
-        updated value. Some possible merge functions are ``theano.tensor``:
-        ``mul``, ``add``, ``maximum`` and ``minimum``.
-
-    output_shape : None, callable, tuple, or 'auto'
-        Specifies the output shape of this layer. If a tuple, this fixes the
-        output shape for any input shape (the tuple can contain None if some
-        dimensions may vary). If a callable, it should return the calculated
-        output shape given the input shape. If None, the output shape is
-        assumed to be the same as the input shape. If 'auto', an attempt will
-        be made to automatically infer the correct output shape.
-
-    Notes
-    -----
-    if ``output_shape=None``, this layer chooses first input_shape as its
-    output_shape
-
-    Example
-    --------
-    >> from lasagne.layers import InputLayer, DimshuffleLayer, ExpressionMergeLayer
-    >> l_in = InputLayer(shape=(None, 500, 120))
-    >> l_mask = InputLayer(shape=(None, 500))
-    >> l_dim = DimshuffleLayer(l_mask, pattern=(0, 1, 'x'))
-    >> l_out = ExpressionMergeLayer(
-                                (l_in, l_dim), tensor.mul, output_shape='auto')
-    (None, 500, 120)
-    """
-
-    def __init__(self, incomings, merge_function, output_shape=None, **kwargs):
-        super(ExpressionMergeLayer, self).__init__(incomings, **kwargs)
-        if output_shape is None:
-            self._output_shape = None
-        elif output_shape == 'auto':
-            self._output_shape = 'auto'
-        elif hasattr(output_shape, '__call__'):
-            self.get_output_shape_for = output_shape
-        else:
-            self._output_shape = tuple(output_shape)
-
-        self.merge_function = merge_function
-
-    def get_output_shape_for(self, input_shapes):
-        if self._output_shape is None:
-            return input_shapes[0]
-        elif self._output_shape is 'auto':
-            input_shape = [(0 if s is None else s for s in ishape)
-                           for ishape in input_shapes]
-            Xs = [T.alloc(0, *ishape) for ishape in input_shape]
-            output_shape = self.merge_function(*Xs).shape.eval()
-            output_shape = tuple(s if s else None for s in output_shape)
-            return output_shape
-        else:
-            return self._output_shape
-
-    def get_output_for(self, inputs, **kwargs):
-        return self.merge_function(*inputs)
 
 
 def social_mask(all_nodes):
@@ -166,19 +97,30 @@ def social_mask(all_nodes):
     # indication = lambda mn_pool, distance_xy: sum((distance_xy >= SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2))
     #                      & (distance_xy < SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2 + 1))) == 2
 
-    mn_pool = T.ivector('mn')
-    distance_xy = T.fvector('distance')
+    # mn_pool = T.bvector('mn')
+    # distance_xy = T.fvector('distance')
+    # # todo test
+    # # 1 / 0
+    # if_within_grid = T.eq(T.sum((distance_xy >= SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2))
+    #                      & (distance_xy < SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2 + 1))), 2)
+    # # distance_xy = other_xy - my_xy
+    # # pass in [m, n] in [0, RANGE_NEIGHBORHOOD)
+    # indication = theano.function([mn_pool, distance_xy], if_within_grid, allow_input_downcast=True)
+
     # todo test
-    # 1 / 0
-    if_within_grid = T.eq(T.sum((distance_xy >= SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2))
-                         & (distance_xy < SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2 + 1))), 2)
     # distance_xy = other_xy - my_xy
     # pass in [m, n] in [0, RANGE_NEIGHBORHOOD)
-    indication = theano.function([mn_pool, distance_xy], if_within_grid, allow_input_downcast=True)
+    # 1 / 0
+    indication = lambda mn_pool, distance_xy: (T.ge(distance_xy[0], SIZE_POOL * (mn_pool[0] - RANGE_NEIGHBORHOOD / 2)))\
+                                              and T.lt(distance_xy[0], SIZE_POOL * (mn_pool[0] - RANGE_NEIGHBORHOOD / 2 + 1))\
+                                              and (T.ge(distance_xy[1], SIZE_POOL * (mn_pool[1] - RANGE_NEIGHBORHOOD / 2)))\
+                                              and T.lt(distance_xy[1], SIZE_POOL * (mn_pool[1] - RANGE_NEIGHBORHOOD / 2 + 1))
 
     n_nodes = all_nodes.shape[0]
-    ret = numpy.zeros((SIZE_BATCH, n_nodes, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, n_nodes))
-    # for ibatch in xrange(SIZE_BATCH):
+    n_nodes = T.cast(n_nodes, 'int32')
+    n_nodes = n_nodes.eval()
+
+    ret = T.zeros((n_nodes, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, n_nodes))
     for inode in xrange(n_nodes):
         for ibatch in xrange(SIZE_BATCH):
             for iseq in xrange(LENGTH_SEQUENCE_INPUT):
@@ -187,8 +129,8 @@ def social_mask(all_nodes):
                         for jnode in xrange(n_nodes):
                             if jnode == inode:
                                 continue
-                            ret[ibatch, inode, iseq, m, n, jnode] += indication([m, n],
-                                                                                all_nodes[jnode, ibatch, iseq] - all_nodes[inode, ibatch, iseq])
+                            ind = indication([m, n], all_nodes[jnode, ibatch, iseq] - all_nodes[inode, ibatch, iseq])
+                            T.set_subtensor(ret[inode, ibatch, iseq, m, n, jnode], ind)
 
     return ret
 
@@ -213,17 +155,20 @@ def test_model():
 
         print("Building network ...")
 
+        layer_in = InputLayer(name="symbolic-input",
+                                             shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
         # [(x, y)]
-        layer_in = InputLayer(name="input sample",
+        layer_xy= InputLayer(name="input-xy",
                                              shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
         # e = relu(x, y; We)
-        layer_e = DenseLayer(layer_in, name="e", num_units=DIMENSION_EMBED_LAYER,
+        layer_e = DenseLayer(layer_xy, name="e", num_units=DIMENSION_EMBED_LAYER,
                                             nonlinearity=rectify, num_leading_axes=3)
         assert match(layer_e.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
 
         # [N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES]
         w_h_to_H = social_mask(net_inputs)
-        layer_social_mask = ExpressionLayer(layer_in, social_mask, output_shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES))
+        # layer_social_mask = ExpressionLayer(layer_xy, social_mask, output_shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES))
+        layer_social_mask = ExpressionLayer(layer_xy, social_mask, output_shape='auto')
         assert match(layer_social_mask.output_shape,
                      (N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES))
 
@@ -231,7 +176,10 @@ def test_model():
         assert match(layer_shuffled_social_mask.output_shape,
                      (N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES, 1))
 
-        layer_prev_h = InputLayer(name="previous h", shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        # layer_prev_h = InputLayer(name="previous h", shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        layer_prev_h = InputLayer(name="previous-h", shape=(None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        layer_prev_h = ReshapeLayer(layer_prev_h, (N_NODES, -1, [1], [2]))
+        assert match(layer_prev_h.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
 
         # [N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS]
         # shuffle & broadcast into: [1, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 1, 1, N_NODES, DIMENSION_HIDDEN_LAYERS] to match social matrix
@@ -244,10 +192,13 @@ def test_model():
         # layer_H = ExpressionMergeLayer([layer_shuffled_social_mask, layer_shuffled_h], lambda lt, rt: (T.mul(lt, rt)).sum(-2)
         #                                , output_shape="auto")
         layer_H = ElemwiseMergeLayer([layer_shuffled_social_mask, layer_shuffled_h], T.mul)
-        layer_H = ExpressionLayer([layer_H, layer_shuffled_h], lambda x: x.sum(-2), output_shape="auto")
+        assert match(layer_H.output_shape
+                     , (N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES, DIMENSION_HIDDEN_LAYERS))
 
-        assert match(layer_H.output_shape, (
-        N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, DIMENSION_HIDDEN_LAYERS))
+        layer_H = ExpressionLayer(layer_H, lambda x: x.sum(-2), output_shape="auto")
+
+        assert match(layer_H.output_shape
+                     , (N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, DIMENSION_HIDDEN_LAYERS))
 
         # todo reshape batch & node dim together all the time?
         layer_a = DenseLayer(layer_H, name="a", num_units=DIMENSION_EMBED_LAYER,
@@ -273,53 +224,101 @@ def test_model():
         assert match(layer_lstm_0.output_shape, (None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
 
         layers_lstm = [layer_lstm_0]
+
         # Create params sharing LSTMs for the rest (n - 1) nodes,
         # which have params exactly the same as LSTM_0
         for inode in xrange(1, N_NODES):
+            # # Overdated implement for lasagne/lasagne
+            # layers_lstm += [
+            #     LSTMLayer(layers_in_lstms[inode], DIMENSION_HIDDEN_LAYERS, name="LSTM-" + str(inode)
+            #                              , nonlinearity=tanh, hid_init=Constant(0.0),
+            #                              cell_init=Constant(0.0), only_return_final=False,
+            #                              ingate=Gate(W_in=layer_lstm_0.W_in_to_ingate,
+            #                                                         W_hid=layer_lstm_0.W_hid_to_ingate,
+            #                                                         W_cell=layer_lstm_0.W_cell_to_ingate,
+            #                                                         b=layer_lstm_0.b_ingate),
+            #                              outgate=Gate(W_in=layer_lstm_0.W_in_to_outgate,
+            #                                                          W_hid=layer_lstm_0.W_hid_to_outgate,
+            #                                                          W_cell=layer_lstm_0.W_cell_to_outgate,
+            #                                                          b=layer_lstm_0.b_outgate),
+            #                              forgetgate=Gate(W_in=layer_lstm_0.W_in_to_forgetgate,
+            #                                                             W_hid=layer_lstm_0.W_hid_to_forgetgate,
+            #                                                             W_cell=layer_lstm_0.W_cell_to_forgetgate,
+            #                                                             b=layer_lstm_0.b_forgetgate),
+            #                              cell=Gate(W_in=layer_lstm_0.W_in_to_cell,
+            #                                                       W_hid=layer_lstm_0.W_hid_to_cell,
+            #                                                       W_cell=None,
+            #                                                       b=layer_lstm_0.b_cell,
+            #                                                       nonlinearity=tanh
+            #                                                       ))]
+
+            # Updated implement for the addition of CellLayer
+            assert hasattr(layer_lstm_0, 'cell')
+            lstm_cell_0 = getattr(layer_lstm_0, 'cell')
+            assert hasattr(lstm_cell_0, 'input_layer')
+            lstm_cell_0 = getattr(lstm_cell_0, 'input_layer')
+            assert type(lstm_cell_0) == LSTMCell
+
             layers_lstm += [
                 LSTMLayer(layers_in_lstms[inode], DIMENSION_HIDDEN_LAYERS, name="LSTM-" + str(inode)
-                                         , nonlinearity=tanh, hid_init=Constant(0.0),
-                                         cell_init=Constant(0.0), only_return_final=False,
-                                         ingate=Gate(W_in=layer_lstm_0.W_in_to_ingate,
-                                                                    W_hid=layer_lstm_0.W_hid_to_ingate,
-                                                                    W_cell=layer_lstm_0.W_cell_to_ingate,
-                                                                    b=layer_lstm_0.b_ingate),
-                                         outgate=Gate(W_in=layer_lstm_0.W_in_to_outgate,
-                                                                     W_hid=layer_lstm_0.W_hid_to_outgate,
-                                                                     W_cell=layer_lstm_0.W_cell_to_outgate,
-                                                                     b=layer_lstm_0.b_outgate),
-                                         forgetgate=Gate(W_in=layer_lstm_0.W_in_to_forgetgate,
-                                                                        W_hid=layer_lstm_0.W_hid_to_forgetgate,
-                                                                        W_cell=layer_lstm_0.W_cell_to_forgetgate,
-                                                                        b=layer_lstm_0.b_forgetgate),
-                                         cell=Gate(W_in=layer_lstm_0.W_in_to_cell,
-                                                                  W_hid=layer_lstm_0.W_hid_to_cell,
-                                                                  W_cell=None,
-                                                                  b=layer_lstm_0.b_cell,
-                                                                  nonlinearity=tanh
-                                                                  ))]
+                          , nonlinearity=tanh, hid_init=Constant(0.0),
+                          cell_init=Constant(0.0), only_return_final=False,
+                          ingate=Gate(W_in=lstm_cell_0.W_in_to_ingate,
+                                      W_hid=lstm_cell_0.W_hid_to_ingate,
+                                      W_cell=lstm_cell_0.W_cell_to_ingate,
+                                      b=lstm_cell_0.b_ingate),
+                          outgate=Gate(W_in=lstm_cell_0.W_in_to_outgate,
+                                       W_hid=lstm_cell_0.W_hid_to_outgate,
+                                       W_cell=lstm_cell_0.W_cell_to_outgate,
+                                       b=lstm_cell_0.b_outgate),
+                          forgetgate=Gate(W_in=lstm_cell_0.W_in_to_forgetgate,
+                                          W_hid=lstm_cell_0.W_hid_to_forgetgate,
+                                          W_cell=lstm_cell_0.W_cell_to_forgetgate,
+                                          b=lstm_cell_0.b_forgetgate),
+                          cell=Gate(W_in=lstm_cell_0.W_in_to_cell,
+                                    W_hid=lstm_cell_0.W_hid_to_cell,
+                                    W_cell=None,
+                                    b=lstm_cell_0.b_cell,
+                                    nonlinearity=tanh
+                                    ))]
 
         # layer_lstms = ListMergeLayer(layers_lstm, name="Merged LSTMs")
         layer_concated_lstms = ConcatLayer(layers_lstm, axis=0)
         assert match(layer_concated_lstms.output_shape, (None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
-        layer_h = ReshapeLayer(layer_concated_lstms, (N_NODES, -1, [1], [2]))
-        assert match(layer_h.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        layer_h = layer_concated_lstms
+        # layer_h = ReshapeLayer(layer_concated_lstms, (N_NODES, -1, [1], [2]))
+        # assert match(layer_h.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+
 
         # layer_h_to_h = NonlinearityLayer(layer_h, nonlinearity=rectify)
 
-        layer_h_to_h = NonlinearityLayer(InputLayer((None, DIMENSION_HIDDEN_LAYERS))
+        layer_h_to_h = NonlinearityLayer(InputLayer((None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
                                                         , nonlinearity=rectify)
-        # assert ""
-        layer_social_lstm = CustomRecurrentLayer(layer_in, layer_h, layer_h_to_h
-                                                                , nonlinearity=None, hid_init=Constant(.0))
-        temp_outputs = get_output(layer_social_lstm, net_inputs)
-        temp_outputs = get_output(layer_h, {layer_in: net_inputs, layer_prev_h: layer_h_to_h.get_output_for(layer_in)})
+        cell_social_lstm = CustomRecurrentCell(layer_xy, layer_h, layer_h_to_h
+                                                                , nonlinearity=None, hid_init=Constant(.0))['output']
+        # layer_social_lstm = RecurrentContainerLayer({layer_xy: layer_in}, cell_social_lstm, {layer_prev_h: layer_h})
+        layer_social_lstm = RecurrentContainerLayer({}, cell_social_lstm, {layer_prev_h: layer_h_to_h})
 
-        net_outputs = temp_outputs
+        x_in = np.random.random(net_inputs.shape).astype('float32')
+        # net_outputs = helper.get_output(layer_social_lstm, {layer_in: x_in})
+        # layer_in.input_var = x_in
+        net_outputs = helper.get_output(layer_social_lstm, {layer_in: x_in})
+        net_outputs = helper.get_output(layer_social_lstm).eval({layer_in.input_var: x_in})
+
+        net_outputs = helper.get_output(layer_social_lstm).eval({layer_in.input_var: net_inputs})
+
+
+        # temp_outputs = get_output(layer_social_lstm, net_inputs)
+        # temp_outputs = get_output(layer_h, {layer_in: net_inputs, layer_prev_h: layer_h_to_h.get_output_for(layer_in)})
+
+        # net_outputs = temp_outputs
 
 
     except KeyboardInterrupt:
         pass
+
+    # except Exception, e:
+    #     print str(type(e)) + e.message
 
 
 # def test_model():

@@ -9,7 +9,7 @@
 - scipy-0.18.1
 - mingw-4.7.0
 - Theano-0.9.0.dev4
-- [Lasagne latest version](639972e1496a3df331401de633f18be8b7ee9265)
+- **[Forked Lasagne](https://github.com/sheeco/Lasagne)**
 
 ### Platform
 
@@ -76,22 +76,28 @@
 - ADD: 修改自 [lstm_text_generation](https://github.com/Lasagne/Recipes/blob/master/examples/lstm_text_generation.py) 的 demo；
 - [ ] BUG: 能够正常运行，但有时会得到 `NaN`；
 
-###### [2016-11-27](ea01df35e2619edf0ab0690dd67825187a6160e6)
-
-###### [2016-11-29](d8475aa25b4aa03a7c6ecd8c06ec48b9f1a5b9de)
-
-###### [2016-11-30](c655f04af0fb13077deef1b958f9adb7873fe3c4)
-
 ###### [2016-12-01](e082892fc7e9d6d96adaa5f14cf0e6197d956e04)
 
 - ADD: Allow `load_batch_for_nodes` to have either `int` or `list` passed in for param `filter_nodes`;
 - ADD: Nano size configs for debugging; 
 - ADD: Forwarding connections through the network are built & tested;
 - [ ] TODO: While still having problems with the recurrent connection from previous LSTM hidden states to Social Pooling Layer;
-- [x] TRY: Whether `RecurrentContainerLayer` proposed in [#629](https://github.com/Lasagne/Lasagne/pull/629) would suffice;
+- [ ] TRY: Whether `RecurrentContainerLayer` proposed in [#629](https://github.com/Lasagne/Lasagne/pull/629) would suffice;
 
-###### 2016-12-02
+###### [2016-12-02](09a53a25e789820e71f19145d92db3e9f15ec37f)
 
-- Tried to apply PR [stevenxxiu/Lasagne:recurrent](1d23b4022455ef8449b98c3805f2f0c919836f61) & 
-  [skaae/Lasagne:merge_broadcast](8588929fba32b03e3df324b87fc451cc4b2ab225) via patch/git-format-patch approach. FAIL;
-- OPT: Import of lasagne;
+- ~~Fail to apply PR [stevenxxiu/Lasagne:recurrent](1d23b4022455ef8449b98c3805f2f0c919836f61) & 
+  [skaae/Lasagne:merge_broadcast](8588929fba32b03e3df324b87fc451cc4b2ab225) via patch/git-format-patch approach.~~
+  SHOULD use the fork-fetch-merge approach;
+- OPT: Simplize module importing;
+
+###### 2016-12-03
+
+- Merge PR [#629](https://github.com/Lasagne/Lasagne/issues/629) from [stevenxxiu/Lasagne:recurrent](1d23b4022455ef8449b98c3805f2f0c919836f61) & 
+  [#633](https://github.com/Lasagne/Lasagne/issues/633) from [skaae/Lasagne:merge_broadcast](8588929fba32b03e3df324b87fc451cc4b2ab225) 
+  into [my forked lasagne](https://github.com/sheeco/Lasagne) for dependency;
+- MOD: Implement social pooling based on broadcastable `ElementwiseMergeLayer` (by skaae) instead of `ExpressionMergeLayer`;
+- MOD: Have to alter the LSTM params sharing code for the new `LSTMCell` wrapper (by stevenxxiu);
+- ADD: Try to use `RecurrentContainerLayer` to implement the recurrent connection from LSTM to S-Pooling;
+- FIX: Theano compiling(?) problems in `social_mask` (probably not done);
+- BUG: "Lack of input" reported by `lasagne.helper.get_output`. Haven't found the reason yet;
