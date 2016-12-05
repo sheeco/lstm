@@ -91,7 +91,7 @@
   SHOULD use the fork-fetch-merge approach;
 - OPT: Simplize module importing;
 
-###### 2016-12-03
+###### [2016-12-03](a3edd597c5fc475906d2f93a45f835e93c5bd23f)
 
 - Merge PR [#629](https://github.com/Lasagne/Lasagne/issues/629) from [stevenxxiu/Lasagne:recurrent](1d23b4022455ef8449b98c3805f2f0c919836f61) & 
   [#633](https://github.com/Lasagne/Lasagne/issues/633) from [skaae/Lasagne:merge_broadcast](8588929fba32b03e3df324b87fc451cc4b2ab225) 
@@ -100,4 +100,11 @@
 - MOD: Have to alter the LSTM params sharing code for the new `LSTMCell` wrapper (by stevenxxiu);
 - ADD: Try to use `RecurrentContainerLayer` to implement the recurrent connection from LSTM to S-Pooling;
 - FIX: Theano compiling(?) problems in `social_mask` (probably not done);
-- BUG: "Lack of input" reported by `lasagne.helper.get_output`. Haven't found the reason yet;
+- BUG: "Lack of input" reported by `lasagne.helper.get_output`. Haven't figured out the reason yet;
+
+###### 2016-12-05
+
+- RFCT: Move helper funcitons into `utils.py`;
+- ADD: `STRICT_BATCH` to indicate if only full-size batches are accepted, maybe mandatory to avoid indeterministic in `social_mask`;
+- ADD: Try to define `SocialLSTMCell` herited from `CustomRecurrentCell` (untested);
+- NOTE: Maybe should give up the `ReccurentContainerLayer` approach & overwrite `CustomRecurrentLayer` directly?

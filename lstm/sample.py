@@ -2,6 +2,7 @@
 import numpy
 import os  # 文件夹操作
 from config import *
+from utils import *
 
 
 def read_triples_from_file(filename):
@@ -75,7 +76,7 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
     try:
         dict_traces_requested = {node_id: dict_traces[node_id] for node_id in nodes_requested}
     except KeyError:
-        raise KeyError("generate_input_sequences @ sample: \n\tNo value found by given key")
+        raise KeyError("generate_input_sequences @ sample: \n\tNo value found by given key.")
 
     # 计算不同节点轨迹长度的最小值
     min_len_trace = min([len(trace) for trace in dict_traces_requested.values()])
@@ -148,9 +149,16 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
 
         elif len(batch_input) == 0:
             return batch_input, batch_target
-        else:
-            print "Warning: Insufficient batch, only ", batch_input.shape[1], " samples left"
+        elif STRICT_BATCH_SIZE:
+            warn("An insufficient batch of ", batch_input.shape[1], " samples is discarded.")
+            batch_input = numpy.zeros((0, 0, 0, 0))
+            batch_target = numpy.zeros((0, 0, 0, 0))
+            return batch_input, batch_target
+        elif not STRICT_BATCH_SIZE:
+            warn("Insufficient batch. Only ", batch_input.shape[1], " samples are left.")
             break
+        else:
+            raise RuntimeError("load_batch_for_nodes @ sample: \n\tUnexpected access of this block.")
     return batch_input, batch_target
 
 

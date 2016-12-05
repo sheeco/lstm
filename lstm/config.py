@@ -39,6 +39,8 @@ LOG_SLOT = 100
 """Nano-size net config for debugging"""
 # Batch Size
 SIZE_BATCH = 3
+# If only a full size batch will be accepted
+STRICT_BATCH_SIZE = True
 # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
 DIMENSION_SAMPLE = 2
 # Length of observed sequence
