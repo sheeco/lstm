@@ -102,9 +102,13 @@
 - FIX: Theano compiling(?) problems in `social_mask` (probably not done);
 - BUG: "Lack of input" reported by `lasagne.helper.get_output`. Haven't figured out the reason yet;
 
-###### 2016-12-05
+###### [2016-12-05](68aae71b8b1d7aacefee9bd6ec79882d960f5459)
 
 - RFCT: Move helper funcitons into `utils.py`;
 - ADD: `STRICT_BATCH` to indicate if only full-size batches are accepted, maybe mandatory to avoid indeterministic in `social_mask`;
 - ADD: Try to define `SocialLSTMCell` herited from `CustomRecurrentCell` (untested);
 - NOTE: Maybe should give up the `ReccurentContainerLayer` approach & overwrite `CustomRecurrentLayer` directly?
+
+###### 2016-12-12
+
+- ADD: Instant sequence to the return values of `load_batch_for_nodes`;
