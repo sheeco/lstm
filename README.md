@@ -99,7 +99,7 @@
 - MOD: Implement social pooling based on broadcastable `ElementwiseMergeLayer` (by skaae) instead of `ExpressionMergeLayer`;
 - MOD: Have to alter the LSTM params sharing code for the new `LSTMCell` wrapper (by stevenxxiu);
 - ADD: Try to use `RecurrentContainerLayer` to implement the recurrent connection from LSTM to S-Pooling;
-- FIX: Theano compiling(?) problems in `social_mask` (probably not done);
+- FIX: Theano compiling(?) problems in `social_mask` (probably undone);
 - BUG: "Lack of input" reported by `lasagne.helper.get_output`. Haven't figured out the reason yet;
 
 ###### [2016-12-05](68aae71b8b1d7aacefee9bd6ec79882d960f5459)
@@ -109,6 +109,11 @@
 - ADD: Try to define `SocialLSTMCell` herited from `CustomRecurrentCell` (untested);
 - NOTE: Maybe should give up the `ReccurentContainerLayer` approach & overwrite `CustomRecurrentLayer` directly?
 
-###### 2016-12-12
+###### [2016-12-12](a7ac820e2778d45190204cdfd9349843859e5a1f)
 
 - ADD: Instant sequence to the return values of `load_batch_for_nodes`;
+
+###### 2016-12-12
+
+- TEST: Forwarding connections should be fine, only if passing in previous hidden states mannually;
+- DEBUG: The overwriting in `SocialLSTMCell`, still "lack of input" for `layer_xy`. Likely has sth to do with line 291 & 551 in [recurrent.py](https://github.com/sheeco/Lasagne/blob/add565017d4636676028d16dcba1ec2b2870aa36/lasagne/layers/recurrent.py#L291);

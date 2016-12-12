@@ -198,14 +198,15 @@ class SocialLSTMCell(lasagne.layers.CustomRecurrentCell):
     .. [1] Graves, Alex: "Generating sequences with recurrent neural networks."
            arXiv preprint arXiv:1308.0850 (2013).
     """
-    def __init__(self, incoming, incoming_hidden, input_to_hidden, hidden_to_hidden,
+    def __init__(self, incoming, incoming_recurrent, input_to_hidden, hidden_to_hidden,
                  nonlinearity=lasagne.nonlinearities.rectify,
                  hid_init=lasagne.init.Constant(0.),
                  grad_clipping=0,
                  **kwargs):
         super(lasagne.layers.CustomRecurrentCell, self).__init__(
-            {'input': incoming, 'input_hidden_previous': incoming_hidden} if input_to_hidden is not None else {},
-            {'output': hid_init, 'input_hidden_previous': hid_init}, **kwargs)
+            {'input': incoming, 'recurrent_input': incoming_recurrent} if input_to_hidden is not None else {},
+            {'output': hid_init}, **kwargs)
+            # {'output': hid_init, 'input_hidden_previous': hid_init}, **kwargs)
         self.input_to_hidden = input_to_hidden
         self.hidden_to_hidden = hidden_to_hidden
         self.grad_clipping = grad_clipping
@@ -356,7 +357,7 @@ class SocialLSTMCell(lasagne.layers.CustomRecurrentCell):
 
         if self.input_to_hidden is not None:
             input = inputs['input']
-            input_hid = inputs['input_hidden_previous']
+            input_hid = inputs['recurrent_input']
 
             # If the dot product is precomputed then add it, otherwise
             # calculate the input_to_hidden values and add them
@@ -435,41 +436,41 @@ def test_model():
         # todo write config to .log
         # todo read config from command line args
         # 1 batch for each node
-        net_inputs, net_targets = load_batch_for_nodes(all_traces, SIZE_BATCH, N_NODES, 0, True)
+        instants, net_inputs, net_targets = load_batch_for_nodes(all_traces, SIZE_BATCH, N_NODES, 0, True)
 
         print("Building network ...")
 
         layer_in = lasagne.layers.InputLayer(name="symbolic-input",
-                                             shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
+                                             shape=(N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
         # [(x, y)]
-        layer_xy= lasagne.layers.InputLayer(name="input-xy",
-                                             shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
+        layer_xy = lasagne.layers.InputLayer(name="input-xy",
+                                             shape=(N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
         # e = relu(x, y; We)
         layer_e = lasagne.layers.DenseLayer(layer_xy, name="e", num_units=DIMENSION_EMBED_LAYER,
                                             nonlinearity=lasagne.nonlinearities.rectify, num_leading_axes=3)
-        assert match(layer_e.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
+        assert match(layer_e.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
 
         # [N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES]
         w_h_to_H = social_mask(net_inputs)
         # layer_social_mask = ExpressionLayer(layer_xy, social_mask, output_shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES))
         layer_social_mask = lasagne.layers.ExpressionLayer(layer_xy, social_mask, output_shape='auto')
         assert match(layer_social_mask.output_shape,
-                     (N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES))
+                     (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES))
 
         layer_shuffled_social_mask = lasagne.layers.DimshuffleLayer(layer_social_mask, (0, 1, 2, 3, 4, 5, 'x'))
         assert match(layer_shuffled_social_mask.output_shape,
-                     (N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES, 1))
+                     (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES, 1))
 
         # layer_prev_h = InputLayer(name="previous h", shape=(N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
-        layer_prev_h = lasagne.layers.InputLayer(name="previous-h", shape=(None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
-        layer_prev_h = lasagne.layers.ReshapeLayer(layer_prev_h, (N_NODES, -1, [1], [2]))
-        assert match(layer_prev_h.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        layer_prev_h = lasagne.layers.InputLayer(name="previous-h", shape=(N_NODES * SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        layer_reshaped_h = lasagne.layers.ReshapeLayer(layer_prev_h, (N_NODES, -1, [1], [2]))
+        assert match(layer_reshaped_h.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
 
         # [N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS]
         # shuffle & broadcast into: [1, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 1, 1, N_NODES, DIMENSION_HIDDEN_LAYERS] to match social matrix
-        layer_shuffled_h = lasagne.layers.DimshuffleLayer(layer_prev_h, ('x', 1, 2, 'x', 'x', 0, 3))
+        layer_shuffled_h = lasagne.layers.DimshuffleLayer(layer_reshaped_h, ('x', 1, 2, 'x', 'x', 0, 3))
         assert match(layer_shuffled_h.output_shape,
-                     (1, None, LENGTH_SEQUENCE_INPUT, 1, 1, N_NODES, DIMENSION_HIDDEN_LAYERS))
+                     (1, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 1, 1, N_NODES, DIMENSION_HIDDEN_LAYERS))
 
         # todo test lambda
         # Perform elementwise multiplication & sum by -2nd dimension (N_NODES
@@ -477,27 +478,27 @@ def test_model():
         #                                , output_shape="auto")
         layer_H = lasagne.layers.ElemwiseMergeLayer([layer_shuffled_social_mask, layer_shuffled_h], T.mul)
         assert match(layer_H.output_shape
-                     , (N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES, DIMENSION_HIDDEN_LAYERS))
+                     , (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES, DIMENSION_HIDDEN_LAYERS))
 
         layer_H = lasagne.layers.ExpressionLayer(layer_H, lambda x: x.sum(-2), output_shape="auto")
 
         assert match(layer_H.output_shape
-                     , (N_NODES, None, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, DIMENSION_HIDDEN_LAYERS))
+                     , (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, DIMENSION_HIDDEN_LAYERS))
 
         # todo reshape batch & node dim together all the time?
         layer_a = lasagne.layers.DenseLayer(layer_H, name="a", num_units=DIMENSION_EMBED_LAYER,
                                             nonlinearity=lasagne.nonlinearities.rectify, num_leading_axes=3)
-        assert match(layer_a.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
+        assert match(layer_a.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
         assert match(layer_e.output_shape, layer_a.output_shape)
 
         layer_in_lstms = lasagne.layers.ConcatLayer([layer_e, layer_a], 3, name="e & a")
-        assert match(layer_in_lstms.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, 2 * DIMENSION_EMBED_LAYER))
+        assert match(layer_in_lstms.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 2 * DIMENSION_EMBED_LAYER))
 
         layers_in_lstms = []
         for inode in xrange(0, N_NODES):
             layers_in_lstms += [lasagne.layers.SliceLayer(layer_in_lstms, inode, axis=0)]
         assert all(
-            match(ilayer_in_lstm.output_shape, (None, LENGTH_SEQUENCE_INPUT, 2 * DIMENSION_EMBED_LAYER)) for ilayer_in_lstm
+            match(ilayer_in_lstm.output_shape, (SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 2 * DIMENSION_EMBED_LAYER)) for ilayer_in_lstm
             in layers_in_lstms)
 
         # Create an LSTM layers for the 1st node
@@ -505,7 +506,7 @@ def test_model():
                                                 nonlinearity=lasagne.nonlinearities.tanh,
                                                 hid_init=lasagne.init.Constant(0.0), cell_init=lasagne.init.Constant(0.0),
                                                 only_return_final=False)
-        assert match(layer_lstm_0.output_shape, (None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        assert match(layer_lstm_0.output_shape, (SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
 
         layers_lstm = [layer_lstm_0]
 
@@ -566,36 +567,40 @@ def test_model():
                                     nonlinearity=lasagne.nonlinearities.tanh
                                     ))]
 
-        # layer_lstms = ListMergeLayer(layers_lstm, name="Merged LSTMs")
         layer_concated_lstms = lasagne.layers.ConcatLayer(layers_lstm, axis=0)
-        assert match(layer_concated_lstms.output_shape, (None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        assert match(layer_concated_lstms.output_shape, (N_NODES * SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
         layer_h = layer_concated_lstms
+        # # not sure about whether to reshape or not
         # layer_h = ReshapeLayer(layer_concated_lstms, (N_NODES, -1, [1], [2]))
         # assert match(layer_h.output_shape, (N_NODES, None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
 
+        # # test forwarding connections: pass
+        # randoms_h_prev = numpy.random.random(layer_prev_h.shape).astype('float32')
+        # temp_outputs = lasagne.layers.get_output(layer_h, {layer_xy: net_inputs, layer_prev_h: randoms_h_prev})
+        # temp_outputs = temp_outputs.eval()
 
-        # layer_h_to_h = NonlinearityLayer(layer_h, nonlinearity=rectify)
+        # # tried the CustomRecurrentLayer approach
+        # layer_h_to_h = lasagne.layers.NonlinearityLayer(lasagne.layers.InputLayer((N_NODES * SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        #                                                 , nonlinearity=lasagne.nonlinearities.rectify)
 
-        layer_h_to_h = lasagne.layers.NonlinearityLayer(lasagne.layers.InputLayer((None, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
+        # # tried the RecurrentContainerLayer aproach
+        # cell_social_lstm = lasagne.layers.CustomRecurrentCell(layer_xy, layer_h, layer_h_to_h
+        #                                                         , nonlinearity=None, hid_init=lasagne.init.Constant(.0))['output']
+        # layer_social_lstm = lasagne.layers.RecurrentContainerLayer({layer_xy: layer_in}, cell_social_lstm, {layer_prev_h: layer_h})
+
+
+        # trying rewriting CustomRecurrentCell
+        layer_h_to_h = lasagne.layers.NonlinearityLayer(lasagne.layers.InputLayer((N_NODES * SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
                                                         , nonlinearity=lasagne.nonlinearities.rectify)
-        cell_social_lstm = lasagne.layers.CustomRecurrentCell(layer_xy, layer_h, layer_h_to_h
+        cell_social_lstm = SocialLSTMCell(layer_xy, layer_prev_h, layer_h, layer_h_to_h
                                                                 , nonlinearity=None, hid_init=lasagne.init.Constant(.0))['output']
-        # layer_social_lstm = RecurrentContainerLayer({layer_xy: layer_in}, cell_social_lstm, {layer_prev_h: layer_h})
-        layer_social_lstm = lasagne.layers.RecurrentContainerLayer({}, cell_social_lstm, {layer_prev_h: layer_h_to_h})
+        layer_social_lstm = lasagne.layers.RecurrentContainerLayer({layer_xy: layer_in}, cell_social_lstm)
 
-        x_in = numpy.random.random(net_inputs.shape).astype('float32')
-        # net_outputs = helper.get_output(layer_social_lstm, {layer_in: x_in})
-        # layer_in.input_var = x_in
-        net_outputs = lasagne.layers.get_output(layer_social_lstm, {layer_in: x_in})
-        net_outputs = lasagne.layers.get_output(layer_social_lstm).eval({layer_in.input_var: x_in})
+        randoms_in = numpy.random.random(net_inputs.shape).astype('float32')
+        temp_outputs = lasagne.layers.get_output(layer_social_lstm, {layer_in: randoms_in}).eval()
+        temp_outputs = lasagne.layers.get_output(layer_social_lstm).eval({layer_in.input_var: randoms_in})
 
-        net_outputs = lasagne.layers.get_output(layer_social_lstm).eval({layer_in.input_var: net_inputs})
-
-
-        # temp_outputs = get_output(layer_social_lstm, net_inputs)
-        # temp_outputs = get_output(layer_h, {layer_in: net_inputs, layer_prev_h: layer_h_to_h.get_output_for(layer_in)})
-
-        # net_outputs = temp_outputs
+        net_outputs = temp_outputs
 
 
     except KeyboardInterrupt:
