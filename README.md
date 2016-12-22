@@ -113,7 +113,12 @@
 
 - ADD: Instant sequence to the return values of `load_batch_for_nodes`;
 
-###### 2016-12-12
+###### [2016-12-12](2aa7ec08e92780cd1c7cb86c2fe549e0f217657b)
 
 - TEST: Forwarding connections should be fine, only if passing in previous hidden states mannually;
 - DEBUG: The overwriting in `SocialLSTMCell`, still "lack of input" for `layer_xy`. Likely has sth to do with line 291 & 551 in [recurrent.py](https://github.com/sheeco/Lasagne/blob/add565017d4636676028d16dcba1ec2b2870aa36/lasagne/layers/recurrent.py#L291);
+
+###### 2016-12-22
+
+- NOTE: Give up the previous cell&container approach from stevenxxiu;
+- ADD: Try to define `RecurrentContainerLayer` by overwriting `CustomRecurrentLayer`;
