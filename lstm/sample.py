@@ -57,11 +57,11 @@ def read_traces_from_path(path):
 def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target=True):
     """
     指定起始位置，为单次训练/测试生成所有节点的输入序列（及目标序列）。
-    注意：如果超出最大采样数，将返回 2 个空值，因此需要对返回值进行验证之后再使用
+    注意：如果超出最大采样数，将返回 None，因此需要对返回值进行验证之后再使用
     :param dict_traces: 由 @read_traces_from_path 返回的 dict{轨迹文件名 string: 采样三元组 list}
     :param filter_nodes: 用于指定所选节点集合的 array/list[string 节点标识符]
     :param idx_line_entry: int 指定序列起始 instant 在轨迹文件中对应的行号（由 0 开始）
-    :param with_target: bool 是否返回学习目标，默认 True；如果为 False，第二个返回值即为空
+    :param with_target: bool 是否返回学习目标，默认 True；如果为 False，第二个返回值即为 None
     :return: 时序，采样输入，学习目标
     :format: [:LENGTH_SEQUENCE_INPUT], [:所选节点数, :LENGTH_SEQUENCE_INPUT, :2], [:所选节点数, :LENGTH_SEQUENCE_OUTPUT， :2]
     """
@@ -105,12 +105,12 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
     sequences_target = numpy.zeros((0, 0, 0))
     end_line_traces = traces_requested.shape[1]
     if end_line_input >= end_line_traces or end_line_target > end_line_traces:
-        return sequences_instants, sequences_input, sequences_target
+        return None, None, None
 
     sequences_instants = instants[begin_line_input: end_line_input]
     sequences_input = traces_requested[:, begin_line_input: end_line_input, :]
-    if with_target:
-        sequences_target = traces_requested[:, begin_line_target: end_line_target, :]
+
+    sequences_target = traces_requested[:, begin_line_target: end_line_target, :] if with_target else None
 
     return sequences_instants, sequences_input, sequences_target
 
@@ -118,12 +118,12 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
 def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, with_target=True):
     """
     指定起始位置及批大小，为单批次的训练/测试生成所有节点的输入序列（及目标序列）。
-    注意：如果超出最大采样数，将返回 2 个空值，因此需要对返回值进行验证之后再使用
+    注意：如果超出最大采样数，将返回 2 个 None，因此需要对返回值进行验证之后再使用
     :param dict_traces: 由 @read_traces_from_path 返回的 dict{轨迹文件名 string: 采样三元组 list}
     :param size_batch: int 批大小
     :param filter_nodes: 用于指定所选节点集合的 array/list[string 节点标识符]
     :param idx_line_entry: int 指定序列起始 instant 在轨迹文件中对应的行号（由 0 开始）
-    :param with_target: bool 是否返回学习目标，默认 True；如果为 False，第二个返回值即为空
+    :param with_target: bool 是否返回学习目标，默认 True；如果为 False，第二个返回值即为 None
     :return: 时序，采样输入，学习目标
     # :format: [size_batch, LENGTH_SEQUENCE_INPUT], [size_batch, N_NODES, LENGTH_SEQUENCE_INPUT, 2], [size_batch, N_NODES, LENGTH_SEQUENCE_OUTPUT, 2]
     :format: [size_batch, LENGTH_SEQUENCE_INPUT], [N_NODES, size_batch, LENGTH_SEQUENCE_INPUT, 2], [N_NODES, size_batch, LENGTH_SEQUENCE_OUTPUT, 2]
@@ -136,7 +136,7 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
     for i in range(size_batch):
         sample_instants, sample_input, sample_target = load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry + i,
                                                             with_target)
-        if len(sample_input) > 0:
+        if sample_input is not None:
             shape_in = sample_input.shape
 
             batch_instants = numpy.resize(batch_instants, (i + 1, shape_in[1]))
@@ -159,18 +159,17 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
                     batch_target[inode, i] = sample_target[inode]
 
         elif len(batch_input) == 0:
-            return batch_instants, batch_input, batch_target
+            return None, None, None
         elif STRICT_BATCH_SIZE:
             warn("An insufficient batch of ", batch_input.shape[1], " samples is discarded.")
-            batch_instants, = numpy.zeros((0, 0))
-            batch_input = numpy.zeros((0, 0, 0, 0))
-            batch_target = numpy.zeros((0, 0, 0, 0))
-            return batch_instants, batch_input, batch_target
+            return None, None, None
         elif not STRICT_BATCH_SIZE:
             warn("Insufficient batch. Only ", batch_input.shape[1], " samples are left.")
             break
         else:
             raise RuntimeError("load_batch_for_nodes @ sample: \n\tUnexpected access of this block.")
+    if not with_target:
+        batch_target = None
     return batch_instants, batch_input, batch_target
 
 

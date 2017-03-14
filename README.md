@@ -125,7 +125,11 @@
 
 ##### Branch `shared_lstm`
 
-###### 2017-03-13
+###### [2017-03-13](4ff90b74528e4090fe2dd98f6460cbe3b7c24227)
 
 - ADD: A simple model of shared LSTM, with dense decoder;
 - TEST: Building & compiling should be fine;
+
+###### 2017-03-14
+
+- OPT: for sample loading;

@@ -308,7 +308,7 @@ if __name__ == '__main__':
         while True:
             # 1 batch for each node
             instants, inputs, targets = load_batch_for_nodes(all_traces, SIZE_BATCH, N_NODES, p_entry, True)
-            if len(inputs) == 0:
+            if inputs is None:
                 break
 
             p_entry += SIZE_BATCH
