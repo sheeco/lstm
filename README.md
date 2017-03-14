@@ -118,7 +118,14 @@
 - TEST: Forwarding connections should be fine, only if passing in previous hidden states mannually;
 - DEBUG: The overwriting in `SocialLSTMCell`, still "lack of input" for `layer_xy`. Likely has sth to do with line 291 & 551 in [recurrent.py](https://github.com/sheeco/Lasagne/blob/add565017d4636676028d16dcba1ec2b2870aa36/lasagne/layers/recurrent.py#L291);
 
-###### 2016-12-22
+###### [2016-12-22](b96a719c22d8ee8941e9c737b12a4597f031a30d)
 
 - NOTE: Give up the previous cell&container approach from stevenxxiu;
 - ADD: Try to define `RecurrentContainerLayer` by overwriting `CustomRecurrentLayer`;
+
+##### Branch `shared_lstm`
+
+###### 2017-03-13
+
+- ADD: A simple model of shared LSTM, with dense decoder;
+- TEST: Building & compiling should be fine;
