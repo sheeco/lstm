@@ -46,7 +46,7 @@ DIMENSION_SAMPLE = 2
 # Length of observed sequence
 LENGTH_SEQUENCE_INPUT = 4
 # Length of predicted sequence
-LENGTH_SEQUENCE_OUTPUT = 1
+LENGTH_SEQUENCE_OUTPUT = 4
 # Number of units in embedding layer ([x, y] -> e)
 DIMENSION_EMBED_LAYER = 2
 # Number of units in each hidden (LSTM) layers

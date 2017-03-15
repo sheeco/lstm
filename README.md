@@ -130,6 +130,10 @@
 - ADD: A simple model of shared LSTM, with dense decoder;
 - TEST: Building & compiling should be fine;
 
-###### 2017-03-14
+###### [2017-03-14](8591dd9b5dcc7504806f030685bd0ec4b09f210d)
 
 - OPT: for sample loading;
+
+###### 2017-03-14
+
+- 

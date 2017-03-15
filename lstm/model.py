@@ -1,6 +1,7 @@
 # coding:GBK
 
 import numpy
+import scalar
 import theano
 import theano.tensor as T
 import lasagne as L
@@ -21,8 +22,8 @@ N_NODES = N_NODES_EXPECTED if N_NODES_EXPECTED < N_NODES else N_NODES
 RMSPROP = lambda loss, params: L.updates.rmsprop(loss, params, LEARNING_RATE_RMSPROP)
 METRIC_TRAINING = RMSPROP
 
-CROSS_ENTROPY = lambda pred, target: L.objectives.categorical_crossentropy(pred, target)
-SQUARED = lambda pred, target: L.objectives.squared_error(pred, target)
+CROSS_ENTROPY = lambda pred, target: L.objectives.categorical_crossentropy(pred, target).mean()
+SQUARED = lambda pred, target: L.objectives.squared_error(pred, target).mean()
 METRIC_LOSS = SQUARED
 
 
@@ -83,10 +84,10 @@ def build_shared_lstm(input_var=None):
         print 'Building shared LSTM network ...',
 
         # [(x, y)]
-        layer_in = L.layers.InputLayer(name="input-in", input_var=input_var,
+        layer_in = L.layers.InputLayer(name="input-layer", input_var=input_var,
                                              shape=(N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
         # e = relu(x, y; We)
-        layer_e = L.layers.DenseLayer(layer_in, name="e", num_units=DIMENSION_EMBED_LAYER,
+        layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=DIMENSION_EMBED_LAYER,
                                             nonlinearity=L.nonlinearities.rectify, num_leading_axes=3)
         assert match(layer_e.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
 
@@ -136,19 +137,51 @@ def build_shared_lstm(input_var=None):
 
         layer_concated_lstms = L.layers.ConcatLayer(layers_lstm, axis=0)
         assert match(layer_concated_lstms.output_shape, (N_NODES * SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
-        # not sure about whether to reshape or not
+
         layer_h = L.layers.ReshapeLayer(layer_concated_lstms, (N_NODES, -1, [1], [2]))
         assert match(layer_h.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
 
-        # simple decoder
-        layer_decoded = L.layers.DenseLayer(layer_h, name="e", num_units=DIMENSION_SAMPLE,
-                                            nonlinearity=L.nonlinearities.rectify, num_leading_axes=3)
-        assert match(layer_decoded.output_shape,
-                     (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
+        # # simple decoder
+        #
+        # layer_decoded = L.layers.DenseLayer(layer_h, name="decoded", num_units=DIMENSION_SAMPLE,
+        #                                     nonlinearity=L.nonlinearities.rectify, num_leading_axes=3)
+        # assert match(layer_decoded.output_shape,
+        #              (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
+        #
+        # layer_output = L.layers.SliceLayer(layer_distribution, slice(-1, None), axis=-2)
+        # assert match(layer_output.output_shape,
+        #              (N_NODES, SIZE_BATCH, 1, DIMENSION_SAMPLE))
 
-        layer_output = L.layers.SliceLayer(layer_decoded, slice(-1, None), axis=-2)
-        assert match(layer_output.output_shape,
-                     (N_NODES, SIZE_BATCH, 1, DIMENSION_SAMPLE))
+        layer_distribution = L.layers.DenseLayer(layer_h, name="distribution-layer", num_units=5,
+                                            nonlinearity=None, num_leading_axes=-1)
+
+        assert match(layer_distribution.output_shape,
+                     (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 5))
+
+        # todo to be tested
+        _sample = T.constant([[50, 100, 0.1, 0.1, 0.5], [50, 100, 0.1, 0.1, 0.5]])
+        covariance_matrix = lambda deviation, correlation: T.mul(correlation, T.dot(T.transpose(deviation), deviation) ** 0.5)
+        # _temp = _sample[0, 2:4]
+        # _val = _temp.eval()
+        # _temp = _temp ** 0.5
+        # _val = _temp.eval()
+        # _temp = T.dot(T.transpose(_temp), _temp ** 0.5)
+        # _val = _temp.eval()
+        _temp = covariance_matrix(_sample[:, 2:4], _sample[:, 4])
+        _val = _temp.eval()
+        # _temp = T.flatten(_sample[0, 0:2], 1)
+        # _val = _temp.eval()
+        # _temp = numpy.random.multivariate_normal(T.flatten(_sample[0, 0:2], 1), _temp)
+        _temp = numpy.random.multivariate_normal([50, 100], _temp)
+        T.
+        _val = _temp.eval()
+        binary_gaussian_distribution = lambda distribution: numpy.random.multivariate_normal(distribution[:, 0:2], covariance_matrix(distribution[:, 2:4], distribution[:, 4]))
+        _temp = binary_gaussian_distribution(_sample)
+        _val = _temp.eval()
+
+        layer_output = L.layers.ExpressionLayer(layer_distribution, binary_gaussian_distribution)
+        assert match(layer_distribution.output_shape,
+                     (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 2))
 
         print 'Done'
         return layer_output
@@ -262,7 +295,6 @@ def compute_and_compile(network, input_var, target_var):
 
         # The loss function is calculated as the mean of the (categorical) cross-entropy between the prediction and target.
         loss = METRIC_LOSS(predictions, target_var)
-        loss = loss.mean()
 
         # Retrieve all parameters from the network
         params = L.layers.get_all_params(network, trainable=True)
