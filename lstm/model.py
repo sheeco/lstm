@@ -85,10 +85,10 @@ def build_shared_lstm(input_var=None):
 
         # [(x, y)]
         layer_in = L.layers.InputLayer(name="input-layer", input_var=input_var,
-                                             shape=(N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
+                                       shape=(N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
         # e = relu(x, y; We)
         layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=DIMENSION_EMBED_LAYER,
-                                            nonlinearity=L.nonlinearities.rectify, num_leading_axes=3)
+                                      nonlinearity=L.nonlinearities.rectify, num_leading_axes=3)
         assert match(layer_e.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
 
         layers_in_lstms = []
@@ -100,9 +100,9 @@ def build_shared_lstm(input_var=None):
 
         # Create an LSTM layers for the 1st node
         layer_lstm_0 = L.layers.LSTMLayer(layers_in_lstms[0], DIMENSION_HIDDEN_LAYERS, name="LSTM-0",
-                                                nonlinearity=L.nonlinearities.tanh,
-                                                hid_init=L.init.Constant(0.0), cell_init=L.init.Constant(0.0),
-                                                only_return_final=False)
+                                          nonlinearity=L.nonlinearities.tanh,
+                                          hid_init=L.init.Constant(0.0), cell_init=L.init.Constant(0.0),
+                                          only_return_final=False)
         assert match(layer_lstm_0.output_shape, (SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
 
         layers_lstm = [layer_lstm_0]
@@ -113,27 +113,27 @@ def build_shared_lstm(input_var=None):
             # Overdated implement for lasagne/lasagne
             layers_lstm += [
                 L.layers.LSTMLayer(layers_in_lstms[inode], DIMENSION_HIDDEN_LAYERS, name="LSTM-" + str(inode),
-                                         grad_clipping=GRAD_CLIP,
-                                         nonlinearity=L.nonlinearities.tanh, hid_init=L.init.Constant(0.0),
-                                         cell_init=L.init.Constant(0.0), only_return_final=False,
-                                         ingate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_ingate,
-                                                                    W_hid=layer_lstm_0.W_hid_to_ingate,
-                                                                    W_cell=layer_lstm_0.W_cell_to_ingate,
-                                                                    b=layer_lstm_0.b_ingate),
-                                         outgate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_outgate,
-                                                                     W_hid=layer_lstm_0.W_hid_to_outgate,
-                                                                     W_cell=layer_lstm_0.W_cell_to_outgate,
-                                                                     b=layer_lstm_0.b_outgate),
-                                         forgetgate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_forgetgate,
-                                                                        W_hid=layer_lstm_0.W_hid_to_forgetgate,
-                                                                        W_cell=layer_lstm_0.W_cell_to_forgetgate,
-                                                                        b=layer_lstm_0.b_forgetgate),
-                                         cell=L.layers.Gate(W_in=layer_lstm_0.W_in_to_cell,
-                                                                  W_hid=layer_lstm_0.W_hid_to_cell,
-                                                                  W_cell=None,
-                                                                  b=layer_lstm_0.b_cell,
-                                                                  nonlinearity=L.nonlinearities.tanh
-                                                                  ))]
+                                   grad_clipping=GRAD_CLIP,
+                                   nonlinearity=L.nonlinearities.tanh, hid_init=L.init.Constant(0.0),
+                                   cell_init=L.init.Constant(0.0), only_return_final=False,
+                                   ingate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_ingate,
+                                                        W_hid=layer_lstm_0.W_hid_to_ingate,
+                                                        W_cell=layer_lstm_0.W_cell_to_ingate,
+                                                        b=layer_lstm_0.b_ingate),
+                                   outgate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_outgate,
+                                                         W_hid=layer_lstm_0.W_hid_to_outgate,
+                                                         W_cell=layer_lstm_0.W_cell_to_outgate,
+                                                         b=layer_lstm_0.b_outgate),
+                                   forgetgate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_forgetgate,
+                                                            W_hid=layer_lstm_0.W_hid_to_forgetgate,
+                                                            W_cell=layer_lstm_0.W_cell_to_forgetgate,
+                                                            b=layer_lstm_0.b_forgetgate),
+                                   cell=L.layers.Gate(W_in=layer_lstm_0.W_in_to_cell,
+                                                      W_hid=layer_lstm_0.W_hid_to_cell,
+                                                      W_cell=None,
+                                                      b=layer_lstm_0.b_cell,
+                                                      nonlinearity=L.nonlinearities.tanh
+                                                      ))]
 
         layer_concated_lstms = L.layers.ConcatLayer(layers_lstm, axis=0)
         assert match(layer_concated_lstms.output_shape, (N_NODES * SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
@@ -153,35 +153,18 @@ def build_shared_lstm(input_var=None):
         #              (N_NODES, SIZE_BATCH, 1, DIMENSION_SAMPLE))
 
         layer_distribution = L.layers.DenseLayer(layer_h, name="distribution-layer", num_units=5,
-                                            nonlinearity=None, num_leading_axes=-1)
+                                                 nonlinearity=None, num_leading_axes=-1)
 
         assert match(layer_distribution.output_shape,
                      (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 5))
 
-        # todo to be tested
-        _sample = T.constant([[50, 100, 0.1, 0.1, 0.5], [50, 100, 0.1, 0.1, 0.5]])
-        covariance_matrix = lambda deviation, correlation: T.mul(correlation, T.dot(T.transpose(deviation), deviation) ** 0.5)
-        # _temp = _sample[0, 2:4]
-        # _val = _temp.eval()
-        # _temp = _temp ** 0.5
-        # _val = _temp.eval()
-        # _temp = T.dot(T.transpose(_temp), _temp ** 0.5)
-        # _val = _temp.eval()
-        _temp = covariance_matrix(_sample[:, 2:4], _sample[:, 4])
-        _val = _temp.eval()
-        # _temp = T.flatten(_sample[0, 0:2], 1)
-        # _val = _temp.eval()
-        # _temp = numpy.random.multivariate_normal(T.flatten(_sample[0, 0:2], 1), _temp)
-        _temp = numpy.random.multivariate_normal([50, 100], _temp)
-        T.
-        _val = _temp.eval()
-        binary_gaussian_distribution = lambda distribution: numpy.random.multivariate_normal(distribution[:, 0:2], covariance_matrix(distribution[:, 2:4], distribution[:, 4]))
-        _temp = binary_gaussian_distribution(_sample)
-        _val = _temp.eval()
-
-        layer_output = L.layers.ExpressionLayer(layer_distribution, binary_gaussian_distribution)
+        layer_output = L.layers.ReshapeLayer(layer_distribution, (-1, [3]))
         assert match(layer_distribution.output_shape,
-                     (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 2))
+                     (N_NODES * SIZE_BATCH * LENGTH_SEQUENCE_INPUT, 5))
+
+        # layer_output = L.layers.ExpressionLayer(layer_distribution, binary_gaussian_distribution)
+        # assert match(layer_distribution.output_shape,
+        #              (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 2))
 
         print 'Done'
         return layer_output
@@ -291,10 +274,61 @@ def compute_and_compile(network, input_var, target_var):
 
         print 'Computing updates ...',
 
-        predictions = L.layers.get_output(network)
+        outputs = L.layers.get_output(network)
 
-        # The loss function is calculated as the mean of the (categorical) cross-entropy between the prediction and target.
-        loss = METRIC_LOSS(predictions, target_var)
+        # # The loss function is calculated as the mean of the (categorical) cross-entropy between the prediction and target.
+        # loss = METRIC_LOSS(predictions, target_var)
+
+        # outputs = T.dmatrix('outputs')
+        distributions = T.reshape(outputs, (-1, 5))
+        # preds = T.dmatrix('predictions')
+        predictions = distributions[:, :, :, 0:2]
+        # decoder = theano.function([outputs], predictions)
+
+        # (..., 2)
+        targets = T.dmatrix('targets')
+        log_probs = T.dvector('log-probs')
+        # distributions = T.constant([[50, 100, 0.04, 0.09, 1], [50, 100, 0.18, 0.08, 0.5]])
+        means = distributions[:, 0:2]
+        deviations = distributions[:, 2:4]
+        correlations = distributions[:, 4:5]
+        covariance_matrix = lambda deviation, correlation: T.dot(T.transpose(deviation)** 0.5, T.mul(T.extra_ops.repeat(correlation, 2, axis=0),  deviation) ** 0.5)
+
+        from breze.arch.component.distributions.mvn import pdf, logpdf
+        msample = T.dmatrix('sample')
+        vmean = T.dvector('mean')
+        mcov = T.dmatrix('cov')
+        p = pdf(msample, vmean, mcov)
+        logp = logpdf(msample, vmean, mcov)
+        pdf_multi_norm = theano.function([msample, vmean, mcov], p)
+        logpdf_multi_norm = theano.function([msample, vmean, mcov], logp)
+
+        for i in xrange(distributions.ndim):
+            target = targets[i, :]
+            # (dim, )
+            mean = means[i, 0:2]
+            # _val = mean.eval()
+            # (dim, )
+            deviation = deviations[i:i+1, 0:2]
+            # (1, )
+            correlation = correlations[i, :]
+            # (dim, dim)
+            cov = covariance_matrix(deviation, correlation)
+            # _val = cov.eval()
+            # from breze.learn.utils import theano_floatx
+            # from theano.tensor.shared_randomstreams import RandomStreams
+            # srng = RandomStreams(seed=234)
+            # srng.normal()
+            pred = mean
+            _val = pred.eval()
+            prob = logpdf_multi_norm(target, mean, cov)
+            _val = prob.eval()
+            log_probs.set_subtensor(log_probs[i], prob)
+        loss = - T.sum(log_probs)
+        _val = log_probs.eval()
+
+        # compute_loss = theano.function([outputs, targets], loss)
+
 
         # Retrieve all parameters from the network
         params = L.layers.get_all_params(network, trainable=True)
