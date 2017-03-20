@@ -63,7 +63,7 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
     :param idx_line_entry: int 指定序列起始 instant 在轨迹文件中对应的行号（由 0 开始）
     :param with_target: bool 是否返回学习目标，默认 True；如果为 False，第二个返回值即为 None
     :return: 时序，采样输入，学习目标
-    :format: [:LENGTH_SEQUENCE_INPUT], [:所选节点数, :LENGTH_SEQUENCE_INPUT, :2], [:所选节点数, :LENGTH_SEQUENCE_OUTPUT， :2]
+    :format: [:LENGTH_SEQUENCE_INPUT], [:所选节点数, :LENGTH_SEQUENCE_INPUT, :DIMENSION_SAMPLE], [:所选节点数, :LENGTH_SEQUENCE_OUTPUT， :DIMENSION_SAMPLE]
     """
 
     # 仅选中 node_identifiers 中指定的节点的轨迹
@@ -125,8 +125,8 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
     :param idx_line_entry: int 指定序列起始 instant 在轨迹文件中对应的行号（由 0 开始）
     :param with_target: bool 是否返回学习目标，默认 True；如果为 False，第二个返回值即为 None
     :return: 时序，采样输入，学习目标
-    # :format: [size_batch, LENGTH_SEQUENCE_INPUT], [size_batch, N_NODES, LENGTH_SEQUENCE_INPUT, 2], [size_batch, N_NODES, LENGTH_SEQUENCE_OUTPUT, 2]
-    :format: [size_batch, LENGTH_SEQUENCE_INPUT], [N_NODES, size_batch, LENGTH_SEQUENCE_INPUT, 2], [N_NODES, size_batch, LENGTH_SEQUENCE_OUTPUT, 2]
+    # :format: [size_batch, LENGTH_SEQUENCE_INPUT], [size_batch, N_NODES, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE], [size_batch, N_NODES, LENGTH_SEQUENCE_OUTPUT, DIMENSION_SAMPLE]
+    :format: [size_batch, LENGTH_SEQUENCE_INPUT], [N_NODES, size_batch, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE], [N_NODES, size_batch, LENGTH_SEQUENCE_OUTPUT, DIMENSION_SAMPLE]
     """
     # todo add boolean arg redundant_batch
 

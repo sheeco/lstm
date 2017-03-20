@@ -10,7 +10,7 @@ from config import *
 from utils import *
 from sample import *
 
-
+theano.config.exception_verbosity = 'high'
 all_traces = read_traces_from_path(PATH_TRACE_FILES)
 MAX_SEQUENCES = len(all_traces.items())
 
@@ -18,13 +18,6 @@ N_NODES = len(all_traces)
 # if N_NODES_EXPECTED > N_NODES:
 #     raise RuntimeError("Cannot find enough nodes in the given path.")
 N_NODES = N_NODES_EXPECTED if N_NODES_EXPECTED < N_NODES else N_NODES
-
-RMSPROP = lambda loss, params: L.updates.rmsprop(loss, params, LEARNING_RATE_RMSPROP)
-METRIC_TRAINING = RMSPROP
-
-CROSS_ENTROPY = lambda pred, target: L.objectives.categorical_crossentropy(pred, target).mean()
-SQUARED = lambda pred, target: L.objectives.squared_error(pred, target).mean()
-METRIC_LOSS = SQUARED
 
 
 def social_mask(sequences):
@@ -158,9 +151,12 @@ def build_shared_lstm(input_var=None):
         assert match(layer_distribution.output_shape,
                      (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 5))
 
-        layer_output = L.layers.ReshapeLayer(layer_distribution, (-1, [3]))
+        layer_output = L.layers.SliceLayer(layer_distribution, indices=slice(-LENGTH_SEQUENCE_OUTPUT, None), axis=2)
         assert match(layer_distribution.output_shape,
-                     (N_NODES * SIZE_BATCH * LENGTH_SEQUENCE_INPUT, 5))
+                     (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_OUTPUT, 5))
+        # layer_output = L.layers.ReshapeLayer(layer_distribution, (-1, [3]))
+        # assert match(layer_distribution.output_shape,
+        #              (N_NODES * SIZE_BATCH * LENGTH_SEQUENCE_INPUT, 5))
 
         # layer_output = L.layers.ExpressionLayer(layer_distribution, binary_gaussian_distribution)
         # assert match(layer_distribution.output_shape,
@@ -268,85 +264,108 @@ def build_shared_lstm(input_var=None):
     #     pass
 
 
-def compute_and_compile(network, input_var, target_var):
+def compute_and_compile(network, inputs_in, targets_in):
 
     try:
 
-        print 'Computing updates ...',
+        print 'Preparing ...',
 
-        outputs = L.layers.get_output(network)
+        network_outputs = L.layers.get_output(network)
 
-        # # The loss function is calculated as the mean of the (categorical) cross-entropy between the prediction and target.
-        # loss = METRIC_LOSS(predictions, target_var)
+        # Use mean(x, y) as predictions directly
+        predictions = network_outputs[:, :, :, 0:2]
+        # Remove time column
+        facts = targets_in[:, :, :, 1:3]
 
-        # outputs = T.dmatrix('outputs')
-        distributions = T.reshape(outputs, (-1, 5))
-        # preds = T.dmatrix('predictions')
-        predictions = distributions[:, :, :, 0:2]
-        # decoder = theano.function([outputs], predictions)
+        """Euclidean Error for Observation"""
 
-        # (..., 2)
-        targets = T.dmatrix('targets')
-        log_probs = T.dvector('log-probs')
+        # Elemwise differences
+        differences = T.sub(predictions, facts)
+        original_shape = differences.shape
+        new_shape = (original_shape[0] * original_shape[1] * original_shape[2], original_shape[3])
+        differences = T.reshape(differences, new_shape)
+        error = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
+        new_shape = (original_shape[0] * original_shape[1] * original_shape[2], 1)
+        error = T.reshape(differences, new_shape)
+
+        """NNL Loss for Training"""
+
+        # Reshape for convenience
+        original_shape = facts.shape
+        new_shape = (original_shape[0] * original_shape[1] * original_shape[2], original_shape[3])
+        targets = T.reshape(facts, new_shape)
+        original_shape = network_outputs.shape
+        new_shape = (original_shape[0] * original_shape[1] * original_shape[2], original_shape[3])
+        distributions = T.reshape(network_outputs, new_shape)
         # distributions = T.constant([[50, 100, 0.04, 0.09, 1], [50, 100, 0.18, 0.08, 0.5]])
-        means = distributions[:, 0:2]
-        deviations = distributions[:, 2:4]
-        correlations = distributions[:, 4:5]
-        covariance_matrix = lambda deviation, correlation: T.dot(T.transpose(deviation)** 0.5, T.mul(T.extra_ops.repeat(correlation, 2, axis=0),  deviation) ** 0.5)
 
-        from breze.arch.component.distributions.mvn import pdf, logpdf
-        msample = T.dmatrix('sample')
-        vmean = T.dvector('mean')
-        mcov = T.dmatrix('cov')
-        p = pdf(msample, vmean, mcov)
-        logp = logpdf(msample, vmean, mcov)
-        pdf_multi_norm = theano.function([msample, vmean, mcov], p)
-        logpdf_multi_norm = theano.function([msample, vmean, mcov], logp)
+        # Use scan to replace loop with tensors
+        def step_loss(idx, distribution_mat, target_mat):
 
-        for i in xrange(distributions.ndim):
-            target = targets[i, :]
-            # (dim, )
-            mean = means[i, 0:2]
-            # _val = mean.eval()
-            # (dim, )
-            deviation = deviations[i:i+1, 0:2]
-            # (1, )
-            correlation = correlations[i, :]
-            # (dim, dim)
-            cov = covariance_matrix(deviation, correlation)
-            # _val = cov.eval()
-            # from breze.learn.utils import theano_floatx
-            # from theano.tensor.shared_randomstreams import RandomStreams
-            # srng = RandomStreams(seed=234)
-            # srng.normal()
-            pred = mean
-            _val = pred.eval()
-            prob = logpdf_multi_norm(target, mean, cov)
-            _val = prob.eval()
-            log_probs.set_subtensor(log_probs[i], prob)
-        loss = - T.sum(log_probs)
-        _val = log_probs.eval()
+            # From the idx of the start of the slice, the vector and the length of
+            # the slice, obtain the desired slice.
+            distribution = distribution_mat[idx:idx + 1, :]
+            target = target_mat[idx:idx + 1, :]
 
-        # compute_loss = theano.function([outputs, targets], loss)
+            mean = distribution[:, 0:2]
+            deviation = distribution[0:1, 2:4]
+            correlation = distribution[0:1, 4]
 
+            # deviation_var = T.dvector('deviation')
+            # correlation_var = T.dvector('correlation')
+            # covariance_var = T.dot(T.transpose(deviation_var) ** 0.5,
+            #                        T.mul(T.extra_ops.repeat(correlation_var, 2, axis=0), deviation_var) ** 0.5)
+            # compute_covariance = theano.function([deviation_var, correlation_var], covariance_var)
+
+            from breze.arch.component.distributions.mvn import logpdf
+
+            # sample_var = T.dmatrix('sample')
+            # mean_var = T.dvector('mean')
+            # cov_var = T.dmatrix('cov')
+            # # p = pdf(msample, vmean, mcov)
+            # # pdf_multi_norm = theano.function([msample, vmean, mcov], p)
+            # logp_var = logpdf(sample_var, mean_var, cov_var)
+            # logpdf_multi_norm = theano.function([sample_var, mean_var, cov_var], logp_var)
+
+            covariance = T.dot(T.transpose(deviation) ** 0.5,
+                                   T.mul(T.extra_ops.repeat(correlation, 2, axis=0), deviation) ** 0.5)
+            # Normal Negative Log-likelihood
+            nnl = logpdf(target, mean, covariance)
+
+            # Do something with the slice here. I don't know what you want to do
+            # to I'll just return the slice itself.
+
+            return nnl
+
+        # Make a vector containing the start idx of every slice
+        indices = T.arange(targets.shape[0])
+
+        probs, updates_loss = theano.scan(fn=step_loss,
+                                   sequences=[indices],
+                                   non_sequences=[distributions, targets])
+
+        loss = T.sum(probs)
+
+        print 'Done'
+        print 'Computing updates ...',
 
         # Retrieve all parameters from the network
         params = L.layers.get_all_params(network, trainable=True)
 
         # Compute RMSProp updates for training
-        updates = METRIC_TRAINING(loss, params)
+        RMSPROP = L.updates.rmsprop(loss, params, LEARNING_RATE_RMSPROP)
+        updates = RMSPROP
 
         print 'Done'
         print 'Compiling functions ...',
 
         # Theano functions for training and computing cost
-        predict = theano.function([input_var], predictions, allow_input_downcast=True)
-        compute_loss = theano.function([input_var, target_var], loss, allow_input_downcast=True)
-        # train = theano.function([input_var], loss, givens={net_targets: targets}, updates=updates, allow_input_downcast=True)
-        train = theano.function([input_var, target_var], loss, updates=updates, allow_input_downcast=True)
+        predict = theano.function([inputs_in], predictions, allow_input_downcast=True)
+        compare = theano.function([inputs_in, targets_in], error, allow_input_downcast=True)
+        train = theano.function([inputs_in, targets_in], loss, updates=updates, allow_input_downcast=True)
 
         print 'Done'
-        return predict, compute_loss, train
+        return predict, compare, train
 
     except (KeyboardInterrupt, SystemExit):
         pass

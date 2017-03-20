@@ -134,6 +134,8 @@
 
 - OPT: for sample loading;
 
-###### 2017-03-16
+###### 2017-03-20
 
-- 
+- MOD: Dimension of network inputs modified to 3 to include the time column;
+- ADD: NNL loss for training & Euclidean distance error for observation;
+- TEST: `compute_and_compile` should be fine for now;
