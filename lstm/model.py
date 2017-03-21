@@ -20,56 +20,6 @@ N_NODES = len(all_traces)
 N_NODES = N_NODES_EXPECTED if N_NODES_EXPECTED < N_NODES else N_NODES
 
 
-def social_mask(sequences):
-    """
-    Calculate social hidden-state tensor H for single batch of training sequences for all nodes
-    :param sequences: [N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 2]
-    :return: [N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES]
-    """
-
-    # mn_pool = numpy.zeros((1, 2), dtype=int)
-    # distance_xy = numpy.zeros((1, 2), dtype=float)
-    # indication = lambda mn_pool, distance_xy: sum((distance_xy >= SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2))
-    #                      & (distance_xy < SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2 + 1))) == 2
-
-    # mn_pool = T.bvector('mn')
-    # distance_xy = T.fvector('distance')
-    # # todo test
-    # # 1 / 0
-    # if_within_grid = T.eq(T.sum((distance_xy >= SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2))
-    #                      & (distance_xy < SIZE_POOL * (mn_pool - RANGE_NEIGHBORHOOD / 2 + 1))), 2)
-    # # distance_xy = other_xy - my_xy
-    # # pass in [m, n] in [0, RANGE_NEIGHBORHOOD)
-    # indication = theano.function([mn_pool, distance_xy], if_within_grid, allow_input_downcast=True)
-
-    # todo test
-    # distance_xy = other_xy - my_xy
-    # pass in [m, n] in [0, RANGE_NEIGHBORHOOD)
-    # 1 / 0
-    indication = lambda mn_pool, distance_xy: (T.ge(distance_xy[0], SIZE_POOL * (mn_pool[0] - RANGE_NEIGHBORHOOD / 2)))\
-                                              and T.lt(distance_xy[0], SIZE_POOL * (mn_pool[0] - RANGE_NEIGHBORHOOD / 2 + 1))\
-                                              and (T.ge(distance_xy[1], SIZE_POOL * (mn_pool[1] - RANGE_NEIGHBORHOOD / 2)))\
-                                              and T.lt(distance_xy[1], SIZE_POOL * (mn_pool[1] - RANGE_NEIGHBORHOOD / 2 + 1))
-
-    # n_nodes = all_nodes.shape[0]
-    # n_nodes = T.cast(n_nodes, 'int32')
-    # n_nodes = n_nodes.eval()
-
-    ret = T.zeros((N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, RANGE_NEIGHBORHOOD, RANGE_NEIGHBORHOOD, N_NODES))
-    for inode in xrange(N_NODES):
-        for ibatch in xrange(SIZE_BATCH):
-            for iseq in xrange(LENGTH_SEQUENCE_INPUT):
-                for m in xrange(RANGE_NEIGHBORHOOD):
-                    for n in xrange(RANGE_NEIGHBORHOOD):
-                        for jnode in xrange(N_NODES):
-                            if jnode == inode:
-                                continue
-                            ind = indication([m, n], sequences[jnode, ibatch, iseq] - sequences[inode, ibatch, iseq])
-                            T.set_subtensor(ret[inode, ibatch, iseq, m, n, jnode], ind)
-
-    return ret
-
-
 def build_shared_lstm(input_var=None):
 
     try:
@@ -80,7 +30,7 @@ def build_shared_lstm(input_var=None):
         layer_in = L.layers.InputLayer(name="input-layer", input_var=input_var,
                                        shape=(N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
         # e = relu(x, y; We)
-        layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=DIMENSION_EMBED_LAYER,
+        layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=DIMENSION_EMBED_LAYER, W=L.init.GlorotUniform(), b=L.init.Normal(),
                                       nonlinearity=L.nonlinearities.rectify, num_leading_axes=3)
         assert match(layer_e.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
 
@@ -145,7 +95,7 @@ def build_shared_lstm(input_var=None):
         # assert match(layer_output.output_shape,
         #              (N_NODES, SIZE_BATCH, 1, DIMENSION_SAMPLE))
 
-        layer_distribution = L.layers.DenseLayer(layer_h, name="distribution-layer", num_units=5,
+        layer_distribution = L.layers.DenseLayer(layer_h, name="distribution-layer", num_units=5, W=L.init.GlorotUniform(), b=L.init.Normal(),
                                                  nonlinearity=None, num_leading_axes=-1)
 
         assert match(layer_distribution.output_shape,
@@ -276,27 +226,26 @@ def compute_and_compile(network, inputs_in, targets_in):
         predictions = network_outputs[:, :, :, 0:2]
         # Remove time column
         facts = targets_in[:, :, :, 1:3]
+        shape_facts = facts.shape
+        shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
 
         """Euclidean Error for Observation"""
 
         # Elemwise differences
         differences = T.sub(predictions, facts)
-        original_shape = differences.shape
-        new_shape = (original_shape[0] * original_shape[1] * original_shape[2], original_shape[3])
-        differences = T.reshape(differences, new_shape)
-        error = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
-        new_shape = (original_shape[0] * original_shape[1] * original_shape[2], 1)
-        error = T.reshape(differences, new_shape)
+        differences = T.reshape(differences, shape_stacked_facts)
+        deviations = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
+        shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2], 1)
+        shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2])
+        deviations = T.reshape(deviations, shape_deviations)
 
         """NNL Loss for Training"""
 
         # Reshape for convenience
-        original_shape = facts.shape
-        new_shape = (original_shape[0] * original_shape[1] * original_shape[2], original_shape[3])
-        targets = T.reshape(facts, new_shape)
-        original_shape = network_outputs.shape
-        new_shape = (original_shape[0] * original_shape[1] * original_shape[2], original_shape[3])
-        distributions = T.reshape(network_outputs, new_shape)
+        targets = T.reshape(facts, shape_stacked_facts)
+        shape_distributions = network_outputs.shape
+        shape_stacked_distributions = (shape_distributions[0] * shape_distributions[1] * shape_distributions[2], shape_distributions[3])
+        distributions = T.reshape(network_outputs, shape_stacked_distributions)
         # distributions = T.constant([[50, 100, 0.04, 0.09, 1], [50, 100, 0.18, 0.08, 0.5]])
 
         # Use scan to replace loop with tensors
@@ -304,33 +253,38 @@ def compute_and_compile(network, inputs_in, targets_in):
 
             # From the idx of the start of the slice, the vector and the length of
             # the slice, obtain the desired slice.
-            distribution = distribution_mat[idx:idx + 1, :]
-            target = target_mat[idx:idx + 1, :]
 
-            mean = distribution[:, 0:2]
-            deviation = distribution[0:1, 2:4]
-            correlation = distribution[0:1, 4]
+            # distribution = distribution_mat[idx:idx + 1, :]
+            # target = target_mat[idx:idx + 1, :]
+            #
+            # from breze.arch.component.distributions.mvn import pdf
+            #
+            # mean = distribution[:, 0:2]
+            # deviation = T.abs_(distribution[0:1, 2:4])
+            # correlation = distribution[0:1, 4]
+            #
+            # covariance = T.dot(T.transpose(deviation),
+            #                        T.mul(T.extra_ops.repeat(correlation, 2, axis=0), deviation))
+            # # Normal Negative Log-likelihood
+            # nnl = pdf(target, mean, covariance)
 
-            # deviation_var = T.dvector('deviation')
-            # correlation_var = T.dvector('correlation')
-            # covariance_var = T.dot(T.transpose(deviation_var) ** 0.5,
-            #                        T.mul(T.extra_ops.repeat(correlation_var, 2, axis=0), deviation_var) ** 0.5)
-            # compute_covariance = theano.function([deviation_var, correlation_var], covariance_var)
+            def bivar_norm(x1, x2, mu1, mu2, sigma1, sigma2, rho):
+                # pdf of bivariate norm
+                # def pdf(x1, x2):
+                # get z
+                part1 = (x1 - mu1) ** 2 / sigma1 ** 2
+                part2 = - 2. * rho * (x1 - mu1) * (x2 - mu2) / sigma1 * sigma2
+                part3 = (x2 - mu2) ** 2 / sigma2 ** 2
+                z = part1 + part2 + part3
 
-            from breze.arch.component.distributions.mvn import logpdf
+                cof = 1. / (2. * numpy.pi * sigma1 * sigma2 * T.sqrt(1 - rho ** 2))
+                return cof * T.exp(-z / (2. * (1 - rho ** 2)))
+                # return pdf
 
-            # sample_var = T.dmatrix('sample')
-            # mean_var = T.dvector('mean')
-            # cov_var = T.dmatrix('cov')
-            # # p = pdf(msample, vmean, mcov)
-            # # pdf_multi_norm = theano.function([msample, vmean, mcov], p)
-            # logp_var = logpdf(sample_var, mean_var, cov_var)
-            # logpdf_multi_norm = theano.function([sample_var, mean_var, cov_var], logp_var)
-
-            covariance = T.dot(T.transpose(deviation) ** 0.5,
-                                   T.mul(T.extra_ops.repeat(correlation, 2, axis=0), deviation) ** 0.5)
-            # Normal Negative Log-likelihood
-            nnl = logpdf(target, mean, covariance)
+            distribution = distribution_mat[idx, :]
+            target = target_mat[idx, :]
+            nnl = bivar_norm(target[0], target[1], distribution[0], distribution[1], T.abs_(distribution[2]), T.abs_(distribution[3]), distribution[4])
+            # nnl = T.neg(T.log(nnl))
 
             # Do something with the slice here. I don't know what you want to do
             # to I'll just return the slice itself.
@@ -361,11 +315,12 @@ def compute_and_compile(network, inputs_in, targets_in):
 
         # Theano functions for training and computing cost
         predict = theano.function([inputs_in], predictions, allow_input_downcast=True)
-        compare = theano.function([inputs_in, targets_in], error, allow_input_downcast=True)
+        compare = theano.function([inputs_in, targets_in], deviations, allow_input_downcast=True)
         train = theano.function([inputs_in, targets_in], loss, updates=updates, allow_input_downcast=True)
+        check = theano.function([inputs_in, targets_in], probs, allow_input_downcast=True)
 
         print 'Done'
-        return predict, compare, train
+        return predict, compare, train, check
 
     except (KeyboardInterrupt, SystemExit):
         pass
@@ -373,30 +328,36 @@ def compute_and_compile(network, inputs_in, targets_in):
 
 if __name__ == '__main__':
 
-    # todo build the network
-    # todo define initializers
-    # todo add debug info & assertion
-    # todo extract args into config
-    # todo write config to .log
-    # todo read config from command line args
+    try:
 
-    input_var = T.tensor4("input", dtype='float64')
-    # target_var = T.fvector("targets")
-    target_var = T.tensor4("target", dtype='float64')
-    # net_targets = T.constant(targets, "net targets")
-    network = build_shared_lstm(input_var)
+        # todo build the network
+        # todo define initializers
+        # todo add debug info & assertion
+        # todo extract args into config
+        # todo write config to .log
+        # todo read config from command line args
 
-    predict, loss, train = compute_and_compile(network, input_var, target_var)
+        input_var = T.tensor4("input", dtype='float64')
+        target_var = T.tensor4("target", dtype='float64')
+        network = build_shared_lstm(input_var)
 
-    for iepoch in range(NUM_EPOCH):
-        p_entry = 0
-        while True:
-            # 1 batch for each node
-            instants, inputs, targets = load_batch_for_nodes(all_traces, SIZE_BATCH, N_NODES, p_entry, True)
-            if inputs is None:
-                break
+        predict, compare, train, check = compute_and_compile(network, input_var, target_var)
 
-            p_entry += SIZE_BATCH
-            train(inputs, targets)
+        for iepoch in range(NUM_EPOCH):
+            p_entry = 0
+            while True:
+                # 1 batch for each node
+                instants, inputs, targets = load_batch_for_nodes(all_traces, SIZE_BATCH, N_NODES, p_entry, True)
+                if inputs is None:
+                    break
+
+                p_entry += SIZE_BATCH
+                predictions = predict(inputs)
+                deviations = compare(inputs, targets)
+                probs = check(inputs, targets)
+                loss = train(inputs, targets)
+
+    except (KeyboardInterrupt, SystemExit):
+        pass
 
     print 'Exit'

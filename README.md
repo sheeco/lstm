@@ -134,8 +134,16 @@
 
 - OPT: for sample loading;
 
-###### 2017-03-20
+###### [2017-03-20](dd0b55bd7c2884eb8b0226890399ae9c7fe88f77)
 
 - MOD: Dimension of network inputs modified to 3 to include the time column;
-- ADD: NNL loss for training & Euclidean distance error for observation;
+- ADD: NNL loss for training & Euclidean distance error for observation. 
+- NOTE: Need new package [breze](https://github.com/breze-no-salt/breze) & consequently package [climin](https://github.com/BRML/climin), 
+  for `pdf` (under `breze.arch.component.distributions.mvn`), the probability density function of multi-variate normal distribution;
 - TEST: `compute_and_compile` should be fine for now;
+
+###### 2017-03-21
+
+- MOD: Define probability density function of bivariate normal distribution directly. No longer need package breze;
+- TRY: Different initialization metrics for weights & biases to avoid `NaN` or `inf` during computation;
+- DEBUG: Values of sigma (standard deviations) are negative, or too small for further computation;
