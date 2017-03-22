@@ -1,7 +1,7 @@
 # coding:utf-8
 import numpy
 import os  # 文件夹操作
-from config import *
+import config
 from utils import *
 
 
@@ -90,14 +90,14 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
     instants = instants[0]
     instants = instants.sum(1)
 
-    if DIMENSION_SAMPLE == 2:
+    if config.DIMENSION_SAMPLE == 2:
         # 不使用 time 作为输入元组的一部分，删除第 0 列
         traces_requested = traces_requested[:, :, 1:]
 
     begin_line_input = idx_line_entry
-    end_line_input = begin_line_input + LENGTH_SEQUENCE_INPUT
+    end_line_input = begin_line_input + config.LENGTH_SEQUENCE_INPUT
     begin_line_target = end_line_input
-    end_line_target = begin_line_target + LENGTH_SEQUENCE_OUTPUT
+    end_line_target = begin_line_target + config.LENGTH_SEQUENCE_OUTPUT
 
     # 如果超出采样数，返回 [], [], []
     sequences_instants = numpy.zeros((0))
@@ -160,11 +160,11 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
 
         elif len(batch_input) == 0:
             return None, None, None
-        elif STRICT_BATCH_SIZE:
-            warn("An insufficient batch of ", batch_input.shape[1], " samples is discarded.")
+        elif config.STRICT_BATCH_SIZE:
+            warn("An insufficient batch of %s samples is discarded." % batch_input.shape[1])
             return None, None, None
-        elif not STRICT_BATCH_SIZE:
-            warn("Insufficient batch. Only ", batch_input.shape[1], " samples are left.")
+        elif not config.STRICT_BATCH_SIZE:
+            warn("Insufficient batch. Only  %s  samples are left." % batch_input.shape[1])
             break
         else:
             raise RuntimeError("load_batch_for_nodes @ sample: \n\tUnexpected access of this block.")
@@ -180,7 +180,7 @@ __all__ = ["read_traces_from_path",
 def test_sample():
     demo_list_triples = read_triples_from_file('res/trace/2.trace')
     print numpy.shape(demo_list_triples)
-    dict_all_traces = read_traces_from_path(PATH_TRACE_FILES)
+    dict_all_traces = read_traces_from_path(config.PATH_TRACE_FILES)
     t_sample, in_sample, target_sample = load_sample_for_nodes(dict_all_traces, [], 0, True)
     print numpy.shape(t_sample), numpy.shape(in_sample), numpy.shape(target_sample)
     t_sample, in_sample, target_sample = load_sample_for_nodes(dict_all_traces, ['1', '2'], 0, True)
@@ -189,7 +189,11 @@ def test_sample():
     print numpy.shape(t_sample), numpy.shape(in_sample), numpy.shape(target_sample)
     t_sample, in_sample, target_sample = load_sample_for_nodes(dict_all_traces, [], 0, False)
     print numpy.shape(t_sample), numpy.shape(in_sample), numpy.shape(target_sample)
-    t_batch, in_batch, target_batch = load_batch_for_nodes(dict_all_traces, 11, [], 0, True)
+    t_batch, in_batch, target_batch = load_batch_for_nodes(dict_all_traces, 31, [], 0, True)
+    print numpy.shape(t_batch), numpy.shape(in_batch), numpy.shape(target_batch)
+
+    config.STRICT_BATCH_SIZE = False
+    t_batch, in_batch, target_batch = load_batch_for_nodes(dict_all_traces, 31, [], 0, True)
     print numpy.shape(t_batch), numpy.shape(in_batch), numpy.shape(target_batch)
 
     return
