@@ -9,7 +9,8 @@ from config import *
 from utils import *
 from sample import *
 
-theano.config.exception_verbosity = 'high'
+if __debug__:
+    theano.config.exception_verbosity = 'high'
 all_traces = read_traces_from_path(PATH_TRACE_FILES)
 all_traces = pan_to_positive(all_traces)
 MAX_SEQUENCES = len(all_traces.items())
@@ -30,8 +31,8 @@ def build_shared_lstm(input_var):
         layer_in = L.layers.InputLayer(name="input-layer", input_var=input_var,
                                        shape=(N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
         # e = relu(x, y; We)
-        layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=DIMENSION_EMBED_LAYER, W=L.init.GlorotUniform(), b=L.init.Normal(),
-                                      nonlinearity=L.nonlinearities.rectify, num_leading_axes=3)
+        layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=DIMENSION_EMBED_LAYER, W=L.init.Uniform(std=0.1, mean=(1/DIMENSION_SAMPLE)),
+                                      nonlinearity=None, num_leading_axes=3)
         assert match(layer_e.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
 
         layers_in_lstms = []
@@ -42,8 +43,20 @@ def build_shared_lstm(input_var):
             in layers_in_lstms)
 
         # Create an LSTM layers for the 1st node
-        layer_lstm_0 = L.layers.LSTMLayer(layers_in_lstms[0], DIMENSION_HIDDEN_LAYERS, name="LSTM-0",
-                                          nonlinearity=L.nonlinearities.tanh,
+        layer_lstm_0 = L.layers.LSTMLayer(layers_in_lstms[0], DIMENSION_HIDDEN_LAYERS, name="LSTM-0", nonlinearity=L.nonlinearities.softplus,
+                                          ingate=L.layers.Gate(W_in=L.init.Normal(std=0.1, mean=(1/DIMENSION_SAMPLE)),
+                                                               W_hid=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
+                                                               W_cell=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
+                                                               b=L.init.Constant(0.)),
+                                          forgetgate=L.layers.Gate(W_in=L.init.Normal(std=0.1, mean=(1/DIMENSION_SAMPLE)),
+                                                               W_hid=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
+                                                               W_cell=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
+                                                               b=L.init.Constant(0.)),
+                                          cell=L.layers.Gate(W_cell=None, nonlinearity=L.nonlinearities.softplus),
+                                          outgate=L.layers.Gate(W_in=L.init.Normal(std=0.1, mean=(1/DIMENSION_SAMPLE)),
+                                                               W_hid=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
+                                                               W_cell=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
+                                                               b=L.init.Constant(0.)),
                                           hid_init=L.init.Constant(0.0), cell_init=L.init.Constant(0.0),
                                           only_return_final=False)
         assert match(layer_lstm_0.output_shape, (SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
@@ -57,7 +70,7 @@ def build_shared_lstm(input_var):
             layers_lstm += [
                 L.layers.LSTMLayer(layers_in_lstms[inode], DIMENSION_HIDDEN_LAYERS, name="LSTM-" + str(inode),
                                    grad_clipping=GRAD_CLIP,
-                                   nonlinearity=L.nonlinearities.tanh, hid_init=L.init.Constant(0.0),
+                                   nonlinearity=L.nonlinearities.softplus, hid_init=L.init.Constant(0.0),
                                    cell_init=L.init.Constant(0.0), only_return_final=False,
                                    ingate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_ingate,
                                                         W_hid=layer_lstm_0.W_hid_to_ingate,
@@ -75,7 +88,7 @@ def build_shared_lstm(input_var):
                                                       W_hid=layer_lstm_0.W_hid_to_cell,
                                                       W_cell=None,
                                                       b=layer_lstm_0.b_cell,
-                                                      nonlinearity=L.nonlinearities.tanh
+                                                      nonlinearity=L.nonlinearities.softplus
                                                       ))]
 
         layer_concated_lstms = L.layers.ConcatLayer(layers_lstm, axis=0)
@@ -95,8 +108,15 @@ def build_shared_lstm(input_var):
         # assert match(layer_output.output_shape,
         #              (N_NODES, SIZE_BATCH, 1, DIMENSION_SAMPLE))
 
-        layer_distribution = L.layers.DenseLayer(layer_h, name="distribution-layer", num_units=5, W=L.init.GlorotUniform(), b=L.init.Normal(),
-                                                 nonlinearity=None, num_leading_axes=-1)
+        # layer_distribution = L.layers.DenseLayer(layer_h, name="distribution-layer", num_units=5, W=L.init.GlorotUniform(gain='relu'),
+        #                                          nonlinearity=None, num_leading_axes=3)
+        layer_means = L.layers.DenseLayer(layer_h, name="means-layer", num_units=2, W=L.init.Normal(mean=.0),
+                                                 nonlinearity=None, num_leading_axes=3)
+        layer_deviations = L.layers.DenseLayer(layer_h, name="deviations-layer", num_units=2, W=L.init.Normal(std=0.1, mean=(1 / DIMENSION_HIDDEN_LAYERS)),
+                                                 nonlinearity=L.nonlinearities.softplus, num_leading_axes=3)
+        layer_correlation = L.layers.DenseLayer(layer_h, name="correlation-layer", num_units=1, W=L.init.GlorotNormal(),
+                                                 nonlinearity=L.nonlinearities.sigmoid, num_leading_axes=3)
+        layer_distribution = L.layers.ConcatLayer([layer_means, layer_deviations, layer_correlation], axis=-1)
 
         assert match(layer_distribution.output_shape,
                      (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 5))
@@ -113,13 +133,13 @@ def build_shared_lstm(input_var):
         #              (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 2))
 
         print 'Done'
-        return layer_output
+        return layer_output, layer_h
 
     except (KeyboardInterrupt, SystemExit):
         pass
 
-    # except Exception, e:
-    #     print str(type(e)) + e.message
+    except Exception, e:
+        print str(type(e)) + e.message
 
 
 def compute_and_compile(network, inputs_in, targets_in):
@@ -145,7 +165,7 @@ def compute_and_compile(network, inputs_in, targets_in):
         deviations = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
         shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2], 1)
         shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2])
-        deviations = T.reshape(deviations, shape_deviations)
+        # deviations = T.reshape(deviations, shape_deviations)
 
         """NNL Loss for Training"""
 
@@ -191,8 +211,9 @@ def compute_and_compile(network, inputs_in, targets_in):
 
             distribution = distribution_mat[idx, :]
             target = target_mat[idx, :]
-            nnl = bivar_norm(target[0], target[1], distribution[0], distribution[1], T.abs_(distribution[2]), T.abs_(distribution[3]), distribution[4])
-            # nnl = T.neg(T.log(nnl))
+            prob = bivar_norm(target[0], target[1], distribution[0], distribution[1], T.abs_(distribution[2]), T.abs_(distribution[3]), distribution[4])
+            # nnl = T.neg(T.log(prob))
+            nnl = prob
 
             # Do something with the slice here. I don't know what you want to do
             # to I'll just return the slice itself.
@@ -202,11 +223,12 @@ def compute_and_compile(network, inputs_in, targets_in):
         # Make a vector containing the start idx of every slice
         indices = T.arange(targets.shape[0])
 
-        probs, updates_loss = theano.scan(fn=step_loss,
+        nnls, updates_loss = theano.scan(fn=step_loss,
                                    sequences=[indices],
                                    non_sequences=[distributions, targets])
 
-        loss = T.sum(probs)
+        loss = T.sum(nnls)
+        # loss = T.mean(deviations)
 
         print 'Done'
         print 'Computing updates ...',
@@ -225,10 +247,11 @@ def compute_and_compile(network, inputs_in, targets_in):
         predict = theano.function([inputs_in], predictions, allow_input_downcast=True)
         compare = theano.function([inputs_in, targets_in], deviations, allow_input_downcast=True)
         train = theano.function([inputs_in, targets_in], loss, updates=updates, allow_input_downcast=True)
-        check = theano.function([inputs_in, targets_in], probs, allow_input_downcast=True)
+        check_netout = theano.function([inputs_in], network_outputs, allow_input_downcast=True)
+        check_probs = theano.function([inputs_in, targets_in], nnls, allow_input_downcast=True)
 
         print 'Done'
-        return predict, compare, train, check
+        return predict, compare, train, check_netout, check_probs
 
     except (KeyboardInterrupt, SystemExit):
         pass
@@ -245,14 +268,23 @@ if __name__ == '__main__':
         # todo write config to .log
         # todo read config from command line args
 
-        input_var = T.tensor4("input", dtype='float64')
-        target_var = T.tensor4("target", dtype='float64')
-        network = build_shared_lstm(input_var)
+        if __debug__:
+            print '[Debug Mode]'
 
-        predict, compare, train, check = compute_and_compile(network, input_var, target_var)
+        input_var = T.tensor4("input", dtype='float32')
+        target_var = T.tensor4("target", dtype='float32')
+        network, layer_to_check = build_shared_lstm(input_var)
 
+        predict, compare, train, check_netout, check_probs = compute_and_compile(network, input_var, target_var)
+        check_layer = theano.function([input_var], L.layers.get_output(layer_to_check), allow_input_downcast=True)
+
+        print 'Training ...',
+
+        errors_epoch = numpy.zeros((NUM_EPOCH,))
         for iepoch in range(NUM_EPOCH):
+            print 'Epoch %s ... ' % iepoch,
             p_entry = 0
+            errors_batch = numpy.zeros((0,))
             while True:
                 # 1 batch for each node
                 instants, inputs, targets = load_batch_for_nodes(all_traces, SIZE_BATCH, N_NODES, p_entry, True)
@@ -260,12 +292,20 @@ if __name__ == '__main__':
                     break
 
                 p_entry += SIZE_BATCH
+                e = check_layer(inputs)
+                netout = check_netout(inputs)
+                probs = check_probs(inputs, targets)
                 predictions = predict(inputs)
                 deviations = compare(inputs, targets)
-                probs = check(inputs, targets)
                 loss = train(inputs, targets)
+                errors_batch = numpy.append(errors_batch, loss)
+            errors_epoch[iepoch] = errors_batch.mean()
+            print 'error = %s' % errors_epoch[iepoch]
 
     except (KeyboardInterrupt, SystemExit):
         pass
+
+    except Exception, e:
+        print str(type(e)) + e.message
 
     print 'Exit'

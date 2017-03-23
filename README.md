@@ -156,6 +156,11 @@
 
 - OPT: for `config.py` & warning function;
 
-###### 2017-03-23
+###### [2017-03-23](0643472e2a384f8eb94e12f94c092ffe2d7a7a94)
 
 - ADD: Panning the entire coordinate system according to motion range, so as to keep coordinates positive; 
+
+###### 2017-03-23
+
+- ADD: Apply different decoding layers to mu, sigma & rho to guarantee validity;
+- TRY: Different initialization metrics for weights;
