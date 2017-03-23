@@ -1,5 +1,6 @@
 # coding:utf-8
 
+import config
 
 def match(shape1, shape2):
     return (len(shape1) == len(shape2) and
@@ -8,6 +9,7 @@ def match(shape1, shape2):
 
 
 def warn(info):
-    if not isinstance(info, str):
-        raise ValueError("warn @ config: \n\tType of arg 'info' must be <str> instead of <" + type(str) + ">")
-    print "[Warning] " + info
+    if config.SHOW_WARNING:
+        if not isinstance(info, str):
+            raise ValueError("warn @ config: \n\tType of arg 'info' must be <str> instead of <" + type(str) + ">")
+        print "[Warning] " + info

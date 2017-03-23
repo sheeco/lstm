@@ -1,7 +1,6 @@
 # coding:GBK
 
 import numpy
-import scalar
 import theano
 import theano.tensor as T
 import lasagne as L
@@ -20,7 +19,7 @@ N_NODES = len(all_traces)
 N_NODES = N_NODES_EXPECTED if N_NODES_EXPECTED < N_NODES else N_NODES
 
 
-def build_shared_lstm(input_var=None):
+def build_shared_lstm(input_var):
 
     try:
 
@@ -120,98 +119,6 @@ def build_shared_lstm(input_var=None):
 
     # except Exception, e:
     #     print str(type(e)) + e.message
-
-
-# def test_model():
-
-    # all_samples, all_targets = load_batch_for_nodes(read_traces_from_path(PATH_TRACE_FILES),
-    #                                                        SIZE_BATCH, [], 0, True)
-
-    # l_social_pooling = InputLayer(shape=(SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
-    # First, we build the network, starting with an input layer
-    # Recurrent layers expect input of shape
-    # (batch_size, SEQ_LENGTH, num_features)
-
-    # We now build the LSTM layer which takes l_in as the input layer
-    # We clip the gradients at GRAD_CLIP to prevent the problem of exploding gradients.
-
-    # # only_return_final = True?
-    # l_forward_1 = LSTMLayer(
-    #     layer_in, DIMENSION_HIDDEN_LAYERS, grad_clipping=GRAD_CLIP,
-    #     nonlinearity=tanh)
-    #
-    # # Parameter sharing between multiple layers can be achieved by using the same Theano shared variable instance
-    # # for their parameters. e.g.
-    # #
-    # # l1 = DenseLayer(l_in, num_units=100)
-    # # l2 = DenseLayer(l_in, num_units=100, W=l1.W)
-    #
-    # # DenseLayer: full connected
-    # # The output of l_forward_2 of shape (batch_size, N_HIDDEN) is then passed through the dense layer to create
-    # # The output of this stage is (size_batch, dim_sample)
-    # l_out = DenseLayer(l_forward_2, num_units=1, W=Normal())
-
-    # print("Building network ...")
-
-    # # Theano tensor for the targets
-    # target_values = T.fmatrix('target_output')
-    #
-    # # network_output: [size_batch, dim_sample]
-    # # get_output produces a variable for the output of the net
-    # # network_output = get_output(l_out)
-    #
-    # # whats categorical cross-entropy?
-    # # The loss function is calculated as the mean of the (categorical) cross-entropy between the prediction and target.
-    # cost = T.nnet.categorical_crossentropy(network_output, target_values).mean()
-    #
-    # # Retrieve all parameters from the network
-    # all_params = get_all_params(temp_layer_out, trainable=True)
-    #
-    # # Compute RMSProp updates for training
-    # print("Computing updates ...")
-    # updates = L.updates.rmsprop(cost, all_params, LEARNING_RATE_RMSPROP)
-    #
-    # # Theano functions for training and computing cost
-    # print("Compiling functions ...")
-    # train = theano.function([layer_in.input_var, target_values], cost, updates=updates, allow_input_downcast=True)
-    # compute_cost = theano.function([layer_in.input_var, target_values], cost, allow_input_downcast=True)
-    #
-    # predict = theano.function([layer_in.input_var], network_output, allow_input_downcast=True)
-    #
-    # def try_it_out():
-    #     preds = numpy.zeros((node_count, DIMENSION_SAMPLE))
-    #     ins, tars = load_batch_for_nodes(all_traces, 1, [], 0, True)
-    #
-    #     for i in range(LENGTH_SEQUENCE_OUTPUT):
-    #         for inode in range(node_count):
-    #             preds[inode] = predict(ins[inode])
-    #             print preds[inode], tars[inode, :, LENGTH_SEQUENCE_OUTPUT - 1, :]
-    #
-    # print("Training ...")
-    # p = 0
-    # try:
-    #     for it in xrange(N_SEQUENCES * NUM_EPOCH / SIZE_BATCH):
-    #         try_it_out()  # Generate text using the p^th character as the start.
-    #
-    #         avg_cost = 0
-    #         for _ in range(LOG_SLOT):
-    #             for node in range(N_NODES):
-    #                 # 获取(输入序列,实际输出)配对
-    #                 inputs, targets = load_batch_for_nodes(all_traces, SIZE_BATCH, [], p, True)
-    #
-    #                 p += LENGTH_SEQUENCE_INPUT + SIZE_BATCH - 1
-    #                 if p + SIZE_BATCH + LENGTH_SEQUENCE_INPUT >= N_SEQUENCES:
-    #                     print('Carriage Return')
-    #                     p = 0
-    #
-    #                 # 训练
-    #                 avg_cost += train(inputs[node], targets[node, :, LENGTH_SEQUENCE_OUTPUT - 1, :])
-    #             print("Epoch {} average loss = {}".format(it * 1.0 * LOG_SLOT / N_SEQUENCES * SIZE_BATCH,
-    #                                                       avg_cost / LOG_SLOT))
-    #     try_it_out()
-
-    # except KeyboardInterrupt:
-    #     pass
 
 
 def compute_and_compile(network, inputs_in, targets_in):

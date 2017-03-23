@@ -148,6 +148,10 @@
 - TRY: Different initialization metrics for weights & biases to avoid `NaN` or `inf` during computation;
 - DEBUG: Values of sigma (standard deviations) are negative, or too small for further computation;
 
-###### 2017-03-22
+###### [2017-03-22](90b0cb1d2f1843343d5a0803cdc80260e1878dbe)
 
 - FIX: Bugs with warnings in `sample.py`;
+
+###### 2017-03-22
+
+- OPT: for `config.py` & warning function;
