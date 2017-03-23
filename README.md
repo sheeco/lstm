@@ -152,6 +152,10 @@
 
 - FIX: Bugs with warnings in `sample.py`;
 
-###### 2017-03-22
+###### [2017-03-22](40295288a62c8f10da7f049cdab317db87e583c9)
 
 - OPT: for `config.py` & warning function;
+
+###### 2017-03-23
+
+- ADD: Panning the entire coordinate system according to motion range, so as to keep coordinates positive; 

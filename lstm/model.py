@@ -11,6 +11,7 @@ from sample import *
 
 theano.config.exception_verbosity = 'high'
 all_traces = read_traces_from_path(PATH_TRACE_FILES)
+all_traces = pan_to_positive(all_traces)
 MAX_SEQUENCES = len(all_traces.items())
 
 N_NODES = len(all_traces)

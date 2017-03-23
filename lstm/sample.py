@@ -22,7 +22,7 @@ def read_triples_from_file(filename):
 
     # n_triples = len(triples)
 
-    return triples
+    return numpy.array(triples, dtype=numpy.float32)
 
 
 def read_traces_from_path(path):
@@ -51,6 +51,34 @@ def read_traces_from_path(path):
             #     traces[node_name] = temp_trace
             dict_traces[node_identifier] = temp_trace
 
+    return dict_traces
+
+
+def get_range(dict_traces):
+    range = numpy.zeros((2, 2))
+    temp = tuple(dict_traces.itervalues())
+    samples = numpy.concatenate(tuple(dict_traces.itervalues()), axis=0)
+    range[0, 0] = numpy.min(samples[:, 1])
+    range[0, 1] = numpy.max(samples[:, 1])
+    range[1, 0] = numpy.min(samples[:, 2])
+    range[1, 1] = numpy.max(samples[:, 2])
+
+    return range
+
+
+def pan_to_positive(dict_traces):
+    """
+
+    :param dict_traces:
+    :param range:
+    """
+
+    range = get_range(dict_traces)
+    stride = - range[:, 0]
+    stride = numpy.ceil(stride)
+    for trace in dict_traces.values():
+        for itriple in xrange(len(trace)):
+            trace[itriple, 1:3] = trace[itriple, 1:3] + stride
     return dict_traces
 
 
@@ -83,8 +111,8 @@ def load_sample_for_nodes(dict_traces, filter_nodes, idx_line_entry, with_target
     min_len_trace = min([len(trace) for trace in dict_traces_requested.values()])
     # 以 min_len_trace 为最后一行，对齐截断
     # 并将选中 dict 中的 value 转换成 array，顺序由给定的 node_identifiers 决定
-    traces_requested = numpy.array([numpy.array(trace)[:min_len_trace, :] for trace in dict_traces_requested.values()],
-                                   dtype=numpy.float64)
+    traces_requested = numpy.array([trace[:min_len_trace, :] for trace in dict_traces_requested.values()],
+                                   dtype=numpy.float32)
     # 提取时序
     instants = traces_requested[:, :, :1]
     instants = instants[0]
@@ -174,6 +202,7 @@ def load_batch_for_nodes(dict_traces, size_batch, filter_nodes, idx_line_entry, 
 
 
 __all__ = ["read_traces_from_path",
+           "pan_to_positive",
            "load_batch_for_nodes"]
 
 
