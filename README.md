@@ -9,7 +9,7 @@
 - scipy-0.18.1
 - mingw-4.7.0
 - Theano-0.9.0.dev4
-- **[Forked Lasagne](https://github.com/sheeco/Lasagne)**
+- **[Forked Lasagne](4cd90af6f318caf2b883a26b72feb87383a0c695)**
 
 ### Platform
 
@@ -160,7 +160,12 @@
 
 - ADD: Panning the entire coordinate system according to motion range, so as to keep coordinates positive; 
 
-###### 2017-03-23
+###### [2017-03-23](4211a71eee90da4fdb04876a5ef26ca71134c1e3)
 
 - ADD: Apply different decoding layers to mu, sigma & rho to guarantee validity;
 - TRY: Different initialization metrics for weights;
+
+###### 2017-03-25
+
+- RFCT: Extract file io into `file.py` & some other refactoring;
+- ADD: Some utils;

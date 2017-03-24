@@ -1,8 +1,6 @@
 # coding:utf-8
 import numpy
-import os  # 文件夹操作
-import config
-from utils import *
+from file import *
 
 
 def read_triples_from_file(filename):
@@ -13,7 +11,7 @@ def read_triples_from_file(filename):
     :return: list[:行数, :3]
     """
 
-    lines = open(filename, 'rb').readlines()
+    lines = read_lines(filename)
     triples = []  # (time, x, y) 的三元组列表
 
     # 从每一行读入三个数值并存入列表中的一行
@@ -36,14 +34,14 @@ def read_traces_from_path(path):
 
     dict_traces = {}
 
-    if not os.path.exists(path):
+    if not if_exists(path):
         raise IOError('read_traces_from_path @ sample: \n\tInvalid Path: ' + str(path))
     else:
-        list_subdir = os.listdir(path)
-        list_files = [subdir for subdir in list_subdir if os.path.isfile(path + subdir)]
+        list_subdir = list_directory(path)
+        list_files = [subdir for subdir in list_subdir if is_file(path + subdir)]
 
         for filename in list_files:
-            node_identifier, _ = os.path.splitext(filename)
+            node_identifier, _ = split_filename(filename)
             temp_trace = read_triples_from_file(path + filename)
             # if node_name.isdigit():
             #     traces[int(node_name)] = temp_trace
@@ -206,7 +204,7 @@ __all__ = ["read_traces_from_path",
            "load_batch_for_nodes"]
 
 
-def test_sample():
+def test():
     demo_list_triples = read_triples_from_file('res/trace/2.trace')
     print numpy.shape(demo_list_triples)
     dict_all_traces = read_traces_from_path(config.PATH_TRACE_FILES)
@@ -226,7 +224,3 @@ def test_sample():
     print numpy.shape(t_batch), numpy.shape(in_batch), numpy.shape(target_batch)
 
     return
-
-
-# if __name__ == '__main__':
-#     test_sample()

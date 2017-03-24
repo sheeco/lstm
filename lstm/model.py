@@ -135,11 +135,8 @@ def build_shared_lstm(input_var):
         print 'Done'
         return layer_output, layer_h
 
-    except (KeyboardInterrupt, SystemExit):
-        pass
-
     except Exception, e:
-        print str(type(e)) + e.message
+        raise
 
 
 def compute_and_compile(network, inputs_in, targets_in):
@@ -253,11 +250,11 @@ def compute_and_compile(network, inputs_in, targets_in):
         print 'Done'
         return predict, compare, train, check_netout, check_probs
 
-    except (KeyboardInterrupt, SystemExit):
-        pass
+    except Exception:
+        raise
 
 
-if __name__ == '__main__':
+def test():
 
     try:
 
@@ -302,10 +299,5 @@ if __name__ == '__main__':
             errors_epoch[iepoch] = errors_batch.mean()
             print 'error = %s' % errors_epoch[iepoch]
 
-    except (KeyboardInterrupt, SystemExit):
-        pass
-
     except Exception, e:
-        print str(type(e)) + e.message
-
-    print 'Exit'
+        raise

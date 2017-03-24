@@ -2,6 +2,8 @@
 
 # Path for trace files
 PATH_TRACE_FILES = 'res/trace/'
+# Path for logs
+PATH_LOG = 'log/'
 # How many nodes to learn on
 N_NODES_EXPECTED = 9
 # How often should we check the output
