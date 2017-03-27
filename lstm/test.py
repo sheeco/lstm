@@ -9,9 +9,9 @@ import model
 if __name__ == '__main__':
 
     try:
-        utils.test()
-        file.test()
-        sample.test()
+        # utils.test()
+        # file.test()
+        # sample.test()
         model.test()
         print 'Exit'
 
