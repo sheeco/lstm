@@ -124,6 +124,11 @@
 - RFCT: Extract file io into `file.py` & some other refactoring;
 - ADD: Some utils;
 
-###### 2017-03-27
+###### [2017-03-27](b25784a81092e5c65d83965329575f925d1e19d7)
 
 - MNT: Seperate `CHANGE.md` from `README.md`. & Rename `main.py` as `test.py`;
+
+###### 2017-03-27
+
+- RFCT: Put initialization of weights & biases together for convenience;
+- NOTE: With correlation==1.0, deviations=10000+, always get probs='inf'. Maybe should check value of correlation & `bivar_norm`;

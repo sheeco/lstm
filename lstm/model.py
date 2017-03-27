@@ -9,19 +9,31 @@ from config import *
 from utils import *
 from sample import *
 
-if __debug__:
-    theano.config.exception_verbosity = 'high'
-all_traces = read_traces_from_path(PATH_TRACE_FILES)
-all_traces = pan_to_positive(all_traces)
-MAX_SEQUENCES = len(all_traces.items())
+w_e = L.init.Uniform(std=0.005, mean=(1. / DIMENSION_SAMPLE))
+# w_e = L.init.Uniform(range=(0., 1.))
+b_e = L.init.Constant(0.)
+f_e = None
 
-N_NODES = len(all_traces)
-# if N_NODES_EXPECTED > N_NODES:
-#     raise RuntimeError("Cannot find enough nodes in the given path.")
-N_NODES = N_NODES_EXPECTED if N_NODES_EXPECTED < N_NODES else N_NODES
+w_lstm_in = L.init.Normal(std=0.005, mean=(1. / DIMENSION_SAMPLE))
+w_lstm_hid = L.init.Normal(std=0.005, mean=(1. / DIMENSION_HIDDEN_LAYERS))
+w_lstm_cell = L.init.Normal(std=0.005, mean=(1. / DIMENSION_HIDDEN_LAYERS))
+b_lstm = L.init.Constant(0.)
+f_lstm_hid = L.nonlinearities.softplus
+f_lstm_cell = L.nonlinearities.softplus
+init_lstm_hid = L.init.Constant(0.)
+init_lstm_cell = L.init.Constant(0.)
 
+w_means = L.init.Uniform(std=0.005, mean=(1. / DIMENSION_HIDDEN_LAYERS))
+b_means = L.init.Constant(0.)
+f_means = None
+w_deviations = L.init.Uniform(std=0.1, mean=(10. / DIMENSION_HIDDEN_LAYERS))
+b_deviations = L.init.Constant(0.)
+f_deviations = L.nonlinearities.softplus
+w_correlation = L.init.Uniform(std=0.5, mean=0.)
+b_correlation = L.init.Constant(0.)
+f_correlation = L.nonlinearities.tanh
 
-def build_shared_lstm(input_var):
+def build_shared_lstm(input_var, N_NODES):
 
     try:
 
@@ -31,8 +43,8 @@ def build_shared_lstm(input_var):
         layer_in = L.layers.InputLayer(name="input-layer", input_var=input_var,
                                        shape=(N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE))
         # e = relu(x, y; We)
-        layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=DIMENSION_EMBED_LAYER, W=L.init.Uniform(std=0.1, mean=(1/DIMENSION_SAMPLE)),
-                                      nonlinearity=None, num_leading_axes=3)
+        layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=DIMENSION_EMBED_LAYER, W=w_e, b=b_e,
+                                      nonlinearity=f_e, num_leading_axes=3)
         assert match(layer_e.output_shape, (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_EMBED_LAYER))
 
         layers_in_lstms = []
@@ -43,21 +55,21 @@ def build_shared_lstm(input_var):
             in layers_in_lstms)
 
         # Create an LSTM layers for the 1st node
-        layer_lstm_0 = L.layers.LSTMLayer(layers_in_lstms[0], DIMENSION_HIDDEN_LAYERS, name="LSTM-0", nonlinearity=L.nonlinearities.softplus,
-                                          ingate=L.layers.Gate(W_in=L.init.Normal(std=0.1, mean=(1/DIMENSION_SAMPLE)),
-                                                               W_hid=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
-                                                               W_cell=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
-                                                               b=L.init.Constant(0.)),
-                                          forgetgate=L.layers.Gate(W_in=L.init.Normal(std=0.1, mean=(1/DIMENSION_SAMPLE)),
-                                                               W_hid=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
-                                                               W_cell=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
-                                                               b=L.init.Constant(0.)),
-                                          cell=L.layers.Gate(W_cell=None, nonlinearity=L.nonlinearities.softplus),
-                                          outgate=L.layers.Gate(W_in=L.init.Normal(std=0.1, mean=(1/DIMENSION_SAMPLE)),
-                                                               W_hid=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
-                                                               W_cell=L.init.Normal(std=0.1, mean=(1/DIMENSION_HIDDEN_LAYERS)),
-                                                               b=L.init.Constant(0.)),
-                                          hid_init=L.init.Constant(0.0), cell_init=L.init.Constant(0.0),
+        layer_lstm_0 = L.layers.LSTMLayer(layers_in_lstms[0], DIMENSION_HIDDEN_LAYERS, name="LSTM-0", nonlinearity=f_lstm_hid,
+                                          ingate=L.layers.Gate(W_in=w_lstm_in,
+                                                               W_hid=w_lstm_hid,
+                                                               W_cell=w_lstm_hid,
+                                                               b=b_lstm),
+                                          forgetgate=L.layers.Gate(W_in=w_lstm_in,
+                                                               W_hid=w_lstm_hid,
+                                                               W_cell=w_lstm_hid,
+                                                               b=b_lstm),
+                                          cell=L.layers.Gate(W_cell=None, nonlinearity=f_lstm_cell),
+                                          outgate=L.layers.Gate(W_in=w_lstm_in,
+                                                               W_hid=w_lstm_hid,
+                                                               W_cell=w_lstm_hid,
+                                                               b=b_lstm),
+                                          hid_init=init_lstm_hid, cell_init=init_lstm_cell,
                                           only_return_final=False)
         assert match(layer_lstm_0.output_shape, (SIZE_BATCH, LENGTH_SEQUENCE_INPUT, DIMENSION_HIDDEN_LAYERS))
 
@@ -70,8 +82,8 @@ def build_shared_lstm(input_var):
             layers_lstm += [
                 L.layers.LSTMLayer(layers_in_lstms[inode], DIMENSION_HIDDEN_LAYERS, name="LSTM-" + str(inode),
                                    grad_clipping=GRAD_CLIP,
-                                   nonlinearity=L.nonlinearities.softplus, hid_init=L.init.Constant(0.0),
-                                   cell_init=L.init.Constant(0.0), only_return_final=False,
+                                   nonlinearity=f_lstm_hid, hid_init=init_lstm_hid,
+                                   cell_init=init_lstm_cell, only_return_final=False,
                                    ingate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_ingate,
                                                         W_hid=layer_lstm_0.W_hid_to_ingate,
                                                         W_cell=layer_lstm_0.W_cell_to_ingate,
@@ -88,7 +100,7 @@ def build_shared_lstm(input_var):
                                                       W_hid=layer_lstm_0.W_hid_to_cell,
                                                       W_cell=None,
                                                       b=layer_lstm_0.b_cell,
-                                                      nonlinearity=L.nonlinearities.softplus
+                                                      nonlinearity=f_lstm_cell
                                                       ))]
 
         layer_concated_lstms = L.layers.ConcatLayer(layers_lstm, axis=0)
@@ -110,12 +122,12 @@ def build_shared_lstm(input_var):
 
         # layer_distribution = L.layers.DenseLayer(layer_h, name="distribution-layer", num_units=5, W=L.init.GlorotUniform(gain='relu'),
         #                                          nonlinearity=None, num_leading_axes=3)
-        layer_means = L.layers.DenseLayer(layer_h, name="means-layer", num_units=2, W=L.init.Normal(mean=.0),
-                                                 nonlinearity=None, num_leading_axes=3)
-        layer_deviations = L.layers.DenseLayer(layer_h, name="deviations-layer", num_units=2, W=L.init.Normal(std=0.1, mean=(1 / DIMENSION_HIDDEN_LAYERS)),
-                                                 nonlinearity=L.nonlinearities.softplus, num_leading_axes=3)
-        layer_correlation = L.layers.DenseLayer(layer_h, name="correlation-layer", num_units=1, W=L.init.GlorotNormal(),
-                                                 nonlinearity=L.nonlinearities.sigmoid, num_leading_axes=3)
+        layer_means = L.layers.DenseLayer(layer_h, name="means-layer", num_units=2, W=w_means, b=b_means,
+                                          nonlinearity=f_means, num_leading_axes=3)
+        layer_deviations = L.layers.DenseLayer(layer_h, name="deviations-layer", num_units=2, W=w_deviations, b=b_deviations,
+                                               nonlinearity=f_deviations, num_leading_axes=3)
+        layer_correlation = L.layers.DenseLayer(layer_h, name="correlation-layer", num_units=1, W=w_correlation, b=b_correlation,
+                                                nonlinearity=f_correlation, num_leading_axes=3)
         layer_distribution = L.layers.ConcatLayer([layer_means, layer_deviations, layer_correlation], axis=-1)
 
         assert match(layer_distribution.output_shape,
@@ -133,7 +145,7 @@ def build_shared_lstm(input_var):
         #              (N_NODES, SIZE_BATCH, LENGTH_SEQUENCE_INPUT, 2))
 
         print 'Done'
-        return layer_output, layer_h
+        return layer_output, layer_e, layer_h
 
     except Exception, e:
         raise
@@ -245,10 +257,11 @@ def compute_and_compile(network, inputs_in, targets_in):
         compare = theano.function([inputs_in, targets_in], deviations, allow_input_downcast=True)
         train = theano.function([inputs_in, targets_in], loss, updates=updates, allow_input_downcast=True)
         check_netout = theano.function([inputs_in], network_outputs, allow_input_downcast=True)
+        check_params = theano.function([], params, allow_input_downcast=True)
         check_probs = theano.function([inputs_in, targets_in], nnls, allow_input_downcast=True)
 
         print 'Done'
-        return predict, compare, train, check_netout, check_probs
+        return predict, compare, train, check_netout, check_params, check_probs
 
     except Exception:
         raise
@@ -257,6 +270,17 @@ def compute_and_compile(network, inputs_in, targets_in):
 def test():
 
     try:
+
+        if __debug__:
+            theano.config.exception_verbosity = 'high'
+        all_traces = read_traces_from_path(PATH_TRACE_FILES)
+        all_traces = pan_to_positive(all_traces)
+        # MAX_SEQUENCES = len(all_traces.items())
+
+        N_NODES = len(all_traces)
+        # if N_NODES_EXPECTED > N_NODES:
+        #     raise RuntimeError("Cannot find enough nodes in the given path.")
+        N_NODES = N_NODES_EXPECTED if N_NODES_EXPECTED < N_NODES else N_NODES
 
         # todo build the network
         # todo define initializers
@@ -270,10 +294,11 @@ def test():
 
         input_var = T.tensor4("input", dtype='float32')
         target_var = T.tensor4("target", dtype='float32')
-        network, layer_to_check = build_shared_lstm(input_var)
+        network, layer_e, layer_h = build_shared_lstm(input_var, N_NODES)
 
-        predict, compare, train, check_netout, check_probs = compute_and_compile(network, input_var, target_var)
-        check_layer = theano.function([input_var], L.layers.get_output(layer_to_check), allow_input_downcast=True)
+        predict, compare, train, check_netout, check_params, check_probs = compute_and_compile(network, input_var, target_var)
+        check_e = theano.function([input_var], L.layers.get_output(layer_e), allow_input_downcast=True)
+        check_h = theano.function([input_var], L.layers.get_output(layer_h), allow_input_downcast=True)
 
         print 'Training ...',
 
@@ -289,7 +314,9 @@ def test():
                     break
 
                 p_entry += SIZE_BATCH
-                e = check_layer(inputs)
+                params = check_params()
+                e = check_e(inputs)
+                h = check_h(inputs)
                 netout = check_netout(inputs)
                 probs = check_probs(inputs, targets)
                 predictions = predict(inputs)
