@@ -5,7 +5,7 @@ PATH_TRACE_FILES = 'res/trace/'
 # Path for logs
 PATH_LOG = 'log/'
 # How many nodes to learn on
-N_NODES_EXPECTED = 9
+N_NODES_EXPECTED = 3
 # How often should we check the output
 LOG_SLOT = 100
 
@@ -33,7 +33,7 @@ if __debug__:
     # x * x of pools around each node
     RANGE_NEIGHBORHOOD = 4
     # Optimization learning rate
-    LEARNING_RATE_RMSPROP = .03
+    LEARNING_RATE_RMSPROP = .003
     GAMMA_RMSPROP = .9
     EPSILON_RMSPROP = 1e-8
     # All gradients above this will be clipped

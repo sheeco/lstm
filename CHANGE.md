@@ -128,7 +128,15 @@
 
 - MNT: Seperate `CHANGE.md` from `README.md`. & Rename `main.py` as `test.py`;
 
-###### 2017-03-27
+###### [2017-03-27](9bcd618823ad3177cf0c470f5353bc615a04140d)
 
 - RFCT: Put initialization of weights & biases together for convenience;
 - NOTE: With correlation==1.0, deviations=10000+, always get probs='inf'. Maybe should check value of correlation & `bivar_norm`;
+
+###### 2017-03-28
+
+- TEST: `bivar_norm` is fine;
+- NOTE: Correlation=+-1 has caused probs='inf'. Even correlation=+-0.1 would cause probs='inf';
+- TEST: Keep correlation around +-`1.e-8` could prevent probs='inf', getting probs~=1.e-11 & loss ~= 900;
+- ADD: Define `scaled_tanh` to prevent correlation from reaching 1 or -1. & Define `w_deviations` related to `N_NODES`;
+- [ ] TRY: Scale deviations to [-1, 1] * range;

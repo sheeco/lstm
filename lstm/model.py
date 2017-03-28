@@ -7,16 +7,55 @@ import lasagne as L
 
 from config import *
 from utils import *
-from sample import *
+from sampler import *
+
+
+def bivar_norm(x1, x2, mu1, mu2, sigma1, sigma2, rho):
+    # pdf of bivariate norm
+
+    part1 = (x1 - mu1) ** 2 / sigma1 ** 2
+    part2 = - 2. * rho * (x1 - mu1) * (x2 - mu2) / sigma1 * sigma2
+    part3 = (x2 - mu2) ** 2 / sigma2 ** 2
+    z = part1 + part2 + part3
+
+    cof = 1. / (2. * numpy.pi * sigma1 * sigma2 * T.sqrt(1 - rho ** 2))
+    return cof * T.exp(-z / (2. * (1 - rho ** 2)))
+
+
+def check_bivar_norm(target, distribution):
+    # ([x1, x2], [mu1, mu2, sigma1, sigma2, rho])
+    _prob = bivar_norm(target[0], target[1], distribution[0], distribution[1], distribution[2], distribution[3], distribution[4])
+    _val = _prob.eval()
+    return _val
+
+
+def clip(x, beta=.9):
+
+    beta = T.as_tensor_variable(beta)
+    return T.clip(x, -beta, beta)
+
+
+def scale(x, beta=.9):
+
+    beta = T.as_tensor_variable(beta)
+    return T.mul(beta, x)
+
+
+def scaled_tanh(x, beta=1.e-8):
+
+    y = T.tanh(x)
+    return scale(y, beta)
+    # return T.clip(y, -beta, beta)
+
 
 w_e = L.init.Uniform(std=0.005, mean=(1. / DIMENSION_SAMPLE))
 # w_e = L.init.Uniform(range=(0., 1.))
 b_e = L.init.Constant(0.)
 f_e = None
 
-w_lstm_in = L.init.Normal(std=0.005, mean=(1. / DIMENSION_SAMPLE))
-w_lstm_hid = L.init.Normal(std=0.005, mean=(1. / DIMENSION_HIDDEN_LAYERS))
-w_lstm_cell = L.init.Normal(std=0.005, mean=(1. / DIMENSION_HIDDEN_LAYERS))
+w_lstm_in = L.init.Uniform(std=0.005, mean=(1. / DIMENSION_SAMPLE))
+w_lstm_hid = L.init.Uniform(std=0.005, mean=(1. / DIMENSION_HIDDEN_LAYERS))
+w_lstm_cell = L.init.Uniform(std=0.005, mean=(1. / DIMENSION_HIDDEN_LAYERS))
 b_lstm = L.init.Constant(0.)
 f_lstm_hid = L.nonlinearities.softplus
 f_lstm_cell = L.nonlinearities.softplus
@@ -26,12 +65,14 @@ init_lstm_cell = L.init.Constant(0.)
 w_means = L.init.Uniform(std=0.005, mean=(1. / DIMENSION_HIDDEN_LAYERS))
 b_means = L.init.Constant(0.)
 f_means = None
-w_deviations = L.init.Uniform(std=0.1, mean=(10. / DIMENSION_HIDDEN_LAYERS))
+w_deviations = L.init.Uniform(std=0.1, mean=(100. / DIMENSION_HIDDEN_LAYERS / N_NODES_EXPECTED))
 b_deviations = L.init.Constant(0.)
 f_deviations = L.nonlinearities.softplus
-w_correlation = L.init.Uniform(std=0.5, mean=0.)
+# w_correlation = L.init.Uniform(std=0.0005, mean=0.)
+w_correlation = L.init.Uniform(std=0., mean=0.)
 b_correlation = L.init.Constant(0.)
-f_correlation = L.nonlinearities.tanh
+# f_correlation = L.nonlinearities.tanh
+f_correlation = scaled_tanh
 
 def build_shared_lstm(input_var, N_NODES):
 
@@ -191,51 +232,25 @@ def compute_and_compile(network, inputs_in, targets_in):
             # From the idx of the start of the slice, the vector and the length of
             # the slice, obtain the desired slice.
 
-            # distribution = distribution_mat[idx:idx + 1, :]
-            # target = target_mat[idx:idx + 1, :]
-            #
-            # from breze.arch.component.distributions.mvn import pdf
-            #
-            # mean = distribution[:, 0:2]
-            # deviation = T.abs_(distribution[0:1, 2:4])
-            # correlation = distribution[0:1, 4]
-            #
-            # covariance = T.dot(T.transpose(deviation),
-            #                        T.mul(T.extra_ops.repeat(correlation, 2, axis=0), deviation))
-            # # Normal Negative Log-likelihood
-            # nnl = pdf(target, mean, covariance)
-
-            def bivar_norm(x1, x2, mu1, mu2, sigma1, sigma2, rho):
-                # pdf of bivariate norm
-                # def pdf(x1, x2):
-                # get z
-                part1 = (x1 - mu1) ** 2 / sigma1 ** 2
-                part2 = - 2. * rho * (x1 - mu1) * (x2 - mu2) / sigma1 * sigma2
-                part3 = (x2 - mu2) ** 2 / sigma2 ** 2
-                z = part1 + part2 + part3
-
-                cof = 1. / (2. * numpy.pi * sigma1 * sigma2 * T.sqrt(1 - rho ** 2))
-                return cof * T.exp(-z / (2. * (1 - rho ** 2)))
-                # return pdf
-
             distribution = distribution_mat[idx, :]
             target = target_mat[idx, :]
-            prob = bivar_norm(target[0], target[1], distribution[0], distribution[1], T.abs_(distribution[2]), T.abs_(distribution[3]), distribution[4])
-            # nnl = T.neg(T.log(prob))
-            nnl = prob
+            prob = bivar_norm(target[0], target[1], distribution[0], distribution[1], distribution[2], distribution[3], distribution[4])
+
 
             # Do something with the slice here. I don't know what you want to do
             # to I'll just return the slice itself.
 
-            return nnl
+            return prob
 
         # Make a vector containing the start idx of every slice
         indices = T.arange(targets.shape[0])
 
-        nnls, updates_loss = theano.scan(fn=step_loss,
-                                   sequences=[indices],
-                                   non_sequences=[distributions, targets])
+        probs, updates_loss = theano.scan(fn=step_loss,
+                                                sequences=[indices],
+                                                non_sequences=[distributions, targets])
 
+        # # Normal Negative Log-likelihood
+        nnls = T.neg(T.log(probs))
         loss = T.sum(nnls)
         # loss = T.mean(deviations)
 
@@ -246,7 +261,7 @@ def compute_and_compile(network, inputs_in, targets_in):
         params = L.layers.get_all_params(network, trainable=True)
 
         # Compute RMSProp updates for training
-        RMSPROP = L.updates.rmsprop(loss, params, LEARNING_RATE_RMSPROP)
+        RMSPROP = L.updates.rmsprop(loss, params, learning_rate=LEARNING_RATE_RMSPROP, rho=GAMMA_RMSPROP, epsilon=EPSILON_RMSPROP)
         updates = RMSPROP
 
         print 'Done'
@@ -258,7 +273,7 @@ def compute_and_compile(network, inputs_in, targets_in):
         train = theano.function([inputs_in, targets_in], loss, updates=updates, allow_input_downcast=True)
         check_netout = theano.function([inputs_in], network_outputs, allow_input_downcast=True)
         check_params = theano.function([], params, allow_input_downcast=True)
-        check_probs = theano.function([inputs_in, targets_in], nnls, allow_input_downcast=True)
+        check_probs = theano.function([inputs_in, targets_in], probs, allow_input_downcast=True)
 
         print 'Done'
         return predict, compare, train, check_netout, check_params, check_probs
@@ -270,6 +285,13 @@ def compute_and_compile(network, inputs_in, targets_in):
 def test():
 
     try:
+
+        # _prob = check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 0])
+        # _prob = check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 0.1])
+        # _prob = check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, -0.1])
+        # _prob = check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 1.e-8])
+        # _prob = check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 0.9])
+        # _prob = check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, -0.9])
 
         if __debug__:
             theano.config.exception_verbosity = 'high'
@@ -319,6 +341,16 @@ def test():
                 h = check_h(inputs)
                 netout = check_netout(inputs)
                 probs = check_probs(inputs, targets)
+
+                def check_probs():
+                    shape = netout.shape
+                    for i in xrange(shape[0]):
+                        for j in xrange(shape[1]):
+                            for k in xrange(shape[2]):
+                                 _prob = check_bivar_norm(targets[i, j, k, 1:3], netout[i, j, k])
+
+                # check_probs()
+
                 predictions = predict(inputs)
                 deviations = compare(inputs, targets)
                 loss = train(inputs, targets)
