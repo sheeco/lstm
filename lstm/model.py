@@ -7,7 +7,7 @@ import lasagne as L
 
 from config import *
 from utils import *
-from sampler import *
+from Sampler import *
 
 
 def bivar_norm(x1, x2, mu1, mu2, sigma1, sigma2, rho):
@@ -295,14 +295,10 @@ def test():
 
         if __debug__:
             theano.config.exception_verbosity = 'high'
-        all_traces = read_traces_from_path(PATH_TRACE_FILES)
-        all_traces = pan_to_positive(all_traces)
-        # MAX_SEQUENCES = len(all_traces.items())
+        sampler = Sampler(PATH_TRACE_FILES, nodes=N_NODES_EXPECTED)
+        sampler.pan_to_positive()
 
-        N_NODES = len(all_traces)
-        # if N_NODES_EXPECTED > N_NODES:
-        #     raise RuntimeError("Cannot find enough nodes in the given path.")
-        N_NODES = N_NODES_EXPECTED if N_NODES_EXPECTED < N_NODES else N_NODES
+        N_NODES = sampler.node_num
 
         # todo build the network
         # todo define initializers
@@ -327,34 +323,34 @@ def test():
         errors_epoch = numpy.zeros((NUM_EPOCH,))
         for iepoch in range(NUM_EPOCH):
             print 'Epoch %s ... ' % iepoch,
-            p_entry = 0
             errors_batch = numpy.zeros((0,))
             while True:
                 # 1 batch for each node
-                instants, inputs, targets = load_batch_for_nodes(all_traces, SIZE_BATCH, N_NODES, p_entry, True)
+                instants, inputs, targets = sampler.load_batch(True)
                 if inputs is None:
+                    sampler.reset_entry()
                     break
 
-                p_entry += SIZE_BATCH
                 params = check_params()
                 e = check_e(inputs)
                 h = check_h(inputs)
                 netout = check_netout(inputs)
                 probs = check_probs(inputs, targets)
 
-                def check_probs():
+                def _check():
                     shape = netout.shape
                     for i in xrange(shape[0]):
                         for j in xrange(shape[1]):
                             for k in xrange(shape[2]):
                                  _prob = check_bivar_norm(targets[i, j, k, 1:3], netout[i, j, k])
 
-                # check_probs()
+                # _check()
 
                 predictions = predict(inputs)
                 deviations = compare(inputs, targets)
                 loss = train(inputs, targets)
                 errors_batch = numpy.append(errors_batch, loss)
+
             errors_epoch[iepoch] = errors_batch.mean()
             print 'error = %s' % errors_epoch[iepoch]
 

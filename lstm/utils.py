@@ -1,5 +1,7 @@
 # coding:utf-8
 
+import traceback
+
 import config
 import time
 
@@ -13,6 +15,11 @@ def match(shape1, shape2):
 def warn(info):
     if config.SHOW_WARNING:
         print "[Warning] " + info
+
+
+def handle(exception):
+        # print str(type(exception)) + exception.message
+        print traceback.format_exc()
 
 
 def assert_type(var, assertion):

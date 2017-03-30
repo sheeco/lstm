@@ -2,7 +2,7 @@
 
 import utils
 import file
-import sample
+import Sampler
 import model
 
 
@@ -11,11 +11,11 @@ if __name__ == '__main__':
     try:
         # utils.test()
         # file.test()
-        # sample.test()
+        Sampler.test()
         model.test()
         print 'Exit'
 
     except KeyboardInterrupt, e:
         exit()
     except Exception, e:
-        print str(type(e)) + e.message
+        utils.handle(e)
