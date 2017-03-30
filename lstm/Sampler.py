@@ -2,10 +2,15 @@
 import numpy
 from file import *
 
+__all__ = [
+    "Sampler"
+    ]
+
 
 class Sampler:
 
-    def __init__(self, path, nodes=None, length=None):
+    def __init__(self, path=config.PATH_TRACE_FILES, nodes=None, length=None, dimension_sample=config.DIMENSION_SAMPLE, length_sequence_input=config.LENGTH_SEQUENCE_INPUT,
+                 length_sequence_output=config.LENGTH_SEQUENCE_OUTPUT, size_batch=config.SIZE_BATCH, strict_batch_size=config.STRICT_BATCH_SIZE):
 
         try:
             self.path = path
@@ -13,10 +18,16 @@ class Sampler:
             dict_traces = Sampler.__filter__(dict_traces, nodes)
             self.node_filter = nodes
             self.traces = Sampler.__clip_and_convert__(dict_traces, length)
-            self.node_num = int(self.traces.shape[0])
+            self.num_node = int(self.traces.shape[0])
             self.length = int(self.traces.shape[1])
             self.motion_range = Sampler.__compute_range__(self.traces)
             self.entry = 0
+
+            self.dimension_sample = dimension_sample
+            self.length_sequence_input = length_sequence_input
+            self.length_sequence_output = length_sequence_output
+            self.size_batch = size_batch
+            self.strict_batch_size = strict_batch_size
 
         except:
             raise
@@ -177,14 +188,14 @@ class Sampler:
             instants = instants[0]
             instants = instants.sum(1)
 
-            if config.DIMENSION_SAMPLE == 2:
+            if self.dimension_sample == 2:
                 # 不使用 time 作为输入元组的一部分，删除第 0 列
                 array_traces = array_traces[:, :, 1:]
 
             begin_line_input = self.entry
-            end_line_input = begin_line_input + config.LENGTH_SEQUENCE_INPUT
+            end_line_input = begin_line_input + self.length_sequence_input
             begin_line_target = end_line_input
-            end_line_target = begin_line_target + config.LENGTH_SEQUENCE_OUTPUT
+            end_line_target = begin_line_target + self.length_sequence_output
 
             # 如果超出采样数，返回 None, None, None
             if end_line_input >= self.length or end_line_target > self.length:
@@ -203,7 +214,7 @@ class Sampler:
             raise
 
 
-    def load_batch(self, size_batch=config.SIZE_BATCH, with_target=True):
+    def load_batch(self, size_batch=None, with_target=True):
         """
         为单批次的训练/测试生成所有节点的时刻、输入、目标序列。
         注意：如果超出最大采样数，将返回 3 个 None，因此需要对返回值进行验证之后再使用
@@ -211,6 +222,8 @@ class Sampler:
         """
         # todo add boolean arg redundant_batch
 
+        if size_batch is None:
+            size_batch = self.size_batch
         try:
             batch_instants = numpy.zeros((0, 0))
             batch_input = numpy.zeros((0, 0, 0, 0))
@@ -242,10 +255,10 @@ class Sampler:
 
                 elif len(batch_input) == 0:
                     return None, None, None
-                elif config.STRICT_BATCH_SIZE:
+                elif self.strict_batch_size:
                     warn("An insufficient batch of %s samples is discarded." % batch_input.shape[1])
                     return None, None, None
-                elif not config.STRICT_BATCH_SIZE:
+                elif not self.strict_batch_size:
                     warn("Insufficient batch. Only  %s  samples are left." % batch_input.shape[1])
                     break
                 else:
@@ -277,7 +290,7 @@ class Sampler:
             instants, inputs, targets = sampler.load_batch(with_target=False)
             # print [to_check.shape if to_check is not None else 'None' for to_check in (instants, inputs, targets)]
 
-            config.STRICT_BATCH_SIZE = False
+            sampler.strict_batch_size = False
             while True:
                 # 1 batch for each node
                 instants, inputs, targets = sampler.load_batch(with_target=True)

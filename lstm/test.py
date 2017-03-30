@@ -2,17 +2,20 @@
 
 import utils
 import file
-import Sampler
-import model
+from Sampler import *
+from SharedLSTM import *
 
 
 if __name__ == '__main__':
 
     try:
+        if __debug__:
+            print '[Debug Mode]'
+
         # utils.test()
         # file.test()
-        Sampler.test()
-        model.test()
+        # Sampler.test()
+        SharedLSTM.test()
         print 'Exit'
 
     except KeyboardInterrupt, e:

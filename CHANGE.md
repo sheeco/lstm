@@ -140,10 +140,14 @@
 - TEST: Keep correlation around +-`1.e-8` could prevent probs='inf', getting probs~=1.e-11 & loss ~= 900;
 - ADD: Define `scaled_tanh` to prevent correlation from reaching 1 or -1. & Define `w_deviations` related to `N_NODES`;
 
-###### 2017-03-30
+###### [2017-03-30](cf217e3ac33c5f5515db19eaa4fe0aef785d7b19)
 
 - RFCT: Wrap functions in `sample.py` into class `Sampler`. Tested;
 - OPT: Add `utils.handle()`;
+
+###### 2017-03-30
+
+- RFCT: Wrap functions in `model.py` into class `SharedLSTM`. & Some opt;
 
 
 - [ ] TRY: Scale deviations to [-1, 1] * range;

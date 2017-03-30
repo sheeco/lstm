@@ -34,7 +34,7 @@ if __debug__:
     RANGE_NEIGHBORHOOD = 4
     # Optimization learning rate
     LEARNING_RATE_RMSPROP = .003
-    GAMMA_RMSPROP = .9
+    RHO_RMSPROP = .9
     EPSILON_RMSPROP = 1e-8
     # All gradients above this will be clipped
     GRAD_CLIP = 100
@@ -66,7 +66,7 @@ else:
     RANGE_NEIGHBORHOOD = 4
     # Optimization learning rate
     LEARNING_RATE_RMSPROP = .03
-    GAMMA_RMSPROP = .9
+    RHO_RMSPROP = .9
     EPSILON_RMSPROP = 1e-8
     # All gradients above this will be clipped
     GRAD_CLIP = 100

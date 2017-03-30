@@ -1,15 +1,20 @@
 # coding:utf-8
 
+import time
 import traceback
+import numpy
 
 import config
-import time
 
 
 def match(shape1, shape2):
     return (len(shape1) == len(shape2) and
             all(s1 is None or s2 is None or s1 == s2
                 for s1, s2 in zip(shape1, shape2)))
+
+
+def check_range(mat):
+    return [numpy.min(mat), numpy.max(mat), numpy.mean(mat)]
 
 
 def warn(info):
