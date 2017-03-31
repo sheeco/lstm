@@ -27,7 +27,8 @@ def warn(info):
 
 
 def handle(exception):
-        print traceback.format_exc()
+    print ''
+    print traceback.format_exc()
 
 
 def assert_type(var, assertion):
@@ -51,16 +52,73 @@ def confirm(info):
             return confirm("Pardon?")
 
 
-def timestamp():
+def get_timestamp():
     stamp = time.strftime("%Y-%m-%d %H-%M-%S")
     return stamp
 
 
+def format_time_string(seconds):
+    if seconds < 60:
+        return "%ds" % seconds
+    elif seconds < 60 * 60:
+        return "%dm %ds" % divmod(seconds, 60)
+    else:
+        h, sec = divmod(seconds, 60 * 60)
+        min, sec = divmod(sec, 60)
+        return "%dh %dm %ds" % (h, min, sec)
+
+
+class Timer:
+    def __init__(self, formatted=True):
+        self.sec_start = None
+        self.sec_stop = None
+        self.sec_elapse = None
+        self.formatted = formatted
+        self.start()
+
+    def start(self):
+        """
+        Would restart & override.
+        """
+        try:
+            self.sec_start = time.clock()
+            self.sec_stop = None
+            self.sec_elapse = None
+        except:
+            raise
+
+    def stop(self):
+        try:
+            if self.sec_start is None:
+                return None
+
+            if self.sec_stop is None:
+                self.sec_stop = time.clock()
+                self.sec_elapse = self.sec_stop - self.sec_start
+            return self.get_elapse()
+        except:
+            raise
+
+    def get_elapse(self, formatted=None):
+        if formatted is None:
+            formatted = self.formatted
+        return format_time_string(self.sec_elapse) if formatted else self.sec_elapse
+
+
 def test():
     # config.SHOW_WARNING = True
-    warn("test warning")
-    assert_type("test", str)
-    # assert_type("test", tuple)
-    stamp = timestamp()
-    yes = confirm("Confirm")
+    # warn("test warning")
+    # assert_type("test", str)
+    # timestamp = get_timestamp()
+    # yes = confirm("Confirm")
 
+    print format_time_string(59.9)
+    print format_time_string(222.2)
+    print format_time_string(7777.7)
+    timer = Timer()
+    print timer.stop()
+    timer.start()
+    print timer.stop()
+    print timer.stop()
+    timer = Timer(formatted=False)
+    print timer.stop()

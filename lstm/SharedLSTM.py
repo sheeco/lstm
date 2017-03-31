@@ -176,6 +176,7 @@ class SharedLSTM:
     # todo change to pure theano
     def build_network(self):
         try:
+            timer = utils.Timer()
 
             print 'Building shared LSTM network ...',
 
@@ -336,7 +337,7 @@ class SharedLSTM:
             # assert match(layer_distribution.output_shape,
             #              (N_NODES, self.size_batch, self.length_sequence_input, 2))
 
-            print 'Done'
+            print timer.stop()
             self.layer_in = layer_in
             self.layer_e = layer_e
             self.layer_h = layer_h
@@ -351,6 +352,7 @@ class SharedLSTM:
     def compile(self):
 
         try:
+            timer = utils.Timer()
 
             print 'Preparing ...',
 
@@ -409,7 +411,8 @@ class SharedLSTM:
             loss = T.sum(nnls)
             # loss = T.mean(deviations)
 
-            print 'Done'
+            print timer.stop()
+            timer.start()
             print 'Computing updates ...',
 
             # Retrieve all parameters from the self.layer_out
@@ -428,8 +431,8 @@ class SharedLSTM:
             self.loss = loss
             self.deviations = deviations
 
-            print 'Done'
-
+            print timer.stop()
+            timer.start()
             print 'Compiling functions ...',
 
             # Theano functions for training and computing cost
@@ -446,7 +449,8 @@ class SharedLSTM:
                 self.check_probs = theano.function([self.inputs, self.targets], self.probabilities,
                                                    allow_input_downcast=True)
 
-            print 'Done'
+            print timer.stop()
+            timer.start()
             return self.func_predict, self.func_compare, self.func_train
 
         except:

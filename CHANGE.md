@@ -149,10 +149,14 @@
 
 - RFCT: Wrap functions in `model.py` into class `SharedLSTM`. & Some opt;
 
-###### 2017-03-31
+###### [2017-03-31](bc82a37756df3b1f44aca51a66bebf8d3f3e0794)
 
 - ADD: Enable multiple hidden layers;
 - OPT: for string formatting, warnings & configs;
+
+###### 2017-03-31
+
+- ADD: Class `Timer`. & Apply to building & compiling;
 
 
 - [ ] TRY: Scale deviations to [-1, 1] * range;
