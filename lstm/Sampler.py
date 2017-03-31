@@ -1,6 +1,9 @@
 # coding:utf-8
 import numpy
-from file import *
+
+import config
+import utils
+import file
 
 __all__ = [
     "Sampler"
@@ -46,7 +49,7 @@ class Sampler:
         """
 
         try:
-            lines = read_lines(filename)
+            lines = file.read_lines(filename)
             triples = []  # (time, x, y) 的三元组列表
 
             # 从每一行读入三个数值并存入列表中的一行
@@ -72,15 +75,15 @@ class Sampler:
 
         dict_traces = {}
 
-        if not if_exists(path):
-            raise IOError('read_traces_from_path @ sample: \n\tInvalid Path: ' + str(path))
+        if not file.if_exists(path):
+            raise IOError('read_traces_from_path @ sample: \n\tInvalid Path: %s' % path)
         else:
             try:
-                list_subdir = list_directory(path)
-                list_files = [subdir for subdir in list_subdir if is_file(path + subdir)]
+                list_subdir = file.list_directory(path)
+                list_files = [subdir for subdir in list_subdir if file.is_file(path + subdir)]
 
                 for filename in list_files:
-                    node_identifier, _ = split_filename(filename)
+                    node_identifier, _ = file.split_filename(filename)
                     temp_trace = Sampler.__read_triples_from_file__(path + filename)
                     # if node_name.isdigit():
                     #     traces[int(node_name)] = temp_trace
@@ -105,7 +108,7 @@ class Sampler:
                     nodes_requested = dict_traces.keys()[:node_filter]
                 else:
                     if node_filter > len(dict_traces):
-                        warn("Cannot find enough nodes in the given path.")
+                        utils.warn("__filter__ @ Sampler: Cannot find enough nodes in the given path.")
                     return dict_traces
 
             # 指定 node identifiers
@@ -256,13 +259,13 @@ class Sampler:
                 elif len(batch_input) == 0:
                     return None, None, None
                 elif self.strict_batch_size:
-                    warn("An insufficient batch of %s samples is discarded." % batch_input.shape[1])
+                    utils.warn("load_batch @ Sampler: An insufficient batch of %s samples is discarded." % batch_input.shape[1])
                     return None, None, None
                 elif not self.strict_batch_size:
-                    warn("Insufficient batch. Only  %s  samples are left." % batch_input.shape[1])
+                    utils.warn("load_batch @ Sampler: Insufficient batch. Only  %s  samples are left." % batch_input.shape[1])
                     break
                 else:
-                    raise RuntimeError("load_batch_for_nodes @ sample: \n\tUnexpected access of this block.")
+                    utils.assert_unreachable()
             if not with_target:
                 batch_target = None
             return batch_instants, batch_input, batch_target

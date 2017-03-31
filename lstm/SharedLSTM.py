@@ -11,7 +11,8 @@ from Sampler import *
 
 __all__ = [
     'SharedLSTM'
-    ]
+]
+
 
 # todo add timer
 # todo add debug info & assertion
@@ -20,9 +21,9 @@ __all__ = [
 
 
 class SharedLSTM:
-
     def __init__(self, sampler=None, inputs=None, targets=None, dimension_embed_layer=config.DIMENSION_EMBED_LAYER,
-                 dimension_hidden_layers=config.DIMENSION_HIDDEN_LAYERS, grad_clip=config.GRAD_CLIP, num_epoch=config.NUM_EPOCH,
+                 dimension_hidden_layers=config.DIMENSION_HIDDEN_LAYERS, grad_clip=config.GRAD_CLIP,
+                 num_epoch=config.NUM_EPOCH,
                  learning_rate_rmsprop=config.LEARNING_RATE_RMSPROP, rho_rmsprop=config.RHO_RMSPROP,
                  epsilon_rmsprop=config.EPSILON_RMSPROP, check=__debug__):
         try:
@@ -38,6 +39,17 @@ class SharedLSTM:
             self.length_sequence_output = self.sampler.length_sequence_output
             self.size_batch = self.sampler.size_batch
             self.dimension_embed_layer = dimension_embed_layer
+
+            utils.assert_type(dimension_hidden_layers, tuple)
+            all(utils.assert_type(x, int) for x in dimension_hidden_layers)
+
+            if len(dimension_hidden_layers) == 1:
+                dimension_hidden_layers = (1,) + dimension_hidden_layers
+            elif len(dimension_hidden_layers) == 2:
+                pass
+            else:
+                raise ValueError("__init__ @ SharedLSTM: Expect len: 1~2 while getting %d instead.",
+                                 len(dimension_hidden_layers))
             self.dimension_hidden_layers = dimension_hidden_layers
             self.grad_clip = grad_clip
             self.num_epoch = num_epoch
@@ -83,18 +95,18 @@ class SharedLSTM:
             self.f_e = None
 
             self.w_lstm_in = L.init.Uniform(std=0.005, mean=(1. / self.dimension_sample))
-            self.w_lstm_hid = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers))
-            self.w_lstm_cell = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers))
+            self.w_lstm_hid = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
+            self.w_lstm_cell = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
             self.b_lstm = L.init.Constant(0.)
             self.f_lstm_hid = L.nonlinearities.softplus
             self.f_lstm_cell = L.nonlinearities.softplus
             self.init_lstm_hid = L.init.Constant(0.)
             self.init_lstm_cell = L.init.Constant(0.)
 
-            self.w_means = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers))
+            self.w_means = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
             self.b_means = L.init.Constant(0.)
             self.f_means = None
-            self.w_deviations = L.init.Uniform(std=0.1, mean=(100. / self.dimension_hidden_layers / self.num_node))
+            self.w_deviations = L.init.Uniform(std=0.1, mean=(100. / self.dimension_hidden_layers[1] / self.num_node))
             self.b_deviations = L.init.Constant(0.)
             self.f_deviations = L.nonlinearities.softplus
             # self.w_correlation = L.init.Uniform(std=0.0005, mean=0.)
@@ -125,7 +137,8 @@ class SharedLSTM:
     def _check_bivar_norm(fact, distribution):
         # ([x1, x2], [mu1, mu2, sigma1, sigma2, rho])
         try:
-            _prob = SharedLSTM.bivar_norm(fact[0], fact[1], distribution[0], distribution[1], distribution[2], distribution[3],
+            _prob = SharedLSTM.bivar_norm(fact[0], fact[1], distribution[0], distribution[1], distribution[2],
+                                          distribution[3],
                                           distribution[4])
             _val = _prob.eval()
             return _val
@@ -161,7 +174,6 @@ class SharedLSTM:
             raise
 
     # todo change to pure theano
-    # todo add multi-layer
     def build_network(self):
         try:
 
@@ -169,22 +181,29 @@ class SharedLSTM:
 
             # [(x, y)]
             layer_in = L.layers.InputLayer(name="input-layer", input_var=self.inputs,
-                                           shape=(self.num_node, self.size_batch, self.length_sequence_input, self.dimension_sample))
-            # e = relu(x, y; We)
-            layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=self.dimension_embed_layer, W=self.w_e, b=self.b_e,
+                                           shape=(self.num_node, self.size_batch, self.length_sequence_input,
+                                                  self.dimension_sample))
+            # e = f(x, y; We)
+            layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=self.dimension_embed_layer, W=self.w_e,
+                                          b=self.b_e,
                                           nonlinearity=self.f_e, num_leading_axes=3)
-            assert utils.match(layer_e.output_shape, (self.num_node, self.size_batch, self.length_sequence_input, self.dimension_embed_layer))
+            assert utils.match(layer_e.output_shape,
+                               (self.num_node, self.size_batch, self.length_sequence_input, self.dimension_embed_layer))
 
             layers_in_lstms = []
             for inode in xrange(0, self.num_node):
                 layers_in_lstms += [L.layers.SliceLayer(layer_e, inode, axis=0)]
             assert all(
-                utils.match(ilayer_in_lstm.output_shape, (self.size_batch, self.length_sequence_input, self.dimension_embed_layer)) for
+                utils.match(ilayer_in_lstm.output_shape,
+                            (self.size_batch, self.length_sequence_input, self.dimension_embed_layer)) for
                 ilayer_in_lstm
                 in layers_in_lstms)
 
-            # Create an LSTM layers for the 1st node
-            layer_lstm_0 = L.layers.LSTMLayer(layers_in_lstms[0], self.dimension_hidden_layers, name="LSTM-0",
+            n_hid = self.dimension_hidden_layers[0]
+            dim_hid = self.dimension_hidden_layers[1]
+
+            # Create the 1st LSTM layer for the 1st node
+            layer_lstm_0 = L.layers.LSTMLayer(layers_in_lstms[0], dim_hid, name="LSTM-%d-%d" % (1, 1),
                                               nonlinearity=self.f_lstm_hid,
                                               ingate=L.layers.Gate(W_in=self.w_lstm_in,
                                                                    W_hid=self.w_lstm_hid,
@@ -201,16 +220,16 @@ class SharedLSTM:
                                                                     b=self.b_lstm),
                                               hid_init=self.init_lstm_hid, cell_init=self.init_lstm_cell,
                                               only_return_final=False)
-            assert utils.match(layer_lstm_0.output_shape, (self.size_batch, self.length_sequence_input, self.dimension_hidden_layers))
+            assert utils.match(layer_lstm_0.output_shape, (self.size_batch, self.length_sequence_input, dim_hid))
 
             layers_lstm = [layer_lstm_0]
 
             # Create params sharing LSTMs for the rest (n - 1) nodes,
-            # which have params exactly the same as LSTM_0
+            # which have params exactly the same as LSTM-1-1
             for inode in xrange(1, self.num_node):
-                # Overdated implement for lasagne/lasagne
                 layers_lstm += [
-                    L.layers.LSTMLayer(layers_in_lstms[inode], self.dimension_hidden_layers, name="LSTM-" + str(inode),
+                    L.layers.LSTMLayer(layers_in_lstms[inode], dim_hid,
+                                       name="LSTM-%d-%d" % (1, inode + 1),
                                        grad_clipping=self.grad_clip,
                                        nonlinearity=self.f_lstm_hid, hid_init=self.init_lstm_hid,
                                        cell_init=self.init_lstm_cell, only_return_final=False,
@@ -233,32 +252,69 @@ class SharedLSTM:
                                                           nonlinearity=self.f_lstm_cell
                                                           ))]
 
+            # Create more layers
+            for i_hid in xrange(1, n_hid):
+                layers_lstm[0] = L.layers.LSTMLayer(layers_lstm[0], dim_hid, name="LSTM-%d-%d" % (i_hid + 1, 1),
+                                                    nonlinearity=self.f_lstm_hid,
+                                                    ingate=L.layers.Gate(W_in=self.w_lstm_in,
+                                                                         W_hid=self.w_lstm_hid,
+                                                                         W_cell=self.w_lstm_hid,
+                                                                         b=self.b_lstm),
+                                                    forgetgate=L.layers.Gate(W_in=self.w_lstm_in,
+                                                                             W_hid=self.w_lstm_hid,
+                                                                             W_cell=self.w_lstm_hid,
+                                                                             b=self.b_lstm),
+                                                    cell=L.layers.Gate(W_cell=None, nonlinearity=self.f_lstm_cell),
+                                                    outgate=L.layers.Gate(W_in=self.w_lstm_in,
+                                                                          W_hid=self.w_lstm_hid,
+                                                                          W_cell=self.w_lstm_hid,
+                                                                          b=self.b_lstm),
+                                                    hid_init=self.init_lstm_hid, cell_init=self.init_lstm_cell,
+                                                    only_return_final=False)
+                layer_lstm_0 = layers_lstm[0]
+                assert utils.match(layer_lstm_0.output_shape, (self.size_batch, self.length_sequence_input, dim_hid))
+
+                for inode in xrange(1, self.num_node):
+                    layers_lstm[inode] = L.layers.LSTMLayer(layers_lstm[inode], dim_hid,
+                                                            name="LSTM-%d-%d" % (i_hid + 1, inode + 1),
+                                                            grad_clipping=self.grad_clip,
+                                                            nonlinearity=self.f_lstm_hid, hid_init=self.init_lstm_hid,
+                                                            cell_init=self.init_lstm_cell, only_return_final=False,
+                                                            ingate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_ingate,
+                                                                                 W_hid=layer_lstm_0.W_hid_to_ingate,
+                                                                                 W_cell=layer_lstm_0.W_cell_to_ingate,
+                                                                                 b=layer_lstm_0.b_ingate),
+                                                            outgate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_outgate,
+                                                                                  W_hid=layer_lstm_0.W_hid_to_outgate,
+                                                                                  W_cell=layer_lstm_0.W_cell_to_outgate,
+                                                                                  b=layer_lstm_0.b_outgate),
+                                                            forgetgate=L.layers.Gate(
+                                                                W_in=layer_lstm_0.W_in_to_forgetgate,
+                                                                W_hid=layer_lstm_0.W_hid_to_forgetgate,
+                                                                W_cell=layer_lstm_0.W_cell_to_forgetgate,
+                                                                b=layer_lstm_0.b_forgetgate),
+                                                            cell=L.layers.Gate(W_in=layer_lstm_0.W_in_to_cell,
+                                                                               W_hid=layer_lstm_0.W_hid_to_cell,
+                                                                               W_cell=None,
+                                                                               b=layer_lstm_0.b_cell,
+                                                                               nonlinearity=self.f_lstm_cell
+                                                                               ))
+
             layer_concated_lstms = L.layers.ConcatLayer(layers_lstm, axis=0)
             assert utils.match(layer_concated_lstms.output_shape,
-                               (self.num_node * self.size_batch, self.length_sequence_input, self.dimension_hidden_layers))
+                               (self.num_node * self.size_batch, self.length_sequence_input, dim_hid))
 
             layer_h = L.layers.ReshapeLayer(layer_concated_lstms, (self.num_node, -1, [1], [2]))
-            assert utils.match(layer_h.output_shape, (self.num_node, self.size_batch, self.length_sequence_input, self.dimension_hidden_layers))
+            assert utils.match(layer_h.output_shape,
+                               (self.num_node, self.size_batch, self.length_sequence_input, dim_hid))
 
-            # # simple decoder
-            #
-            # layer_decoded = L.layers.DenseLayer(layer_h, name="decoded", num_units=self.dimension_sample,
-            #                                     nonlinearity=L.nonlinearities.rectify, num_leading_axes=3)
-            # assert match(layer_decoded.output_shape,
-            #              (N_NODES, self.size_batch, self.length_sequence_input, self.dimension_sample))
-            #
-            # layer_output = L.layers.SliceLayer(layer_distribution, slice(-1, None), axis=-2)
-            # assert match(layer_output.output_shape,
-            #              (N_NODES, self.size_batch, 1, self.dimension_sample))
-
-            # layer_distribution = L.layers.DenseLayer(layer_h, name="distribution-layer", num_units=5, W=L.init.GlorotUniform(gain='relu'),
-            #                                          nonlinearity=None, num_leading_axes=3)
             layer_means = L.layers.DenseLayer(layer_h, name="means-layer", num_units=2, W=self.w_means, b=self.b_means,
                                               nonlinearity=self.f_means, num_leading_axes=3)
             layer_deviations = L.layers.DenseLayer(layer_h, name="deviations-layer", num_units=2, W=self.w_deviations,
                                                    b=self.b_deviations,
                                                    nonlinearity=self.f_deviations, num_leading_axes=3)
-            layer_correlation = L.layers.DenseLayer(layer_h, name="correlation-layer", num_units=1, W=self.w_correlation,
+            layer_correlation = L.layers.DenseLayer(layer_h, name="correlation-layer", num_units=1,
+                                                    W=self.w_correlation,
                                                     b=self.b_correlation,
                                                     nonlinearity=self.f_correlation, num_leading_axes=3)
             layer_distribution = L.layers.ConcatLayer([layer_means, layer_deviations, layer_correlation], axis=-1)
@@ -266,9 +322,12 @@ class SharedLSTM:
             assert utils.match(layer_distribution.output_shape,
                                (self.num_node, self.size_batch, self.length_sequence_input, 5))
 
-            layer_out = L.layers.SliceLayer(layer_distribution, indices=slice(-self.length_sequence_output, None), axis=2)
+            # Slice x-length sequence from the last, according to <length_sequence_output>
+            layer_out = L.layers.SliceLayer(layer_distribution, indices=slice(-self.length_sequence_output, None),
+                                            axis=2)
             assert utils.match(layer_distribution.output_shape,
                                (self.num_node, self.size_batch, self.length_sequence_output, 5))
+
             # layer_output = L.layers.ReshapeLayer(layer_distribution, (-1, [3]))
             # assert match(layer_distribution.output_shape,
             #              (N_NODES * self.size_batch * self.length_sequence_input, 5))
@@ -376,14 +435,16 @@ class SharedLSTM:
             # Theano functions for training and computing cost
             self.func_predict = theano.function([self.inputs], self.predictions, allow_input_downcast=True)
             self.func_compare = theano.function([self.inputs, self.targets], self.deviations, allow_input_downcast=True)
-            self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates, allow_input_downcast=True)
+            self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates,
+                                              allow_input_downcast=True)
 
             if self.check:
                 e = L.layers.get_output(self.layer_e)
                 self.check_e = theano.function([self.inputs], e, allow_input_downcast=True)
                 self.check_netout = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
                 self.check_params = theano.function([], self.params, allow_input_downcast=True)
-                self.check_probs = theano.function([self.inputs, self.targets], self.probabilities, allow_input_downcast=True)
+                self.check_probs = theano.function([self.inputs, self.targets], self.probabilities,
+                                                   allow_input_downcast=True)
 
             print 'Done'
             return self.func_predict, self.func_compare, self.func_train
@@ -395,17 +456,20 @@ class SharedLSTM:
 
         return self.check_e, self.check_netout, self.check_params, self.check_probs
 
-    def train(self):
+    def train(self, log_slot=config.LOG_SLOT):
         try:
             print 'Training ...'
 
             loss_epoch = numpy.zeros((self.num_epoch, 3))
             deviation_epoch = numpy.zeros((self.num_epoch, 3))
             for iepoch in range(self.num_epoch):
-                print '\tEpoch %d ... ' % iepoch,
+                print '  Epoch %d ... ' % iepoch,
                 loss_batch = numpy.zeros((0,))
                 deviation_batch = numpy.zeros((0,))
+                ibatch = 0
                 while True:
+                    ibatch += 1
+
                     # 1 batch for each node
                     instants, inputs, targets = self.sampler.load_batch(True)
                     if inputs is None:
@@ -416,31 +480,31 @@ class SharedLSTM:
                     e = self.check_e(inputs)
                     netout = self.check_netout(inputs)
                     probs = self.check_probs(inputs, targets)
-                    assert numpy.isfinite(probs).any()
-
-                    # def _check():
-                    #     shape = netout.shape
-                    #     for i in xrange(shape[0]):
-                    #         for j in xrange(shape[1]):
-                    #             for k in xrange(shape[2]):
-                    #                 _prob = SharedLSTM._check_bivar_norm(targets[i, j, k, 1:3], netout[i, j, k])
-                    #
-                    # _check()
+                    assert numpy.isfinite(probs).all(), "train @ SharedLSTM: <probs> is infinite."
 
                     prediction = self.func_predict(inputs)
                     deviation = self.func_compare(inputs, targets)
                     loss = self.func_train(inputs, targets)
-                    assert numpy.isfinite(loss).any()
+                    assert numpy.isfinite(loss).all(), "train @ SharedLSTM: <loss> is infinite."
 
                     loss_batch = numpy.append(loss_batch, loss)
                     deviation_batch = numpy.append(deviation_batch, deviation)
 
-                    # todo check for nan & inf
+                    if divmod(ibatch, log_slot)[1] == 0:
+                        loss_epoch[iepoch] = numpy.array(utils.check_range(loss_batch))
+                        deviation_epoch[iepoch] = numpy.array(utils.check_range(deviation_batch))
+                        print '    Batch %d ... ' % ibatch,
+                        print 'loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' \
+                              % tuple(['%.0f' % x for x in utils.check_range(loss_batch)] + ['%.0f' % x for x in
+                                                                                             utils.check_range(
+                                                                                                 deviation_batch)])
 
-                loss_epoch[iepoch] = numpy.array(utils.check_range(loss_batch))
-                deviation_epoch[iepoch] = numpy.array(utils.check_range(deviation_batch))
-                print 'loss: %6s, %6s, %6s' % tuple(['%.0f' % x for x in loss_epoch[iepoch]])
-                print '\tdeviation: %6s, %6s, %6s' % tuple(['%.0f' % x for x in deviation_epoch[iepoch]])
+                if divmod(ibatch, log_slot)[1] != 0:
+                    loss_epoch[iepoch] = numpy.array(utils.check_range(loss_batch))
+                    deviation_epoch[iepoch] = numpy.array(utils.check_range(deviation_batch))
+                    print '    Batch %d ... ' % ibatch,
+                    print '  loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' % tuple(
+                        ['%.0f' % x for x in loss_epoch[iepoch]] + ['%.0f' % x for x in deviation_epoch[iepoch]])
 
         except:
             raise

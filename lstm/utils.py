@@ -2,6 +2,7 @@
 
 import time
 import traceback
+import warnings
 import numpy
 
 import config
@@ -18,22 +19,30 @@ def check_range(mat):
 
 
 def warn(info):
-    if config.SHOW_WARNING:
-        print "[Warning] " + info
+    # if config.SHOW_WARNING:
+        # print "[Warning] %s" % info
+    if not config.SHOW_WARNING:
+        warnings.filterwarnings("ignore")
+    warnings.warn(info)
 
 
 def handle(exception):
-        # print str(type(exception)) + exception.message
         print traceback.format_exc()
 
 
 def assert_type(var, assertion):
     if not isinstance(var, assertion):
-        raise ValueError("assert_type @ utils: Expect " + str(assertion) + " while getting " + str(type(var)) + " instead.")
+        raise ValueError("assert_type @ utils: Expect %s while getting %s instead." % (assertion, type(var)))
+    else:
+        return True
+
+
+def assert_unreachable():
+    raise RuntimeError("assert_unreachable @ utils: \n\tUnexpected access of this block.")
 
 
 def confirm(info):
-        ans = raw_input(info + " (y/n): ")
+        ans = raw_input("%s (y/n): " % info)
         if ans == 'y' or ans == 'Y':
             return True
         elif ans == 'n' or ans == 'N':
@@ -48,6 +57,8 @@ def timestamp():
 
 
 def test():
+    # config.SHOW_WARNING = True
+    warn("test warning")
     assert_type("test", str)
     # assert_type("test", tuple)
     stamp = timestamp()

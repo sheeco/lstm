@@ -145,9 +145,14 @@
 - RFCT: Wrap functions in `sample.py` into class `Sampler`. Tested;
 - OPT: Add `utils.handle()`;
 
-###### 2017-03-30
+###### [2017-03-30](2cd5fe9d541c142f4abb0844a6847ee555e136d2)
 
 - RFCT: Wrap functions in `model.py` into class `SharedLSTM`. & Some opt;
+
+###### 2017-03-31
+
+- ADD: Enable multiple hidden layers;
+- OPT: for string formatting, warnings & configs;
 
 
 - [ ] TRY: Scale deviations to [-1, 1] * range;

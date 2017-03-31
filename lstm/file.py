@@ -12,14 +12,14 @@ def assert_exists(path, assertion=True, raising=True):
     if not if_exists(path) is assertion:
         if raising:
             if assertion is True:
-                raise IOError("assert_exists @ file: " + "'" + path + "' does not exists.")
+                raise IOError("assert_exists @ file: '%s' does not exists." % path)
             else:
-                raise IOError("assert_exists @ file: " + "'" + path + "' already exists.")
+                raise IOError("assert_exists @ file: '%s' already exists." % path)
         else:
             if assertion is True:
-                warn("assert_exists @ file: " + "'" + path + "' does not exists.")
+                warn("assert_exists @ file: '%s' does not exists." % path)
             else:
-                warn("assert_exists @ file: " + "'" + path + "' already exists.")
+                warn("assert_exists @ file: '%s' already exists." % path)
 
 
 def is_file(path):
@@ -35,11 +35,11 @@ def create_path(path):
         raise
 
 
-def rename_path(oldPath, newPath):
-    assert_exists(oldPath)
-    assert_exists(newPath, assertion=False)
+def rename_path(old, new):
+    assert_exists(old)
+    assert_exists(new, assertion=False)
     try:
-        os.name(oldPath, newPath)
+        os.name(old, new)
         return True
     except Exception, e:
         raise
