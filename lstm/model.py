@@ -7,14 +7,13 @@ import lasagne as L
 
 import config
 import utils
-from Sampler import *
+from sampler import *
 
 __all__ = [
     'SharedLSTM'
 ]
 
 
-# todo add timer
 # todo add debug info & assertion
 # todo write config to .log
 # todo read config from command line args
@@ -33,6 +32,7 @@ class SharedLSTM:
             self.sampler = sampler
             self.sampler.reset_entry()
             self.num_node = self.sampler.num_node
+            self.motion_range = self.sampler.motion_range
 
             self.dimension_sample = self.sampler.dimension_sample
             self.length_sequence_input = self.sampler.length_sequence_input
@@ -68,7 +68,7 @@ class SharedLSTM:
 
             self.layer_in = None
             self.layer_e = None
-            self.layer_h = None
+            self.layers_hid = None
             self.layer_out = None
 
             self.outputs = None
@@ -85,42 +85,63 @@ class SharedLSTM:
 
             self.check = check
             self.check_e = None
+            self.checks_hid = []
             self.check_netout = None
             self.check_params = None
             self.check_probs = None
+
+            """
+            Initialization Definitions
+            """
 
             self.w_e = L.init.Uniform(std=0.005, mean=(1. / self.dimension_sample))
             # self.w_e = L.init.Uniform(range=(0., 1.))
             self.b_e = L.init.Constant(0.)
             self.f_e = None
 
-            self.w_lstm_in = L.init.Uniform(std=0.005, mean=(1. / self.dimension_sample))
+            self.w_lstm_in = L.init.Uniform(std=0.005, mean=(1. / self.dimension_embed_layer))
             self.w_lstm_hid = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
             self.w_lstm_cell = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
             self.b_lstm = L.init.Constant(0.)
-            self.f_lstm_hid = L.nonlinearities.softplus
-            self.f_lstm_cell = L.nonlinearities.softplus
+            # self.f_lstm_hid = L.nonlinearities.softplus
+            # self.f_lstm_cell = L.nonlinearities.softplus
+            self.f_lstm_hid = L.nonlinearities.rectify
+            self.f_lstm_cell = L.nonlinearities.rectify
             self.init_lstm_hid = L.init.Constant(0.)
             self.init_lstm_cell = L.init.Constant(0.)
+
 
             self.w_means = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
             self.b_means = L.init.Constant(0.)
             self.f_means = None
+
+            self.scaled_deviation = True
+
             self.w_deviations = L.init.Uniform(std=0.1, mean=(100. / self.dimension_hidden_layers[1] / self.num_node))
             self.b_deviations = L.init.Constant(0.)
-            self.f_deviations = L.nonlinearities.softplus
+            if self.scaled_deviation:
+                self.f_deviations = L.nonlinearities.sigmoid
+            else:
+                self.f_deviations = L.nonlinearities.softplus
+
+            self.scaled_correlation = True
+
             # self.w_correlation = L.init.Uniform(std=0.0005, mean=0.)
             self.w_correlation = L.init.Uniform(std=0., mean=0.)
             self.b_correlation = L.init.Constant(0.)
-            # self.f_correlation = L.nonlinearities.tanh
-            self.f_correlation = SharedLSTM.scaled_tanh
+            if self.scaled_correlation:
+                self.f_correlation = SharedLSTM.scaled_tanh
+            else:
+                self.f_correlation = SharedLSTM.safe_tanh
 
         except:
             raise
 
     @staticmethod
     def bivar_norm(x1, x2, mu1, mu2, sigma1, sigma2, rho):
-        # pdf of bivariate norm
+        """
+        pdf of bivariate norm
+        """
         try:
             part1 = (x1 - mu1) ** 2 / sigma1 ** 2
             part2 = - 2. * rho * (x1 - mu1) * (x2 - mu2) / sigma1 * sigma2
@@ -135,7 +156,10 @@ class SharedLSTM:
 
     @staticmethod
     def _check_bivar_norm(fact, distribution):
-        # ([x1, x2], [mu1, mu2, sigma1, sigma2, rho])
+        """
+        :param fact: [x1, x2]
+        :param distribution: [mu1, mu2, sigma1, sigma2, rho]
+        """
         try:
             _prob = SharedLSTM.bivar_norm(fact[0], fact[1], distribution[0], distribution[1], distribution[2],
                                           distribution[3],
@@ -173,6 +197,16 @@ class SharedLSTM:
         except:
             raise
 
+    @staticmethod
+    def safe_tanh(x, beta=.9):
+
+        try:
+            y = T.tanh(x)
+            return SharedLSTM.scale(y, beta)
+            # return T.clip(y, -beta, beta)
+        except:
+            raise
+
     # todo change to pure theano
     def build_network(self):
         try:
@@ -180,11 +214,11 @@ class SharedLSTM:
 
             print 'Building shared LSTM network ...',
 
-            # [(x, y)]
+            # IN = [(sec, x, y)]
             layer_in = L.layers.InputLayer(name="input-layer", input_var=self.inputs,
                                            shape=(self.num_node, self.size_batch, self.length_sequence_input,
                                                   self.dimension_sample))
-            # e = f(x, y; We)
+            # e = f_e(IN; W_e, b_e)
             layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=self.dimension_embed_layer, W=self.w_e,
                                           b=self.b_e,
                                           nonlinearity=self.f_e, num_leading_axes=3)
@@ -193,7 +227,7 @@ class SharedLSTM:
 
             layers_in_lstms = []
             for inode in xrange(0, self.num_node):
-                layers_in_lstms += [L.layers.SliceLayer(layer_e, inode, axis=0)]
+                layers_in_lstms += [L.layers.SliceLayer(layer_e, indices=inode, axis=0)]
             assert all(
                 utils.match(ilayer_in_lstm.output_shape,
                             (self.size_batch, self.length_sequence_input, self.dimension_embed_layer)) for
@@ -253,6 +287,12 @@ class SharedLSTM:
                                                           nonlinearity=self.f_lstm_cell
                                                           ))]
 
+            layers_shuffled = []
+            for inode in xrange(self.num_node):
+                layers_shuffled += [L.layers.DimshuffleLayer(layers_lstm[inode], pattern=('x', 0, 1, 2))]
+            layer_concated_lstms = L.layers.ConcatLayer(layers_shuffled, axis=0)
+            layers_hid = [layer_concated_lstms]
+
             # Create more layers
             for i_hid in xrange(1, n_hid):
                 layers_lstm[0] = L.layers.LSTMLayer(layers_lstm[0], dim_hid, name="LSTM-%d-%d" % (i_hid + 1, 1),
@@ -301,20 +341,21 @@ class SharedLSTM:
                                                                                nonlinearity=self.f_lstm_cell
                                                                                ))
 
-            layer_concated_lstms = L.layers.ConcatLayer(layers_lstm, axis=0)
-            assert utils.match(layer_concated_lstms.output_shape,
-                               (self.num_node * self.size_batch, self.length_sequence_input, dim_hid))
+                layers_shuffled = []
+                for inode in xrange(self.num_node):
+                    layers_shuffled += [L.layers.DimshuffleLayer(layers_lstm[inode], pattern=('x', 0, 1, 2))]
+                layer_concated_lstms = L.layers.ConcatLayer(layers_shuffled, axis=0)
+                assert utils.match(layer_concated_lstms.output_shape,
+                                   (self.num_node, self.size_batch, self.length_sequence_input, dim_hid))
+                layers_hid += [layer_concated_lstms]
 
-            layer_h = L.layers.ReshapeLayer(layer_concated_lstms, (self.num_node, -1, [1], [2]))
-            assert utils.match(layer_h.output_shape,
-                               (self.num_node, self.size_batch, self.length_sequence_input, dim_hid))
-
-            layer_means = L.layers.DenseLayer(layer_h, name="means-layer", num_units=2, W=self.w_means, b=self.b_means,
+            layer_last_hid = layers_hid[-1]
+            layer_means = L.layers.DenseLayer(layer_last_hid, name="means-layer", num_units=2, W=self.w_means, b=self.b_means,
                                               nonlinearity=self.f_means, num_leading_axes=3)
-            layer_deviations = L.layers.DenseLayer(layer_h, name="deviations-layer", num_units=2, W=self.w_deviations,
+            layer_deviations = L.layers.DenseLayer(layer_last_hid, name="deviations-layer", num_units=2, W=self.w_deviations,
                                                    b=self.b_deviations,
                                                    nonlinearity=self.f_deviations, num_leading_axes=3)
-            layer_correlation = L.layers.DenseLayer(layer_h, name="correlation-layer", num_units=1,
+            layer_correlation = L.layers.DenseLayer(layer_last_hid, name="correlation-layer", num_units=1,
                                                     W=self.w_correlation,
                                                     b=self.b_correlation,
                                                     nonlinearity=self.f_correlation, num_leading_axes=3)
@@ -329,18 +370,10 @@ class SharedLSTM:
             assert utils.match(layer_distribution.output_shape,
                                (self.num_node, self.size_batch, self.length_sequence_output, 5))
 
-            # layer_output = L.layers.ReshapeLayer(layer_distribution, (-1, [3]))
-            # assert match(layer_distribution.output_shape,
-            #              (N_NODES * self.size_batch * self.length_sequence_input, 5))
-
-            # layer_output = L.layers.ExpressionLayer(layer_distribution, binary_gaussian_distribution)
-            # assert match(layer_distribution.output_shape,
-            #              (N_NODES, self.size_batch, self.length_sequence_input, 2))
-
             print timer.stop()
             self.layer_in = layer_in
             self.layer_e = layer_e
-            self.layer_h = layer_h
+            self.layers_hid = layers_hid
             self.layer_out = layer_out
 
             return self.layer_out
@@ -365,7 +398,9 @@ class SharedLSTM:
             shape_facts = facts.shape
             shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
 
-            """Euclidean Error for Observation"""
+            """
+            Euclidean Error for Observation
+            """
 
             # Elemwise differences
             differences = T.sub(predictions, facts)
@@ -374,7 +409,9 @@ class SharedLSTM:
             shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2])
             deviations = T.reshape(deviations, shape_deviations)
 
-            """NNL Loss for Training"""
+            """
+            NNL Loss for Training
+            """
 
             # Reshape for convenience
             facts = T.reshape(facts, shape_stacked_facts)
@@ -382,7 +419,6 @@ class SharedLSTM:
             shape_stacked_distributions = (shape_distributions[0] * shape_distributions[1] * shape_distributions[2], shape_distributions[3])
             distributions = T.reshape(outputs, shape_stacked_distributions)
 
-            # todo confine deviations to [0, 1] & then scale to motion range
             # Use scan to replace loop with tensors
             def step_loss(idx, distribution_mat, fact_mat):
 
@@ -390,23 +426,50 @@ class SharedLSTM:
                 # the slice, obtain the desired slice.
 
                 distribution = distribution_mat[idx, :]
+                means = distribution[0:2]
+                # deviations = distribution[2:4]
+                deviations = distribution[2:4]
+                correlation = distribution[5]
                 target = fact_mat[idx, :]
-                prob = SharedLSTM.bivar_norm(target[0], target[1], distribution[0], distribution[1], distribution[2],
-                                             distribution[3], distribution[4])
+                prob = SharedLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
+                                             correlation)
 
-                # Do something with the slice here. I don't know what you want to do
-                # to I'll just return the slice itself.
+                # Do something with the slice here.
+
+                return prob
+
+            def step_loss_scaled(idx, distribution_mat, fact_mat, motion_range_v):
+
+                # From the idx of the start of the slice, the vector and the length of
+                # the slice, obtain the desired slice.
+
+                distribution = distribution_mat[idx, :]
+                means = distribution[0:2]
+                # deviations = distribution[2:4]
+                deviations = T.mul(distribution[2:4], motion_range_v)
+                correlation = distribution[4]
+                target = fact_mat[idx, :]
+                prob = SharedLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
+                                             correlation)
+
+                # Do something with the slice here.
 
                 return prob
 
             # Make a vector containing the start idx of every slice
             indices = T.arange(facts.shape[0])
 
-            probs, updates_loss = theano.scan(fn=step_loss,
-                                              sequences=[indices],
-                                              non_sequences=[distributions, facts])
+            if self.scaled_deviation:
+                motion_range = T.constant(self.motion_range[1] - self.motion_range[0])
+                probs, updates_loss = theano.scan(fn=step_loss_scaled,
+                                                  sequences=[indices],
+                                                  non_sequences=[distributions, facts, motion_range])
+            else:
+                probs, updates_loss = theano.scan(fn=step_loss,
+                                                  sequences=[indices],
+                                                  non_sequences=[distributions, facts])
 
-            # # Normal Negative Log-likelihood
+            # Normal Negative Log-likelihood
             nnls = T.neg(T.log(probs))
             loss = T.sum(nnls)
             # loss = T.mean(deviations)
@@ -416,6 +479,7 @@ class SharedLSTM:
             print 'Computing updates ...',
 
             # Retrieve all parameters from the self.layer_out
+            # todo save parameter keys for observation
             params = L.layers.get_all_params(self.layer_out, trainable=True)
 
             # Compute RMSProp updates for training
@@ -435,22 +499,28 @@ class SharedLSTM:
             timer.start()
             print 'Compiling functions ...',
 
-            # Theano functions for training and computing cost
+            """
+            Compile theano functions for prediction, observation & training
+            """
             self.func_predict = theano.function([self.inputs], self.predictions, allow_input_downcast=True)
             self.func_compare = theano.function([self.inputs, self.targets], self.deviations, allow_input_downcast=True)
             self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates,
                                               allow_input_downcast=True)
-
+            """
+            Compile checking functions for debugging
+            """
             if self.check:
                 e = L.layers.get_output(self.layer_e)
                 self.check_e = theano.function([self.inputs], e, allow_input_downcast=True)
+                for i_hid in xrange(self.dimension_hidden_layers[0]):
+                    hid = L.layers.get_output(self.layers_hid[i_hid])
+                    self.checks_hid += [theano.function([self.inputs], hid, allow_input_downcast=True)]
                 self.check_netout = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
                 self.check_params = theano.function([], self.params, allow_input_downcast=True)
-                self.check_probs = theano.function([self.inputs, self.targets], self.probabilities,
-                                                   allow_input_downcast=True)
+            # Mandatory checking
+            self.check_probs = theano.function([self.inputs, self.targets], self.probabilities, allow_input_downcast=True)
 
             print timer.stop()
-            timer.start()
             return self.func_predict, self.func_compare, self.func_train
 
         except:
@@ -458,38 +528,68 @@ class SharedLSTM:
 
     def get_checks(self):
 
-        return self.check_e, self.check_netout, self.check_params, self.check_probs
+        return self.check_e, self.checks_hid, self.check_netout, self.check_params, self.check_probs
 
     def train(self, log_slot=config.LOG_SLOT):
-        try:
-            print 'Training ...'
+        print 'Training ...'
 
-            loss_epoch = numpy.zeros((self.num_epoch, 3))
-            deviation_epoch = numpy.zeros((self.num_epoch, 3))
-            for iepoch in range(self.num_epoch):
-                print '  Epoch %d ... ' % iepoch,
-                loss_batch = numpy.zeros((0,))
-                deviation_batch = numpy.zeros((0,))
-                ibatch = 0
-                while True:
-                    ibatch += 1
+        loss_epoch = numpy.zeros((self.num_epoch, 3))
+        deviation_epoch = numpy.zeros((self.num_epoch, 3))
+        for iepoch in range(self.num_epoch):
+            print '  Epoch %d ... ' % iepoch
+            loss_batch = numpy.zeros((0,))
+            deviation_batch = numpy.zeros((0,))
+            ibatch = 0
+            while True:
+                ibatch += 1
+                try:
 
-                    # 1 batch for each node
+                    # retrieve 1 batch for each node
                     instants, inputs, targets = self.sampler.load_batch(True)
+                    loss = None
                     if inputs is None:
                         self.sampler.reset_entry()
                         break
 
-                    params = self.check_params()
-                    e = self.check_e(inputs)
-                    netout = self.check_netout(inputs)
-                    probs = self.check_probs(inputs, targets)
-                    assert numpy.isfinite(probs).all(), "train @ SharedLSTM: <probs> is infinite."
+                    def check_netflow():
+                        if not self.check:
+                            raise RuntimeError("train @ SharedLSTM: Error has occurred. "
+                                               "Must enable <self.check> to check for net flow.")
+                        params = self.check_params()
+                        embedded = self.check_e(inputs)
+                        hids = []
+                        for ihid in xrange(self.dimension_hidden_layers[0]):
+                            check_hid = self.checks_hid[ihid]
+                            hids += [check_hid(inputs)]
+                        netout = self.check_netout(inputs)
 
-                    prediction = self.func_predict(inputs)
+                        if loss is not None:
+                            print '<loss>'
+                            print loss
+                        print ''
+                        print 'Batch %d ...' % ibatch
+                        print '<params>'
+                        print params
+                        print '<embedded[0][0]>'
+                        print embedded[0, 0]
+                        for ihid in xrange(self.dimension_hidden_layers[0]):
+                            print '<hidden-%d[0][0]>' % ihid
+                            print hids[ihid][0, 0]
+                        print '<netout[0][0]>'
+                        print netout[0, 0]
+
+                    probs = self.check_probs(inputs, targets)
+                    # todo log parameter values to file
+                    check_netflow()
+                    if not numpy.isfinite(probs).all():
+                        # check_netflow()
+                        raise RuntimeError("train @ SharedLSTM: <probs> is infinite.")
+
+
+                    # prediction = self.func_predict(inputs)
                     deviation = self.func_compare(inputs, targets)
+
                     loss = self.func_train(inputs, targets)
-                    assert numpy.isfinite(loss).all(), "train @ SharedLSTM: <loss> is infinite."
 
                     loss_batch = numpy.append(loss_batch, loss)
                     deviation_batch = numpy.append(deviation_batch, deviation)
@@ -502,16 +602,16 @@ class SharedLSTM:
                               % tuple(['%.0f' % x for x in utils.check_range(loss_batch)] + ['%.0f' % x for x in
                                                                                              utils.check_range(
                                                                                                  deviation_batch)])
+                except KeyboardInterrupt, e:
+                    raise
 
-                if divmod(ibatch, log_slot)[1] != 0:
-                    loss_epoch[iepoch] = numpy.array(utils.check_range(loss_batch))
-                    deviation_epoch[iepoch] = numpy.array(utils.check_range(deviation_batch))
-                    print '    Batch %d ... ' % ibatch,
-                    print '  loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' % tuple(
-                        ['%.0f' % x for x in loss_epoch[iepoch]] + ['%.0f' % x for x in deviation_epoch[iepoch]])
+            if divmod(ibatch, log_slot)[1] != 0:
+                loss_epoch[iepoch] = numpy.array(utils.check_range(loss_batch))
+                deviation_epoch[iepoch] = numpy.array(utils.check_range(deviation_batch))
+                print '    Batch %d ... ' % ibatch,
+                print '  loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' % tuple(
+                    ['%.0f' % x for x in loss_epoch[iepoch]] + ['%.0f' % x for x in deviation_epoch[iepoch]])
 
-        except:
-            raise
 
     @staticmethod
     def test():
@@ -531,13 +631,13 @@ class SharedLSTM:
             # sampler = Sampler(path=config.PATH_TRACE_FILES, nodes=3)
             # sampler.pan_to_positive()
 
-            model = SharedLSTM(check=True)
-            sampler = model.sampler
+            sampler = Sampler(nodes=3, keep_positive=True)
+            model = SharedLSTM(sampler=sampler, check=True)
 
             network = model.build_network()
             predict, compare, train = model.compile()
 
-            check_e, check_out, check_params, check_probs = model.get_checks()
+            check_e, checks_hid, check_out, check_params, check_probs = model.get_checks()
 
             model.train()
 

@@ -100,7 +100,7 @@
 
 - MOD: Define probability density function of bivariate normal distribution directly. No longer need package breze;
 - TRY: Different initialization metrics for weights & biases to avoid `NaN` or `inf` during computation;
-- DEBUG: Values of sigma (standard deviations) are negative, or too small for further computation;
+- BUG: Values of sigma (standard deviations) are negative, or too small for further computation;
 
 ###### [2017-03-22](90b0cb1d2f1843343d5a0803cdc80260e1878dbe)
 
@@ -154,9 +154,12 @@
 - ADD: Enable multiple hidden layers;
 - OPT: for string formatting, warnings & configs;
 
-###### 2017-03-31
+###### [2017-03-31](ae4b7201986e93c5544ed95a37165643ca2c76bf)
 
 - ADD: Class `Timer`. & Apply to building & compiling;
 
+###### 2017-04-03
 
-- [ ] TRY: Scale deviations to [-1, 1] * range;
+- ADD: Enable scaled deviations, activated using sigmoid & then scaled within motion range;
+- OPT: Enable checking for each single hidden layer during debugging. & Minor opt for network building;
+- BUG: All the parameters (except for distribution layer) equal to 'nan' after 1st training;

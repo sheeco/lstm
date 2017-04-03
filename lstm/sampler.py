@@ -13,7 +13,7 @@ __all__ = [
 class Sampler:
 
     def __init__(self, path=config.PATH_TRACE_FILES, nodes=None, length=None, dimension_sample=config.DIMENSION_SAMPLE, length_sequence_input=config.LENGTH_SEQUENCE_INPUT,
-                 length_sequence_output=config.LENGTH_SEQUENCE_OUTPUT, size_batch=config.SIZE_BATCH, strict_batch_size=config.STRICT_BATCH_SIZE):
+                 length_sequence_output=config.LENGTH_SEQUENCE_OUTPUT, size_batch=config.SIZE_BATCH, strict_batch_size=config.STRICT_BATCH_SIZE, keep_positive=True):
 
         try:
             self.path = path
@@ -31,6 +31,8 @@ class Sampler:
             self.length_sequence_output = length_sequence_output
             self.size_batch = size_batch
             self.strict_batch_size = strict_batch_size
+            if keep_positive:
+                self.pan_to_positive()
 
         except:
             raise

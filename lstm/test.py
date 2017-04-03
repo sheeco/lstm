@@ -2,8 +2,8 @@
 
 import utils
 import file
-from Sampler import *
-from SharedLSTM import *
+from sampler import *
+from model import *
 
 
 if __name__ == '__main__':

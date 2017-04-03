@@ -10,12 +10,12 @@ LOG_SLOT = 10
 SHOW_WARNING = False
 # # How many nodes to learn on
 # N_NODES_EXPECTED = 3
+# Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
+DIMENSION_SAMPLE = 3
 
 if __debug__:
 
     """Nano-size net config for debugging"""
-    # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
-    DIMENSION_SAMPLE = 3
     # Length of observed sequence
     LENGTH_SEQUENCE_INPUT = 4
     # Length of predicted sequence
@@ -49,16 +49,14 @@ if __debug__:
 
 else:
 
-    # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
-    DIMENSION_SAMPLE = 3
     # Length of observed sequence
     LENGTH_SEQUENCE_INPUT = 10
     # Length of predicted sequence
     LENGTH_SEQUENCE_OUTPUT = 10
     # Number of units in embedding layer ([x, y] -> e)
-    DIMENSION_EMBED_LAYER = 64
+    DIMENSION_EMBED_LAYER = 16
     # Number of units in each hidden (LSTM) layers
-    DIMENSION_HIDDEN_LAYERS = (16, 16)
+    DIMENSION_HIDDEN_LAYERS = (4, 4)
 
     # # # Social-LSTM config
     #
@@ -72,9 +70,9 @@ else:
     # If only a full size batch will be accepted
     STRICT_BATCH_SIZE = True
     # Number of epochs to train the net
-    NUM_EPOCH = 100
+    NUM_EPOCH = 3
     # Optimization learning rate
-    LEARNING_RATE_RMSPROP = .03
+    LEARNING_RATE_RMSPROP = .003
     RHO_RMSPROP = .9
     EPSILON_RMSPROP = 1e-8
     # All gradients above this will be clipped
