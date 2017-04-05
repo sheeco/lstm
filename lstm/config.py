@@ -15,6 +15,8 @@ PRINT_LEVEL = 3
 # N_NODES_EXPECTED = 3
 # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
 DIMENSION_SAMPLE = 3
+# Length of edge when coordinates need to be mapped to grid
+GRAIN_GRID = 100
 
 if __debug__:
 

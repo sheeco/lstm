@@ -6,8 +6,16 @@ import utils
 import file
 
 __all__ = [
-    "Sampler"
+    "Sampler",
+    "GridSystem"
     ]
+
+
+class GridSystem:
+
+    def __init__(self, grain, base_xy=None):
+        self.grain = grain
+        self.base_xy = base_xy
 
 
 class Sampler:
@@ -24,6 +32,7 @@ class Sampler:
             self.num_node = int(self.traces.shape[0])
             self.length = int(self.traces.shape[1])
             self.motion_range = Sampler.__compute_range__(self.traces)
+            self.grid_system = None
             self.entry = 0
 
             self.dimension_sample = dimension_sample
@@ -176,6 +185,20 @@ class Sampler:
         self.traces = traces
         return self.traces
 
+    def map_to_grid(self, grid_system=GridSystem(config.GRAIN_GRID)):
+
+        traces = self.traces
+        if grid_system.base_xy is None:
+            grid_system.base_xy = numpy.floor_divide(self.motion_range[0, :], grid_system.grain) * grid_system.grain
+        for trace in traces:
+            for triple in trace:
+                triple[1:3] = numpy.floor_divide((triple[1:3] - grid_system.base_xy), grid_system.grain)
+
+        self.motion_range = Sampler.__compute_range__(traces)
+        self.traces = traces
+        self.grid_system = grid_system
+        return self.traces
+
     def __load_sample__(self, with_target=True):
         """
         指定起始位置，为单次训练/测试生成所有节点的输入序列（及目标序列）。
@@ -291,6 +314,7 @@ class Sampler:
             sampler = Sampler(config.PATH_TRACE_FILES)
             sampler.pan_to_positive()
             sampler.pan_to_positive()
+            sampler.map_to_grid(GridSystem(100))
 
             instants, inputs, targets = sampler.load_batch(with_target=False)
             # utils.xprint([to_check.shape if to_check is not None else 'None' 

@@ -168,7 +168,13 @@
 
 - RFCT: Wrap all the printing with `utils.xprint()` to control detail level;
 
-###### 2017-04-05
+###### [2017-04-05](65e5d9782ce5deeafa6784770751568f2aebc2eb)
 
 - ADD: Enable recording & checking for all the parameters & layers during training;
+
+###### 2017-04-06
+
+- ADD: Enable coordinates in sampler to be mapped to grid;
+
+
 - [ ] TRY: Tuning `GRAD_CLIP`;
