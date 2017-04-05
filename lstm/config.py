@@ -38,13 +38,13 @@ if __debug__:
     # RANGE_NEIGHBORHOOD = 4
 
     # Batch Size
-    SIZE_BATCH = 3
+    SIZE_BATCH = 10
     # If only a full size batch will be accepted
     STRICT_BATCH_SIZE = True
     # Number of epochs to train the net
     NUM_EPOCH = 2
     # Optimization learning rate
-    LEARNING_RATE_RMSPROP = .003
+    LEARNING_RATE_RMSPROP = .03
     RHO_RMSPROP = .9
     EPSILON_RMSPROP = 1e-8
     # All gradients above this will be clipped

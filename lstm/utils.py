@@ -10,7 +10,6 @@ import config
 
 __all__ = [
     "match",
-    "check_range",
     "xprint",
     "warn",
     "handle",
@@ -28,10 +27,6 @@ def match(shape1, shape2):
     return (len(shape1) == len(shape2) and
             all(s1 is None or s2 is None or s1 == s2
                 for s1, s2 in zip(shape1, shape2)))
-
-
-def check_range(mat):
-    return [numpy.min(mat), numpy.max(mat), numpy.mean(mat)]
 
 
 def xprint(what, level=0, newline=False):
@@ -52,13 +47,23 @@ def warn(info):
 
 
 def handle(exception):
-    xprint('', newline=True)
+    xprint('\n\n')
+    xprint(exception.message, newline=True)
     xprint(traceback.format_exc(), newline=True)
 
 
 def assert_type(var, assertion):
     if not isinstance(var, assertion):
         raise ValueError("assert_type @ utils: Expect %s while getting %s instead." % (assertion, type(var)))
+    else:
+        return True
+
+
+def assert_finite(var, name):
+    if not isinstance(var, list):
+        var = [var]
+    if any((not numpy.isfinite(ivar).all()) for ivar in var):
+        raise AssertionError("assert_finite @ utils: <%s> contains 'nan' or 'inf'." % name)
     else:
         return True
 

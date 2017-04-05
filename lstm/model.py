@@ -3,6 +3,8 @@
 import numpy
 import theano
 import theano.tensor as T
+from theano.compile.nanguardmode import NanGuardMode
+from theano.tensor.sharedvar import TensorSharedVariable
 import lasagne as L
 
 import config
@@ -73,11 +75,14 @@ class SharedLSTM:
 
             self.outputs = None
             self.params = None
+            self.param_names = []
             self.updates = None
             self.predictions = None
             self.probabilities = None
             self.loss = None
             self.deviations = None
+
+            self.network_history = {}
 
             self.func_predict = None
             self.func_compare = None
@@ -472,6 +477,7 @@ class SharedLSTM:
             # Normal Negative Log-likelihood
             nnls = T.neg(T.log(probs))
             loss = T.sum(nnls)
+            # loss = T.mean(nnls)
             # loss = T.mean(deviations)
 
             utils.xprint(timer.stop(), newline=True)
@@ -479,8 +485,16 @@ class SharedLSTM:
             utils.xprint('Computing updates ...')
 
             # Retrieve all parameters from the self.layer_out
-            # todo save parameter keys for observation
             params = L.layers.get_all_params(self.layer_out, trainable=True)
+
+            def get_names_for_params(list_param):
+                param_keys = []
+                for param in list_param:
+                    utils.assert_type(param, TensorSharedVariable)
+                    name = param.name
+                    # ndim = param.ndim
+                    param_keys += [name]
+                return param_keys
 
             # Compute RMSProp updates for training
             RMSPROP = L.updates.rmsprop(loss, params, learning_rate=self.learning_rate_rmsprop, rho=self.rho_rmsprop,
@@ -488,6 +502,7 @@ class SharedLSTM:
             updates = RMSPROP
 
             self.params = params
+            self.param_names = get_names_for_params(params)
             self.updates = updates
             self.outputs = outputs
             self.predictions = predictions
@@ -506,6 +521,10 @@ class SharedLSTM:
             self.func_compare = theano.function([self.inputs, self.targets], self.deviations, allow_input_downcast=True)
             self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates,
                                               allow_input_downcast=True)
+            # self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates,
+            #                                   allow_input_downcast=True,
+            #                                   mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True))
+
             """
             Compile checking functions for debugging
             """
@@ -533,8 +552,28 @@ class SharedLSTM:
     def train(self, log_slot=config.LOG_SLOT):
         utils.xprint('Training ...', newline=True)
 
-        loss_epoch = numpy.zeros((self.num_epoch, 3))
-        deviation_epoch = numpy.zeros((self.num_epoch, 3))
+        def info_mat(mat):
+            return [mat[-1], numpy.min(mat), numpy.max(mat)]
+
+        def format_var(var, name=None):
+            str_var = ''
+            if name is not None:
+                str_var += '\'%s\':\n' % name
+            if var is not None:
+                str_var += '%s\n' % var
+            return str_var
+
+        def format_list_var(list_var, list_names):
+            assert len(list_var) == len(list_names)
+            string = ''
+            for iparam in xrange(len(list_var)):
+                string += format_var(list_var[iparam], name=list_names[iparam])
+            return string
+
+        loss_epoch = numpy.zeros((self.num_epoch,))
+        deviation_epoch = numpy.zeros((self.num_epoch,))
+        params = None
+        str_params = None
         for iepoch in range(self.num_epoch):
             utils.xprint('  Epoch %d ... ' % iepoch, newline=True)
             loss_batch = numpy.zeros((0,))
@@ -551,11 +590,10 @@ class SharedLSTM:
                         self.sampler.reset_entry()
                         break
 
-                    def check_netflow():
+                    def format_netflow():
                         if not self.check:
                             raise RuntimeError("train @ SharedLSTM: Error has occurred. "
                                                "Must enable <self.check> to check for net flow.")
-                        params = self.check_params()
                         embedded = self.check_e(inputs)
                         hids = []
                         for ihid in xrange(self.dimension_hidden_layers[0]):
@@ -563,54 +601,71 @@ class SharedLSTM:
                             hids += [check_hid(inputs)]
                         netout = self.check_netout(inputs)
 
-                        utils.xprint('', level=2, newline=True)
-                        if loss is not None:
-                            utils.xprint('<loss>', level=2, newline=True)
-                            utils.xprint(loss, level=2, newline=True)
-                        utils.xprint('Batch %d ...' % ibatch, level=2, newline=True)
-                        utils.xprint('<params>', level=2, newline=True)
-                        utils.xprint(params, level=2, newline=True)
-                        utils.xprint('<embedded[0][0]>', level=2, newline=True)
-                        utils.xprint(embedded[0, 0], level=2, newline=True)
+                        string = ''
+                        string += format_var(embedded[0, 0], name='embedded[0][0]')
                         for ihid in xrange(self.dimension_hidden_layers[0]):
-                            utils.xprint('<hidden-%d[0][0]>' % ihid, level=2, newline=True)
-                            utils.xprint(hids[ihid][0][0], level=2, newline=True)
-                        utils.xprint('<netout[0][0]>', level=2, newline=True)
-                        utils.xprint(netout[0, 0], level=2, newline=True)
+                            string += format_var(hids[ihid][0][0], name='hidden-%d[0][0]')
+                        string += format_var(netout[0, 0], 'netout[0][0]')
+                        return string
+
+                    utils.xprint('    Batch %d ...' % ibatch, level=2)
+
+                    # todo log parameter values to file
+                    if params is None:
+                        params = self.check_params()
+                        str_params = format_list_var(params, self.param_names)
+                    str_netflow = format_netflow()
+                    self.network_history[ibatch] = {'params': str_params, 'netflow': str_netflow}
 
                     probs = self.check_probs(inputs, targets)
-                    # todo log parameter values to file
-                    check_netflow()
-                    if not numpy.isfinite(probs).all():
-                        # check_netflow()
-                        raise RuntimeError("train @ SharedLSTM: <probs> is infinite.")
+                    try:
+                        utils.assert_finite(probs, 'probs')
+                    except Exception, e:
+                        e.message += '\n'
+                        e.message += '%s' % str_netflow
+                        raise
+                    else:
+                        pass
 
 
                     # prediction = self.func_predict(inputs)
-                    deviation = self.func_compare(inputs, targets)
+                    deviations = self.func_compare(inputs, targets)
 
                     loss = self.func_train(inputs, targets)
+                    params = self.check_params()
+                    str_params = format_list_var(params, self.param_names)
+                    try:
+                        utils.assert_finite(params, 'params')
+                    except Exception, e:
+                        info = 'Unvalid training ... loss: %.1f\n' % loss
+                        info += 'Before this training:\n'
+                        info += '%s\n' % self.network_history[ibatch]['params']
+                        info += 'After:\n'
+                        info += '%s\n' % str_params
+                        e.message += '\n'
+                        e.message += '%s' % info
+                        raise
+                    else:
+                        pass
 
                     loss_batch = numpy.append(loss_batch, loss)
-                    deviation_batch = numpy.append(deviation_batch, deviation)
+                    deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
 
                     if divmod(ibatch, log_slot)[1] == 0:
-                        loss_epoch[iepoch] = numpy.array(utils.check_range(loss_batch))
-                        deviation_epoch[iepoch] = numpy.array(utils.check_range(deviation_batch))
-                        utils.xprint('    Batch %d ... ' % ibatch, level=1)
-                        utils.xprint('loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' \
-                              % tuple(['%.0f' % x for x in utils.check_range(loss_batch)] +
-                                      ['%.0f' % x for x in utils.check_range(deviation_batch)]), level=1, newline=True)
+                        # utils.xprint('    Batch %d ... ' % ibatch, level=1)
+                        utils.xprint('loss: %.0f;  deviation: %.0f (%.0f-%.0f);' %
+                                     tuple(['%.0f' % loss] + ['%.0f' % x for x in info_mat(deviations)]),
+                                     level=1, newline=True)
                 except KeyboardInterrupt, e:
                     raise
 
             if divmod(ibatch, log_slot)[1] != 0:
-                loss_epoch[iepoch] = numpy.array(utils.check_range(loss_batch))
-                deviation_epoch[iepoch] = numpy.array(utils.check_range(deviation_batch))
+                loss_epoch[iepoch] = numpy.array(loss_batch[-1])
+                deviation_epoch[iepoch] = numpy.array(deviation_batch[-1])
                 utils.xprint('    Batch %d ... ' % ibatch, level=1)
-                utils.xprint('  loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' % tuple(
-                    ['%.0f' % x for x in loss_epoch[iepoch]] + ['%.0f' % x for x in deviation_epoch[iepoch]]), level=1, newline=True)
-
+                utils.xprint('loss: %.0f (%.0f-%.0f);  deviation: %.0f (%.0f-%.0f);' \
+                     % tuple(['%.0f' % x for x in info_mat(loss_batch)] + ['%.0f' % x for x in info_mat(deviation_batch)]),
+                             level=1, newline=True)
 
     @staticmethod
     def test():
@@ -626,6 +681,7 @@ class SharedLSTM:
 
             if __debug__:
                 theano.config.exception_verbosity = 'high'
+                theano.config.optimizer = 'fast_compile'
 
             # sampler = Sampler(path=config.PATH_TRACE_FILES, nodes=3)
             # sampler.pan_to_positive()

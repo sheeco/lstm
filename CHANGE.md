@@ -164,6 +164,11 @@
 - OPT: Enable checking for each single hidden layer during debugging. & Minor opt for network building;
 - BUG: All the parameters (except for distribution layer) equal to 'nan' after 1st training;
 
-###### 2017-04-04
+###### [2017-04-04](ec6784434eab9b60e7875f397218b1cb96045cb4)
 
 - RFCT: Wrap all the printing with `utils.xprint()` to control detail level;
+
+###### 2017-04-05
+
+- ADD: Enable recording & checking for all the parameters & layers during training;
+- [ ] TRY: Tuning `GRAD_CLIP`;
