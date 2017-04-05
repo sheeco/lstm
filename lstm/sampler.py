@@ -279,10 +279,10 @@ class Sampler:
     def test():
 
         try:
-            print 'Testing Sampler...',
+            utils.xprint('Testing Sampler...', level=1)
 
             demo_list_triples = Sampler.__read_triples_from_file__('res/trace/2.trace')
-            # print numpy.shape(demo_list_triples)
+            # utils.xprint(numpy.shape(demo_list_triples), level=1, newline=True)
 
             sampler = Sampler(config.PATH_TRACE_FILES, nodes=1)
             sampler = Sampler(config.PATH_TRACE_FILES, nodes=['2'])
@@ -293,18 +293,20 @@ class Sampler:
             sampler.pan_to_positive()
 
             instants, inputs, targets = sampler.load_batch(with_target=False)
-            # print [to_check.shape if to_check is not None else 'None' for to_check in (instants, inputs, targets)]
+            # utils.xprint([to_check.shape if to_check is not None else 'None' 
+            # for to_check in (instants, inputs, targets)], level=1, newline=True)
 
             sampler.strict_batch_size = False
             while True:
                 # 1 batch for each node
                 instants, inputs, targets = sampler.load_batch(with_target=True)
-                # print [to_check.shape if to_check is not None else 'None' for to_check in (instants, inputs, targets)]
+                # utils.xprint([to_check.shape if to_check is not None else 'None' 
+                # for to_check in (instants, inputs, targets)], level=1, newline=True)
                 check_entry = sampler.entry
                 if inputs is None:
                     break
 
-            print 'Fine'
+            utils.xprint('Fine', level=1, newline=True)
             return True
 
         except:

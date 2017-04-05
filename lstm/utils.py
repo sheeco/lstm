@@ -8,6 +8,22 @@ import numpy
 import config
 
 
+__all__ = [
+    "match",
+    "check_range",
+    "xprint",
+    "warn",
+    "handle",
+    "assert_type",
+    "assert_unreachable",
+    "confirm",
+    "get_timestamp",
+    "format_time_string",
+    "Timer",
+    "test"
+]
+
+
 def match(shape1, shape2):
     return (len(shape1) == len(shape2) and
             all(s1 is None or s2 is None or s1 == s2
@@ -18,17 +34,26 @@ def check_range(mat):
     return [numpy.min(mat), numpy.max(mat), numpy.mean(mat)]
 
 
+def xprint(what, level=0, newline=False):
+    if level == 0 or level <= config.PRINT_LEVEL:
+        print what,
+    else:
+        return
+    if newline:
+        print ''
+
+
 def warn(info):
     # if config.SHOW_WARNING:
-        # print "[Warning] %s" % info
+        # xprint("[Warning] %s" % info)
     if not config.SHOW_WARNING:
         warnings.filterwarnings("ignore")
     warnings.warn(info)
 
 
 def handle(exception):
-    print ''
-    print traceback.format_exc()
+    xprint('', newline=True)
+    xprint(traceback.format_exc(), newline=True)
 
 
 def assert_type(var, assertion):
@@ -112,13 +137,13 @@ def test():
     # timestamp = get_timestamp()
     # yes = confirm("Confirm")
 
-    print format_time_string(59.9)
-    print format_time_string(222.2)
-    print format_time_string(7777.7)
+    xprint(format_time_string(59.9), level=1, newline=True)
+    xprint(format_time_string(222.2), level=1, newline=True)
+    xprint(format_time_string(7777.7), level=1, newline=True)
     timer = Timer()
-    print timer.stop()
+    xprint(timer.stop(), level=1, newline=True)
     timer.start()
-    print timer.stop()
-    print timer.stop()
+    xprint(timer.stop(), level=1, newline=True)
+    xprint(timer.stop(), level=1, newline=True)
     timer = Timer(formatted=False)
-    print timer.stop()
+    xprint(timer.stop(), level=1, newline=True)

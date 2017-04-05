@@ -10,13 +10,14 @@ if __name__ == '__main__':
 
     try:
         if __debug__:
-            print '[Debug Mode]'
+            utils.xprint('[Debug Mode]', level=1, newline=True)
 
         # utils.test()
         # file.test()
         # Sampler.test()
         SharedLSTM.test()
-        print 'Exit'
+        utils.xprint('', newline=True)
+        utils.xprint('Completed', newline=True)
 
     except KeyboardInterrupt, e:
         exit()

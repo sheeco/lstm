@@ -5,9 +5,12 @@ PATH_TRACE_FILES = 'res/trace/'
 # Path for logs
 PATH_LOG = 'log/'
 # How often should we check the output
-LOG_SLOT = 10
+LOG_SLOT = 1
 # Show warning info or not
 SHOW_WARNING = False
+# Level of printing detail
+# 0 means mandatory printing only
+PRINT_LEVEL = 3
 # # How many nodes to learn on
 # N_NODES_EXPECTED = 3
 # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]

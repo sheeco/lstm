@@ -158,8 +158,12 @@
 
 - ADD: Class `Timer`. & Apply to building & compiling;
 
-###### 2017-04-03
+###### [2017-04-03](1404076eca67733b9df985831ea1285febc748ef)
 
 - ADD: Enable scaled deviations, activated using sigmoid & then scaled within motion range;
 - OPT: Enable checking for each single hidden layer during debugging. & Minor opt for network building;
 - BUG: All the parameters (except for distribution layer) equal to 'nan' after 1st training;
+
+###### 2017-04-04
+
+- RFCT: Wrap all the printing with `utils.xprint()` to control detail level;

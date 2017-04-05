@@ -212,7 +212,7 @@ class SharedLSTM:
         try:
             timer = utils.Timer()
 
-            print 'Building shared LSTM network ...',
+            utils.xprint('Building shared LSTM network ...')
 
             # IN = [(sec, x, y)]
             layer_in = L.layers.InputLayer(name="input-layer", input_var=self.inputs,
@@ -370,7 +370,7 @@ class SharedLSTM:
             assert utils.match(layer_distribution.output_shape,
                                (self.num_node, self.size_batch, self.length_sequence_output, 5))
 
-            print timer.stop()
+            utils.xprint(timer.stop(), newline=True)
             self.layer_in = layer_in
             self.layer_e = layer_e
             self.layers_hid = layers_hid
@@ -387,7 +387,7 @@ class SharedLSTM:
         try:
             timer = utils.Timer()
 
-            print 'Preparing ...',
+            utils.xprint('Preparing ...')
 
             outputs = L.layers.get_output(self.layer_out)
 
@@ -474,9 +474,9 @@ class SharedLSTM:
             loss = T.sum(nnls)
             # loss = T.mean(deviations)
 
-            print timer.stop()
+            utils.xprint(timer.stop(), newline=True)
             timer.start()
-            print 'Computing updates ...',
+            utils.xprint('Computing updates ...')
 
             # Retrieve all parameters from the self.layer_out
             # todo save parameter keys for observation
@@ -495,9 +495,9 @@ class SharedLSTM:
             self.loss = loss
             self.deviations = deviations
 
-            print timer.stop()
+            utils.xprint(timer.stop(), newline=True)
             timer.start()
-            print 'Compiling functions ...',
+            utils.xprint('Compiling functions ...')
 
             """
             Compile theano functions for prediction, observation & training
@@ -520,7 +520,7 @@ class SharedLSTM:
             # Mandatory checking
             self.check_probs = theano.function([self.inputs, self.targets], self.probabilities, allow_input_downcast=True)
 
-            print timer.stop()
+            utils.xprint(timer.stop(), newline=True)
             return self.func_predict, self.func_compare, self.func_train
 
         except:
@@ -531,12 +531,12 @@ class SharedLSTM:
         return self.check_e, self.checks_hid, self.check_netout, self.check_params, self.check_probs
 
     def train(self, log_slot=config.LOG_SLOT):
-        print 'Training ...'
+        utils.xprint('Training ...', newline=True)
 
         loss_epoch = numpy.zeros((self.num_epoch, 3))
         deviation_epoch = numpy.zeros((self.num_epoch, 3))
         for iepoch in range(self.num_epoch):
-            print '  Epoch %d ... ' % iepoch
+            utils.xprint('  Epoch %d ... ' % iepoch, newline=True)
             loss_batch = numpy.zeros((0,))
             deviation_batch = numpy.zeros((0,))
             ibatch = 0
@@ -563,20 +563,20 @@ class SharedLSTM:
                             hids += [check_hid(inputs)]
                         netout = self.check_netout(inputs)
 
+                        utils.xprint('', level=2, newline=True)
                         if loss is not None:
-                            print '<loss>'
-                            print loss
-                        print ''
-                        print 'Batch %d ...' % ibatch
-                        print '<params>'
-                        print params
-                        print '<embedded[0][0]>'
-                        print embedded[0, 0]
+                            utils.xprint('<loss>', level=2, newline=True)
+                            utils.xprint(loss, level=2, newline=True)
+                        utils.xprint('Batch %d ...' % ibatch, level=2, newline=True)
+                        utils.xprint('<params>', level=2, newline=True)
+                        utils.xprint(params, level=2, newline=True)
+                        utils.xprint('<embedded[0][0]>', level=2, newline=True)
+                        utils.xprint(embedded[0, 0], level=2, newline=True)
                         for ihid in xrange(self.dimension_hidden_layers[0]):
-                            print '<hidden-%d[0][0]>' % ihid
-                            print hids[ihid][0, 0]
-                        print '<netout[0][0]>'
-                        print netout[0, 0]
+                            utils.xprint('<hidden-%d[0][0]>' % ihid, level=2, newline=True)
+                            utils.xprint(hids[ihid][0][0], level=2, newline=True)
+                        utils.xprint('<netout[0][0]>', level=2, newline=True)
+                        utils.xprint(netout[0, 0], level=2, newline=True)
 
                     probs = self.check_probs(inputs, targets)
                     # todo log parameter values to file
@@ -597,20 +597,19 @@ class SharedLSTM:
                     if divmod(ibatch, log_slot)[1] == 0:
                         loss_epoch[iepoch] = numpy.array(utils.check_range(loss_batch))
                         deviation_epoch[iepoch] = numpy.array(utils.check_range(deviation_batch))
-                        print '    Batch %d ... ' % ibatch,
-                        print 'loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' \
-                              % tuple(['%.0f' % x for x in utils.check_range(loss_batch)] + ['%.0f' % x for x in
-                                                                                             utils.check_range(
-                                                                                                 deviation_batch)])
+                        utils.xprint('    Batch %d ... ' % ibatch, level=1)
+                        utils.xprint('loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' \
+                              % tuple(['%.0f' % x for x in utils.check_range(loss_batch)] +
+                                      ['%.0f' % x for x in utils.check_range(deviation_batch)]), level=1, newline=True)
                 except KeyboardInterrupt, e:
                     raise
 
             if divmod(ibatch, log_slot)[1] != 0:
                 loss_epoch[iepoch] = numpy.array(utils.check_range(loss_batch))
                 deviation_epoch[iepoch] = numpy.array(utils.check_range(deviation_batch))
-                print '    Batch %d ... ' % ibatch,
-                print '  loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' % tuple(
-                    ['%.0f' % x for x in loss_epoch[iepoch]] + ['%.0f' % x for x in deviation_epoch[iepoch]])
+                utils.xprint('    Batch %d ... ' % ibatch, level=1)
+                utils.xprint('  loss: %6s, %6s, %6s;  deviation: %6s, %6s, %6s;' % tuple(
+                    ['%.0f' % x for x in loss_epoch[iepoch]] + ['%.0f' % x for x in deviation_epoch[iepoch]]), level=1, newline=True)
 
 
     @staticmethod
