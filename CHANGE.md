@@ -172,9 +172,13 @@
 
 - ADD: Enable recording & checking for all the parameters & layers during training;
 
-###### 2017-04-06
+###### [2017-04-06](88adfd9381202cd198a83bd2b44c275d9af5b7e1)
 
 - ADD: Enable coordinates in sampler to be mapped to grid;
+
+###### 2017-04-06
+
+- FIX: Bugs with printings. & Some opt;
 
 
 - [ ] TRY: Tuning `GRAD_CLIP`;

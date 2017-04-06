@@ -52,11 +52,15 @@ def handle(exception):
     xprint(traceback.format_exc(), newline=True)
 
 
-def assert_type(var, assertion):
-    if not isinstance(var, assertion):
-        raise ValueError("assert_type @ utils: Expect %s while getting %s instead." % (assertion, type(var)))
+def assert_type(var, assertion, raising=True):
+    if isinstance(assertion, list) \
+            or isinstance(assertion, tuple):
+        fine = any(assert_type(var, iassertion, raising=False) for iassertion in assertion)
     else:
-        return True
+        fine = isinstance(var, assertion)
+    if raising and not fine:
+        raise ValueError("assert_type @ utils: Expect %s while getting %s instead." % (assertion, type(var)))
+    return fine
 
 
 def assert_finite(var, name):

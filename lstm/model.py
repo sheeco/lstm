@@ -476,8 +476,8 @@ class SharedLSTM:
 
             # Normal Negative Log-likelihood
             nnls = T.neg(T.log(probs))
-            loss = T.sum(nnls)
-            # loss = T.mean(nnls)
+            # loss = T.sum(nnls)
+            loss = T.mean(nnls)
             # loss = T.mean(deviations)
 
             utils.xprint(timer.stop(), newline=True)
@@ -552,22 +552,34 @@ class SharedLSTM:
     def train(self, log_slot=config.LOG_SLOT):
         utils.xprint('Training ...', newline=True)
 
-        def info_mat(mat):
-            return [mat[-1], numpy.min(mat), numpy.max(mat)]
+        def mean_min_max(mat):
+            return [numpy.mean(mat), numpy.min(mat), numpy.max(mat)]
 
-        def format_var(var, name=None):
-            str_var = ''
-            if name is not None:
-                str_var += '\'%s\':\n' % name
-            if var is not None:
-                str_var += '%s\n' % var
-            return str_var
-
-        def format_list_var(list_var, list_names):
-            assert len(list_var) == len(list_names)
+        def format_var(var, name=None, detail=False):
             string = ''
-            for iparam in xrange(len(list_var)):
-                string += format_var(list_var[iparam], name=list_names[iparam])
+            if isinstance(var, list):
+                assert isinstance(name, list)
+                assert len(var) == len(name)
+                for i in xrange(len(var)):
+                    string += format_var(var[i], name=name[i], detail=detail) + '\n'
+            else:
+                if name is not None:
+                    string += '\'%s\': ' % name
+                if isinstance(var, numpy.ndarray):
+                    if detail:
+                        string += '\n%s' % var
+                    elif numpy.isfinite(var).all():
+                        string += '(mean: %.1f, min: %.1f, max: %.1f)' % tuple(mean_min_max(var))
+                    elif numpy.isnan(var).all():
+                        string += 'nan'
+                    elif numpy.isinf(var).all():
+                        string += 'inf'
+                    else:
+                        string += '\n%s' % var
+                elif isinstance(var, float):
+                    string += '%.1f' % var
+                else:
+                    string += '%s' % var
             return string
 
         loss_epoch = numpy.zeros((self.num_epoch,))
@@ -576,6 +588,8 @@ class SharedLSTM:
         str_params = None
         for iepoch in range(self.num_epoch):
             utils.xprint('  Epoch %d ... ' % iepoch, newline=True)
+            loss = None
+            deviations = None
             loss_batch = numpy.zeros((0,))
             deviation_batch = numpy.zeros((0,))
             ibatch = 0
@@ -585,7 +599,6 @@ class SharedLSTM:
 
                     # retrieve 1 batch for each node
                     instants, inputs, targets = self.sampler.load_batch(True)
-                    loss = None
                     if inputs is None:
                         self.sampler.reset_entry()
                         break
@@ -602,10 +615,10 @@ class SharedLSTM:
                         netout = self.check_netout(inputs)
 
                         string = ''
-                        string += format_var(embedded[0, 0], name='embedded[0][0]')
+                        string += format_var(embedded[0, 0], name='embedded[0][0]') + '\n'
                         for ihid in xrange(self.dimension_hidden_layers[0]):
-                            string += format_var(hids[ihid][0][0], name='hidden-%d[0][0]')
-                        string += format_var(netout[0, 0], 'netout[0][0]')
+                            string += format_var(hids[ihid][0][0], name='hidden-%d[0][0]' % ihid) + '\n'
+                        string += format_var(netout[0, 0], 'netout[0][0]') + '\n'
                         return string
 
                     utils.xprint('    Batch %d ...' % ibatch, level=2)
@@ -613,7 +626,7 @@ class SharedLSTM:
                     # todo log parameter values to file
                     if params is None:
                         params = self.check_params()
-                        str_params = format_list_var(params, self.param_names)
+                        str_params = format_var(params, self.param_names)
                     str_netflow = format_netflow()
                     self.network_history[ibatch] = {'params': str_params, 'netflow': str_netflow}
 
@@ -633,11 +646,11 @@ class SharedLSTM:
 
                     loss = self.func_train(inputs, targets)
                     params = self.check_params()
-                    str_params = format_list_var(params, self.param_names)
+                    str_params = format_var(params, self.param_names)
                     try:
                         utils.assert_finite(params, 'params')
                     except Exception, e:
-                        info = 'Unvalid training ... loss: %.1f\n' % loss
+                        info = 'Unvalid training ... ' + format_var(float(loss), name='loss') + '\n'
                         info += 'Before this training:\n'
                         info += '%s\n' % self.network_history[ibatch]['params']
                         info += 'After:\n'
@@ -653,8 +666,7 @@ class SharedLSTM:
 
                     if divmod(ibatch, log_slot)[1] == 0:
                         # utils.xprint('    Batch %d ... ' % ibatch, level=1)
-                        utils.xprint('loss: %.0f;  deviation: %.0f (%.0f-%.0f);' %
-                                     tuple(['%.0f' % loss] + ['%.0f' % x for x in info_mat(deviations)]),
+                        utils.xprint(format_var(float(loss), name='loss') + '; ' + format_var(deviations, name='deviations'),
                                      level=1, newline=True)
                 except KeyboardInterrupt, e:
                     raise
@@ -663,8 +675,7 @@ class SharedLSTM:
                 loss_epoch[iepoch] = numpy.array(loss_batch[-1])
                 deviation_epoch[iepoch] = numpy.array(deviation_batch[-1])
                 utils.xprint('    Batch %d ... ' % ibatch, level=1)
-                utils.xprint('loss: %.0f (%.0f-%.0f);  deviation: %.0f (%.0f-%.0f);' \
-                     % tuple(['%.0f' % x for x in info_mat(loss_batch)] + ['%.0f' % x for x in info_mat(deviation_batch)]),
+                utils.xprint(format_var(float(loss), name='loss') + '; ' + format_var(deviations, name='deviations'),
                              level=1, newline=True)
 
     @staticmethod
