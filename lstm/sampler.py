@@ -1,5 +1,6 @@
 # coding:utf-8
 import numpy
+import copy
 
 import config
 import utils
@@ -27,8 +28,9 @@ class Sampler:
             self.path = path
             dict_traces = Sampler.__read_traces_from_path__(path)
             dict_traces = Sampler.__filter__(dict_traces, nodes)
+            self.node_identifiers = dict_traces.keys()
             self.node_filter = nodes
-            self.traces = Sampler.__clip_and_convert__(dict_traces, length)
+            self.traces = Sampler.__dict_to_array__(dict_traces, length)
             self.num_node = int(self.traces.shape[0])
             self.length = int(self.traces.shape[1])
             self.motion_range = Sampler.__compute_range__(self.traces)
@@ -114,7 +116,7 @@ class Sampler:
             if node_filter is None:
                 return dict_traces
             # 指定节点个数
-            if type(node_filter) == int:
+            if isinstance(node_filter, int):
                 if 0 < node_filter < len(dict_traces):
                     nodes_requested = dict_traces.keys()[:node_filter]
                 else:
@@ -123,7 +125,7 @@ class Sampler:
                     return dict_traces
 
             # 指定 node identifiers
-            elif type(node_filter) == list and len(node_filter) > 0:
+            elif isinstance(node_filter, list) and len(node_filter) > 0:
                 nodes_requested = node_filter
             else:
                 return dict_traces
@@ -135,7 +137,7 @@ class Sampler:
             raise
 
     @staticmethod
-    def __clip_and_convert__(dict_traces, length=None):
+    def __dict_to_array__(dict_traces, length=None):
 
         try:
             # 计算不同节点轨迹长度的最小值
@@ -146,6 +148,38 @@ class Sampler:
             array_traces = numpy.array([trace[:length, :] for trace in dict_traces.values()],
                                            dtype=numpy.float32)
             return array_traces
+
+        except:
+            raise
+
+    @staticmethod
+    def clip(a, indices=None):
+
+        """
+
+        :param a: The sampler to be clipped
+        :param indices: Slice range e.g. indices=(6, 10); or n for (0, n) e.g. indices=5
+        :return: A clipped Sampler copied from `a`
+        """
+        try:
+            utils.assert_type(a, Sampler)
+            out = copy.deepcopy(a)
+            if indices is None:
+                return None
+            elif isinstance(indices, list) or isinstance(indices, tuple):
+                assert len(indices) == 2
+                ifrom, ito = indices[0], indices[1]
+            elif isinstance(indices, int):
+                ifrom, ito = 0, indices
+            else:
+                utils.assert_type(indices, [list, tuple, int])
+                return None
+            traces = a.traces
+            traces = numpy.array([trace[ifrom:ito, :] for trace in traces], dtype=numpy.float32)
+            out.traces = traces
+            out.length = int(out.traces.shape[1])
+            out.motion_range = Sampler.__compute_range__(out.traces)
+            return out
 
         except:
             raise
@@ -308,13 +342,15 @@ class Sampler:
             # utils.xprint(numpy.shape(demo_list_triples), level=1, newline=True)
 
             sampler = Sampler(config.PATH_TRACE_FILES, nodes=1)
-            sampler = Sampler(config.PATH_TRACE_FILES, nodes=['2'])
             sampler = Sampler(config.PATH_TRACE_FILES, length=18)
+            sampler = Sampler(config.PATH_TRACE_FILES, nodes=['2'])
 
             sampler = Sampler(config.PATH_TRACE_FILES)
             sampler.pan_to_positive()
             sampler.pan_to_positive()
             sampler.map_to_grid(GridSystem(100))
+
+            clipped = Sampler.clip(sampler, indices=20)
 
             instants, inputs, targets = sampler.load_batch(with_target=False)
             # utils.xprint([to_check.shape if to_check is not None else 'None' 

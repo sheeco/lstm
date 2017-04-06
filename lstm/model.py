@@ -22,7 +22,7 @@ __all__ = [
 
 
 class SharedLSTM:
-    def __init__(self, sampler=None, inputs=None, targets=None, dimension_embed_layer=config.DIMENSION_EMBED_LAYER,
+    def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=config.DIMENSION_EMBED_LAYER,
                  dimension_hidden_layers=config.DIMENSION_HIDDEN_LAYERS, grad_clip=config.GRAD_CLIP,
                  num_epoch=config.NUM_EPOCH,
                  learning_rate_rmsprop=config.LEARNING_RATE_RMSPROP, rho_rmsprop=config.RHO_RMSPROP,
@@ -34,7 +34,10 @@ class SharedLSTM:
             self.sampler = sampler
             self.sampler.reset_entry()
             self.num_node = self.sampler.num_node
-            self.motion_range = self.sampler.motion_range
+            if motion_range is None:
+                self.motion_range = self.sampler.motion_range
+            else:
+                self.motion_range = motion_range
 
             self.dimension_sample = self.sampler.dimension_sample
             self.length_sequence_input = self.sampler.length_sequence_input
@@ -698,7 +701,8 @@ class SharedLSTM:
             # sampler.pan_to_positive()
 
             sampler = Sampler(nodes=3, keep_positive=True)
-            model = SharedLSTM(sampler=sampler, check=True)
+            half = Sampler.clip(sampler, indices=(sampler.length / 2))
+            model = SharedLSTM(sampler=half, motion_range=sampler.motion_range, check=True)
 
             network = model.build_network()
             predict, compare, train = model.compile()

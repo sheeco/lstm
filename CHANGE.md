@@ -176,9 +176,13 @@
 
 - ADD: Enable coordinates in sampler to be mapped to grid;
 
-###### 2017-04-06
+###### [2017-04-06](e0898e5d35bf5c0f5969a853edcbbd2573f015af)
 
 - FIX: Bugs with printings. & Some opt;
+
+###### 2017-04-06
+
+- ADD: `Sampler.clip()` to enable devision of samples;
 
 
 - [ ] TRY: Tuning `GRAD_CLIP`;
