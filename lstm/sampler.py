@@ -96,7 +96,7 @@ class Sampler:
                 list_files = [subdir for subdir in list_subdir if file.is_file(path + subdir)]
 
                 for filename in list_files:
-                    node_identifier, _ = file.split_filename(filename)
+                    node_identifier, _ = file.split_extension(filename)
                     temp_trace = Sampler.__read_triples_from_file__(path + filename)
                     # if node_name.isdigit():
                     #     traces[int(node_name)] = temp_trace

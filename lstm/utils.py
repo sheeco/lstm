@@ -29,13 +29,13 @@ def match(shape1, shape2):
                 for s1, s2 in zip(shape1, shape2)))
 
 
-def xprint(what, level=0, newline=False):
+def xprint(what, level=0, newline=False, logger=None):
+    # no level limit for logger
+    if logger is not None:
+        logger.log(what + '\n' if newline else what)
+
     if level == 0 or level <= config.PRINT_LEVEL:
-        print what,
-    else:
-        return
-    if newline:
-        print ''
+        print what + '\n' if newline else what,
 
 
 def warn(info):
@@ -46,10 +46,14 @@ def warn(info):
     warnings.warn(info)
 
 
-def handle(exception):
+def handle(exception, logger=None):
     xprint('\n\n')
     xprint(exception.message, newline=True)
     xprint(traceback.format_exc(), newline=True)
+    if logger is not None:
+        logger.register("exception")
+        logger.log(exception.message + '\n', name="exception")
+        logger.log(traceback.format_exc() + '\n', name="exception")
 
 
 def assert_type(var, assertion, raising=True):

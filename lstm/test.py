@@ -2,6 +2,7 @@
 
 import utils
 import file
+from file import Logger
 from sampler import *
 from model import *
 
@@ -14,10 +15,9 @@ if __name__ == '__main__':
 
         # utils.test()
         # file.test()
+        # Logger.test()
         # Sampler.test()
         SharedLSTM.test()
-        utils.xprint('', newline=True)
-        utils.xprint('Completed', newline=True)
 
     except KeyboardInterrupt, e:
         exit()

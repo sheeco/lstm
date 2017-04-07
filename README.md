@@ -5,10 +5,7 @@
 ### Dependency
 
 - python-2.7.12
-- numpy-1.11.2
-- scipy-0.18.1
-- mingw-4.7.0
-- Theano-0.9.0.dev4
+- [Theano-0.9.0](c697eeab84e5b8a74908da654b66ec9eca4f1291)
 - **[Forked Lasagne](4cd90af6f318caf2b883a26b72feb87383a0c695)**
 
 ### Platform

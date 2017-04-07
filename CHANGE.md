@@ -180,9 +180,13 @@
 
 - FIX: Bugs with printings. & Some opt;
 
-###### 2017-04-06
+###### [2017-04-06](a16e37ceedbd1f5c200ddd675f6bc21c81343c67)
 
 - ADD: `Sampler.clip()` to enable devision of samples;
+
+###### 2017-04-06
+
+- ADD: Class `Logger` to record information into files;
 
 
 - [ ] TRY: Tuning `GRAD_CLIP`;

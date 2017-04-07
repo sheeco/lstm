@@ -10,6 +10,7 @@ import lasagne as L
 import config
 import utils
 from sampler import *
+from file import Logger
 
 __all__ = [
     'SharedLSTM'
@@ -26,7 +27,7 @@ class SharedLSTM:
                  dimension_hidden_layers=config.DIMENSION_HIDDEN_LAYERS, grad_clip=config.GRAD_CLIP,
                  num_epoch=config.NUM_EPOCH,
                  learning_rate_rmsprop=config.LEARNING_RATE_RMSPROP, rho_rmsprop=config.RHO_RMSPROP,
-                 epsilon_rmsprop=config.EPSILON_RMSPROP, check=__debug__):
+                 epsilon_rmsprop=config.EPSILON_RMSPROP, check=__debug__, logger=Logger()):
         try:
             if sampler is None:
                 sampler = Sampler()
@@ -118,7 +119,6 @@ class SharedLSTM:
             self.init_lstm_hid = L.init.Constant(0.)
             self.init_lstm_cell = L.init.Constant(0.)
 
-
             self.w_means = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
             self.b_means = L.init.Constant(0.)
             self.f_means = None
@@ -141,6 +141,9 @@ class SharedLSTM:
                 self.f_correlation = SharedLSTM.scaled_tanh
             else:
                 self.f_correlation = SharedLSTM.safe_tanh
+
+            self.logger = logger
+            self.logger.register("training", tags=['epoch', 'batch', 'loss', 'deviations'])
 
         except:
             raise
@@ -220,7 +223,7 @@ class SharedLSTM:
         try:
             timer = utils.Timer()
 
-            utils.xprint('Building shared LSTM network ...')
+            utils.xprint('Building shared LSTM network ...', logger=self.logger)
 
             # IN = [(sec, x, y)]
             layer_in = L.layers.InputLayer(name="input-layer", input_var=self.inputs,
@@ -378,7 +381,7 @@ class SharedLSTM:
             assert utils.match(layer_distribution.output_shape,
                                (self.num_node, self.size_batch, self.length_sequence_output, 5))
 
-            utils.xprint(timer.stop(), newline=True)
+            utils.xprint(timer.stop(), newline=True, logger=self.logger)
             self.layer_in = layer_in
             self.layer_e = layer_e
             self.layers_hid = layers_hid
@@ -395,7 +398,7 @@ class SharedLSTM:
         try:
             timer = utils.Timer()
 
-            utils.xprint('Preparing ...')
+            utils.xprint('Preparing ...', logger=self.logger)
 
             outputs = L.layers.get_output(self.layer_out)
 
@@ -483,9 +486,9 @@ class SharedLSTM:
             loss = T.mean(nnls)
             # loss = T.mean(deviations)
 
-            utils.xprint(timer.stop(), newline=True)
+            utils.xprint(timer.stop(), newline=True, logger=self.logger)
             timer.start()
-            utils.xprint('Computing updates ...')
+            utils.xprint('Computing updates ...', logger=self.logger)
 
             # Retrieve all parameters from the self.layer_out
             params = L.layers.get_all_params(self.layer_out, trainable=True)
@@ -493,7 +496,7 @@ class SharedLSTM:
             def get_names_for_params(list_param):
                 param_keys = []
                 for param in list_param:
-                    utils.assert_type(param, TensorSharedVariable)
+                    # utils.assert_type(param, TensorSharedVariable)
                     name = param.name
                     # ndim = param.ndim
                     param_keys += [name]
@@ -513,9 +516,9 @@ class SharedLSTM:
             self.loss = loss
             self.deviations = deviations
 
-            utils.xprint(timer.stop(), newline=True)
+            utils.xprint(timer.stop(), newline=True, logger=self.logger)
             timer.start()
-            utils.xprint('Compiling functions ...')
+            utils.xprint('Compiling functions ...', logger=self.logger)
 
             """
             Compile theano functions for prediction, observation & training
@@ -542,7 +545,7 @@ class SharedLSTM:
             # Mandatory checking
             self.check_probs = theano.function([self.inputs, self.targets], self.probabilities, allow_input_downcast=True)
 
-            utils.xprint(timer.stop(), newline=True)
+            utils.xprint(timer.stop(), newline=True, logger=self.logger)
             return self.func_predict, self.func_compare, self.func_train
 
         except:
@@ -553,7 +556,8 @@ class SharedLSTM:
         return self.check_e, self.checks_hid, self.check_netout, self.check_params, self.check_probs
 
     def train(self, log_slot=config.LOG_SLOT):
-        utils.xprint('Training ...', newline=True)
+        utils.xprint('Training ...', newline=True, logger=self.logger)
+        timer = utils.Timer()
 
         def mean_min_max(mat):
             return [numpy.mean(mat), numpy.min(mat), numpy.max(mat)]
@@ -567,7 +571,7 @@ class SharedLSTM:
                     string += format_var(var[i], name=name[i], detail=detail) + '\n'
             else:
                 if name is not None:
-                    string += '\'%s\': ' % name
+                    string += "'%s': " % name
                 if isinstance(var, numpy.ndarray):
                     if detail:
                         string += '\n%s' % var
@@ -590,14 +594,13 @@ class SharedLSTM:
         params = None
         str_params = None
         for iepoch in range(self.num_epoch):
-            utils.xprint('  Epoch %d ... ' % iepoch, newline=True)
+            utils.xprint('  Epoch %d ... ' % iepoch, newline=True, logger=self.logger)
             loss = None
             deviations = None
             loss_batch = numpy.zeros((0,))
             deviation_batch = numpy.zeros((0,))
             ibatch = 0
             while True:
-                ibatch += 1
                 try:
 
                     # retrieve 1 batch for each node
@@ -608,8 +611,8 @@ class SharedLSTM:
 
                     def format_netflow():
                         if not self.check:
-                            raise RuntimeError("train @ SharedLSTM: Error has occurred. "
-                                               "Must enable <self.check> to check for net flow.")
+                            raise RuntimeError("""train @ SharedLSTM: Error has occurred.
+                                                Must enable <self.check> to check for net flow.""")
                         embedded = self.check_e(inputs)
                         hids = []
                         for ihid in xrange(self.dimension_hidden_layers[0]):
@@ -624,7 +627,7 @@ class SharedLSTM:
                         string += format_var(netout[0, 0], 'netout[0][0]') + '\n'
                         return string
 
-                    utils.xprint('    Batch %d ...' % ibatch, level=2)
+                    utils.xprint('    Batch %d ... ' % ibatch, level=2, logger=self.logger)
 
                     # todo log parameter values to file
                     if params is None:
@@ -653,13 +656,16 @@ class SharedLSTM:
                     try:
                         utils.assert_finite(params, 'params')
                     except Exception, e:
-                        info = 'Unvalid training ... ' + format_var(float(loss), name='loss') + '\n'
-                        info += 'Before this training:\n'
-                        info += '%s\n' % self.network_history[ibatch]['params']
-                        info += 'After:\n'
-                        info += '%s\n' % str_params
-                        e.message += '\n'
-                        e.message += '%s' % info
+                        info = """
+                                    Unvalid training ... %s
+                                    Before this training:
+                                    %s
+                                    After:
+                                    %s
+                                """ % (format_var(float(loss), name='loss'),
+                                       self.network_history[ibatch]['params'],
+                                       str_params)
+                        e.message += info
                         raise
                     else:
                         pass
@@ -667,23 +673,35 @@ class SharedLSTM:
                     loss_batch = numpy.append(loss_batch, loss)
                     deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
 
+                    self.logger.log({'epoch': iepoch, 'batch': ibatch,
+                                     'loss': format_var(float(loss)), 'deviations': format_var(deviations)}, name="training")
+
                     if divmod(ibatch, log_slot)[1] == 0:
-                        # utils.xprint('    Batch %d ... ' % ibatch, level=1)
+                        # utils.xprint('    Batch %d ... ' % ibatch, level=1, logger=self.logger)
                         utils.xprint(format_var(float(loss), name='loss') + '; ' + format_var(deviations, name='deviations'),
-                                     level=1, newline=True)
+                                     level=1, newline=True, logger=self.logger)
+
+                    ibatch += 1
+
                 except KeyboardInterrupt, e:
                     raise
 
             if divmod(ibatch, log_slot)[1] != 0:
                 loss_epoch[iepoch] = numpy.array(loss_batch[-1])
                 deviation_epoch[iepoch] = numpy.array(deviation_batch[-1])
-                utils.xprint('    Batch %d ... ' % ibatch, level=1)
+                utils.xprint('    Batch %d ... ' % ibatch, level=1, logger=self.logger)
                 utils.xprint(format_var(float(loss), name='loss') + '; ' + format_var(deviations, name='deviations'),
-                             level=1, newline=True)
+                             level=1, newline=True, logger=self.logger)
+
+        utils.xprint('Done %s' % timer.stop(), newline=True, logger=self.logger)
+
+    def complete(self):
+        self.logger.complete()
 
     @staticmethod
     def test():
 
+        model = None
         try:
 
             # _prob = _check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 0])
@@ -710,6 +728,11 @@ class SharedLSTM:
             check_e, checks_hid, check_out, check_params, check_probs = model.get_checks()
 
             model.train()
+            model.complete()
 
-        except:
+        except Exception, e:
+            if model is not None:
+                utils.handle(e, logger=model.logger)
+            else:
+                utils.handle(e, logger=Logger())
             raise
