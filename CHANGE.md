@@ -184,9 +184,13 @@
 
 - ADD: `Sampler.clip()` to enable devision of samples;
 
-###### 2017-04-06
+###### [2017-04-07](aec4d7f71507754770ec21fe3e369d65b9d7eb1d)
 
-- ADD: Class `Logger` to record information into files;
+- ADD: Class `Logger` to manage log files;
+
+###### 2017-04-08
+
+- ADD: Log loss info to root logging directory (`/log`);
 
 
 - [ ] TRY: Tuning `GRAD_CLIP`;

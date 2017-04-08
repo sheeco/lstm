@@ -27,7 +27,7 @@ class SharedLSTM:
                  dimension_hidden_layers=config.DIMENSION_HIDDEN_LAYERS, grad_clip=config.GRAD_CLIP,
                  num_epoch=config.NUM_EPOCH,
                  learning_rate_rmsprop=config.LEARNING_RATE_RMSPROP, rho_rmsprop=config.RHO_RMSPROP,
-                 epsilon_rmsprop=config.EPSILON_RMSPROP, check=__debug__, logger=Logger()):
+                 epsilon_rmsprop=config.EPSILON_RMSPROP, check=__debug__, logger=None):
         try:
             if sampler is None:
                 sampler = Sampler()
@@ -142,6 +142,8 @@ class SharedLSTM:
             else:
                 self.f_correlation = SharedLSTM.safe_tanh
 
+            if logger is None:
+                logger = Logger(identifier=utils.get_timestamp())
             self.logger = logger
             self.logger.register("training", tags=['epoch', 'batch', 'loss', 'deviations'])
 
@@ -559,41 +561,14 @@ class SharedLSTM:
         utils.xprint('Training ...', newline=True, logger=self.logger)
         timer = utils.Timer()
 
-        def mean_min_max(mat):
-            return [numpy.mean(mat), numpy.min(mat), numpy.max(mat)]
-
-        def format_var(var, name=None, detail=False):
-            string = ''
-            if isinstance(var, list):
-                assert isinstance(name, list)
-                assert len(var) == len(name)
-                for i in xrange(len(var)):
-                    string += format_var(var[i], name=name[i], detail=detail) + '\n'
-            else:
-                if name is not None:
-                    string += "'%s': " % name
-                if isinstance(var, numpy.ndarray):
-                    if detail:
-                        string += '\n%s' % var
-                    elif numpy.isfinite(var).all():
-                        string += '(mean: %.1f, min: %.1f, max: %.1f)' % tuple(mean_min_max(var))
-                    elif numpy.isnan(var).all():
-                        string += 'nan'
-                    elif numpy.isinf(var).all():
-                        string += 'inf'
-                    else:
-                        string += '\n%s' % var
-                elif isinstance(var, float):
-                    string += '%.1f' % var
-                else:
-                    string += '%s' % var
-            return string
-
-        loss_epoch = numpy.zeros((self.num_epoch,))
-        deviation_epoch = numpy.zeros((self.num_epoch,))
+        loss_epoch = numpy.zeros((0,))
+        deviation_epoch = numpy.zeros((0,))
         params = None
         str_params = None
-        for iepoch in range(self.num_epoch):
+        # for iepoch in range(self.num_epoch):
+        iepoch = 0
+        while True:
+
             utils.xprint('  Epoch %d ... ' % iepoch, newline=True, logger=self.logger)
             loss = None
             deviations = None
@@ -621,10 +596,10 @@ class SharedLSTM:
                         netout = self.check_netout(inputs)
 
                         string = ''
-                        string += format_var(embedded[0, 0], name='embedded[0][0]') + '\n'
+                        string += utils.format_var(embedded[0, 0], name='embedded[0][0]') + '\n'
                         for ihid in xrange(self.dimension_hidden_layers[0]):
-                            string += format_var(hids[ihid][0][0], name='hidden-%d[0][0]' % ihid) + '\n'
-                        string += format_var(netout[0, 0], 'netout[0][0]') + '\n'
+                            string += utils.format_var(hids[ihid][0][0], name='hidden-%d[0][0]' % ihid) + '\n'
+                        string += utils.format_var(netout[0, 0], 'netout[0][0]') + '\n'
                         return string
 
                     utils.xprint('    Batch %d ... ' % ibatch, level=2, logger=self.logger)
@@ -632,7 +607,7 @@ class SharedLSTM:
                     # todo log parameter values to file
                     if params is None:
                         params = self.check_params()
-                        str_params = format_var(params, self.param_names)
+                        str_params = utils.format_var(params, self.param_names)
                     str_netflow = format_netflow()
                     self.network_history[ibatch] = {'params': str_params, 'netflow': str_netflow}
 
@@ -652,7 +627,7 @@ class SharedLSTM:
 
                     loss = self.func_train(inputs, targets)
                     params = self.check_params()
-                    str_params = format_var(params, self.param_names)
+                    str_params = utils.format_var(params, self.param_names)
                     try:
                         utils.assert_finite(params, 'params')
                     except Exception, e:
@@ -662,7 +637,7 @@ class SharedLSTM:
                                     %s
                                     After:
                                     %s
-                                """ % (format_var(float(loss), name='loss'),
+                                """ % (utils.format_var(float(loss), name='loss'),
                                        self.network_history[ibatch]['params'],
                                        str_params)
                         e.message += info
@@ -674,11 +649,11 @@ class SharedLSTM:
                     deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
 
                     self.logger.log({'epoch': iepoch, 'batch': ibatch,
-                                     'loss': format_var(float(loss)), 'deviations': format_var(deviations)}, name="training")
+                                     'loss': utils.format_var(float(loss)), 'deviations': utils.format_var(deviations)}, name="training")
 
                     if divmod(ibatch, log_slot)[1] == 0:
                         # utils.xprint('    Batch %d ... ' % ibatch, level=1, logger=self.logger)
-                        utils.xprint(format_var(float(loss), name='loss') + '; ' + format_var(deviations, name='deviations'),
+                        utils.xprint(utils.format_var(float(loss), name='loss') + '; ' + utils.format_var(deviations, name='deviations'),
                                      level=1, newline=True, logger=self.logger)
 
                     ibatch += 1
@@ -687,13 +662,19 @@ class SharedLSTM:
                     raise
 
             if divmod(ibatch, log_slot)[1] != 0:
-                loss_epoch[iepoch] = numpy.array(loss_batch[-1])
-                deviation_epoch[iepoch] = numpy.array(deviation_batch[-1])
                 utils.xprint('    Batch %d ... ' % ibatch, level=1, logger=self.logger)
-                utils.xprint(format_var(float(loss), name='loss') + '; ' + format_var(deviations, name='deviations'),
+                utils.xprint(utils.format_var(float(loss), name='loss') + '; ' + utils.format_var(deviations, name='deviations'),
                              level=1, newline=True, logger=self.logger)
 
-        utils.xprint('Done %s' % timer.stop(), newline=True, logger=self.logger)
+            loss_epoch = numpy.append(loss_epoch, loss_batch[-1])
+            deviation_epoch = numpy.append(deviation_epoch, deviation_batch[-1])
+
+            iepoch += 1
+            if iepoch >= self.num_epoch:
+                break
+
+        utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+        return loss_epoch
 
     def complete(self):
         self.logger.complete()
@@ -701,7 +682,9 @@ class SharedLSTM:
     @staticmethod
     def test():
 
-        model = None
+        timestamp = utils.get_timestamp()
+        sub_logger = Logger(identifier=timestamp)
+
         try:
 
             # _prob = _check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 0])
@@ -720,19 +703,22 @@ class SharedLSTM:
 
             sampler = Sampler(nodes=3, keep_positive=True)
             half = Sampler.clip(sampler, indices=(sampler.length / 2))
-            model = SharedLSTM(sampler=half, motion_range=sampler.motion_range, check=True)
+            model = SharedLSTM(sampler=half, motion_range=sampler.motion_range, check=True, logger=sub_logger)
 
             network = model.build_network()
             predict, compare, train = model.compile()
 
             check_e, checks_hid, check_out, check_params, check_probs = model.get_checks()
 
-            model.train()
+            root_logger = Logger()
+            root_logger.register("loss", tags=["timestamp", "loss-by-epoch"])
+
+            loss = model.train()
+            root_logger.log({"timestamp": timestamp, "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True)},
+                            name="loss")
+
             model.complete()
 
         except Exception, e:
-            if model is not None:
-                utils.handle(e, logger=model.logger)
-            else:
-                utils.handle(e, logger=Logger())
+            utils.handle(e, logger=sub_logger)
             raise

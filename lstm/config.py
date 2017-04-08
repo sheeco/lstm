@@ -15,6 +15,8 @@ PRINT_LEVEL = 3
 # N_NODES_EXPECTED = 3
 # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
 DIMENSION_SAMPLE = 3
+# If only a full size batch will be accepted
+STRICT_BATCH_SIZE = True
 # Length of edge when coordinates need to be mapped to grid
 GRAIN_GRID = 100
 
@@ -41,8 +43,6 @@ if __debug__:
 
     # Batch Size
     SIZE_BATCH = 10
-    # If only a full size batch will be accepted
-    STRICT_BATCH_SIZE = True
     # Number of epochs to train the net
     NUM_EPOCH = 2
     # Optimization learning rate
@@ -59,9 +59,9 @@ else:
     # Length of predicted sequence
     LENGTH_SEQUENCE_OUTPUT = 10
     # Number of units in embedding layer ([x, y] -> e)
-    DIMENSION_EMBED_LAYER = 16
+    DIMENSION_EMBED_LAYER = 64
     # Number of units in each hidden (LSTM) layers
-    DIMENSION_HIDDEN_LAYERS = (4, 4)
+    DIMENSION_HIDDEN_LAYERS = (10, 64)
 
     # # # Social-LSTM config
     #
@@ -72,13 +72,11 @@ else:
 
     # Batch Size
     SIZE_BATCH = 10
-    # If only a full size batch will be accepted
-    STRICT_BATCH_SIZE = True
     # Number of epochs to train the net
     NUM_EPOCH = 3
     # Optimization learning rate
-    LEARNING_RATE_RMSPROP = .003
-    RHO_RMSPROP = .9
+    LEARNING_RATE_RMSPROP = .001
+    RHO_RMSPROP = .95
     EPSILON_RMSPROP = 1e-8
     # All gradients above this will be clipped
-    GRAD_CLIP = 100
+    GRAD_CLIP = 0

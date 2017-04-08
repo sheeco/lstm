@@ -14,8 +14,11 @@ __all__ = [
     "warn",
     "handle",
     "assert_type",
+    "assert_finite",
     "assert_unreachable",
     "confirm",
+    "mean_min_max",
+    "format_var",
     "get_timestamp",
     "format_time_string",
     "Timer",
@@ -32,10 +35,10 @@ def match(shape1, shape2):
 def xprint(what, level=0, newline=False, logger=None):
     # no level limit for logger
     if logger is not None:
-        logger.log(what + '\n' if newline else what)
+        logger.log("%s\n" % what if newline else "%s" % what)
 
     if level == 0 or level <= config.PRINT_LEVEL:
-        print what + '\n' if newline else what,
+        print "%s\n" % what if newline else "%s" % what,
 
 
 def warn(info):
@@ -90,8 +93,40 @@ def confirm(info):
             return confirm("Pardon?")
 
 
+def mean_min_max(mat):
+    return [numpy.mean(mat), numpy.min(mat), numpy.max(mat)]
+
+
+def format_var(var, name=None, detail=False):
+    string = ''
+    if isinstance(var, list):
+        assert isinstance(name, list)
+        assert len(var) == len(name)
+        for i in xrange(len(var)):
+            string += format_var(var[i], name=name[i], detail=detail) + '\n'
+    else:
+        if name is not None:
+            string += "%s: " % name
+        if isinstance(var, numpy.ndarray):
+            if detail:
+                string += '\n%s' % var if name is not None else '%s' % var
+            elif numpy.isfinite(var).all():
+                string += '(mean: %.1f, min: %.1f, max: %.1f)' % tuple(mean_min_max(var))
+            elif numpy.isnan(var).all():
+                string += 'nan'
+            elif numpy.isinf(var).all():
+                string += 'inf'
+            else:
+                string += '\n%s' % var if name is not None else '%s' % var
+        elif isinstance(var, float):
+            string += '%.1f' % var
+        else:
+            string += '%s' % var
+    return string
+
+
 def get_timestamp():
-    stamp = time.strftime("%Y-%m-%d %H-%M-%S")
+    stamp = time.strftime("%Y-%m-%d-%H-%M-%S")
     return stamp
 
 

@@ -147,17 +147,16 @@ def test():
 
 class Logger:
 
-    def __init__(self, path=config.PATH_LOG, timestamp=get_timestamp()):
-        self.path_log = path
-        self.timestamp = timestamp
+    def __init__(self, path=config.PATH_LOG, identifier=None):
+        self.root_path = path
         if not if_exists(path):
-            create_path(self.path_log)
-        if not(self.path_log[-1] == '/' or self.path_log[-1] == '\\'):
-            self.path_log += '/'
-        self.path_log = self.path_log.replace('\\', '/')
-        self.path = self.path_log + '.' + self.timestamp + '/'
+            create_path(self.root_path)
+        if not(self.root_path[-1] == '/' or self.root_path[-1] == '\\'):
+            self.root_path += '/'
+        self.root_path = self.root_path.replace('\\', '/')
+        self.real_path = self.root_path
+        self.identifier = identifier
 
-        self.filename_console = 'console'
         # {'name':
         #   content=[(tag1, [...]),
         #            (tag2, [...])
@@ -165,34 +164,41 @@ class Logger:
         # }
         self.logs = {}
 
-        create_path(self.path)
-        hide_path(self.path)
+        if self.identifier is not None:
+            self.real_path = self.real_path + '.' + self.identifier + '/'
+            create_path(self.real_path)
+            hide_path(self.real_path)
 
-        self.copy_config()
-        self.register('console')
+            self.filename_console = 'console'
+            self.register(self.filename_console)
+            self.copy_config()
 
     def copy_config(self):
         try:
-            copy_file('./config.py', self.path)
+            copy_file('./config.py', self.real_path)
 
         except:
             raise
 
-    def register(self, name, tags=[]):
+    def register(self, name, tags=None):
         try:
             if name not in self.logs:
                 content = []
-                if len(tags) == 0:
-                    tags += ['']
+                if tags is None:
+                    tags = ['']
                 for tag in tags:
                     content += [(tag, [])]
                 self.logs[name] = content
 
-                filepath = self.path + name + '.log'
+                filepath = self.real_path + name + '.log'
                 pfile = open(filepath, 'a')
+                hastag = False
                 for tag in tags:
-                    pfile.write('%s\t' % tag)
-                pfile.write('\n')
+                    if tag != '':
+                        hastag = True
+                        pfile.write('%s\t' % tag)
+                if hastag:
+                    pfile.write('\n')
                 pfile.flush()
                 pfile.close()
 
@@ -211,7 +217,7 @@ class Logger:
                                     Must `register` first.""" % name)
             else:
                 registry = self.logs[name]
-            path = self.path + name + '.log'
+            path = self.real_path + name + '.log'
             pfile = open(path, 'a')
 
             if isinstance(content, dict):
@@ -256,13 +262,15 @@ class Logger:
 
     def complete(self):
         try:
-            directory, filename = split_path(self.path)
+            if self.identifier is None:
+                return
+            directory, filename = split_path(self.real_path)
             if filename[0] == '.':
                 filename = filename[1:]
             complete_path = directory + filename
-            rename_path(self.path, complete_path)
-            self.path = complete_path
-            unhide_path(self.path)
+            rename_path(self.real_path, complete_path)
+            self.real_path = complete_path
+            unhide_path(self.real_path)
 
         except:
             raise
