@@ -17,6 +17,7 @@ __all__ = [
     "assert_finite",
     "assert_unreachable",
     "confirm",
+    "ask_int",
     "mean_min_max",
     "format_var",
     "get_timestamp",
@@ -84,13 +85,27 @@ def assert_unreachable():
 
 
 def confirm(info):
+    try:
         ans = raw_input("%s (y/n): " % info)
-        if ans == 'y' or ans == 'Y':
-            return True
-        elif ans == 'n' or ans == 'N':
-            return False
-        else:
-            return confirm("Pardon?")
+    except:
+        ans = confirm("Pardon?")
+    if ans == 'y' or ans == 'Y':
+        return True
+    elif ans == 'n' or ans == 'N':
+        return False
+    else:
+        return confirm("Pardon?")
+
+
+def ask_int(info):
+    try:
+        n = input("%s (positive integer): " % info)
+    except:
+        n = ask_int("Pardon?")
+    if isinstance(n, int) and n >= 0:
+        return n
+    else:
+        return ask_int("Pardon?")
 
 
 def mean_min_max(mat):
@@ -184,6 +199,8 @@ def test():
     # assert_type("test", str)
     # timestamp = get_timestamp()
     # yes = confirm("Confirm")
+
+    n = ask_int("How many?")
 
     xprint(format_time_string(59.9), level=1, newline=True)
     xprint(format_time_string(222.2), level=1, newline=True)

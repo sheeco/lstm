@@ -188,9 +188,13 @@
 
 - ADD: Class `Logger` to manage log files;
 
-###### 2017-04-08
+###### [2017-04-08](ceae6c1f9778ea12b5ad5a60ba37cb1733a81c54)
 
 - ADD: Log loss info to root logging directory (`/log`);
+
+###### 2017-04-08
+
+- ADD: Enable increasing of epoch number;
 
 
 - [ ] TRY: Tuning `GRAD_CLIP`;

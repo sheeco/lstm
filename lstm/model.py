@@ -671,7 +671,15 @@ class SharedLSTM:
 
             iepoch += 1
             if iepoch >= self.num_epoch:
-                break
+                more = utils.confirm("Try more epochs?")
+                if more:
+                    num_more = utils.ask_int("How many?")
+                    if num_more > 0:
+                        self.num_epoch += num_more
+                    else:
+                        break
+                else:
+                    break
 
         utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
         return loss_epoch
