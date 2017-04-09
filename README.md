@@ -30,7 +30,7 @@
         |-- masked_loss.py   
     |-- utils.py   
     |-- config.py   
-    |-- file.py 
-    |-- sample.py 
+    |-- filer.py 
+    |-- sampler.py 
     |-- model.py    
     |-- test.py

@@ -4,7 +4,7 @@ import copy
 
 import config
 import utils
-import file
+import filer
 
 __all__ = [
     "Sampler",
@@ -62,7 +62,7 @@ class Sampler:
         """
 
         try:
-            lines = file.read_lines(filename)
+            lines = filer.read_lines(filename)
             triples = []  # (time, x, y) 的三元组列表
 
             # 从每一行读入三个数值并存入列表中的一行
@@ -88,15 +88,15 @@ class Sampler:
 
         dict_traces = {}
 
-        if not file.if_exists(path):
+        if not filer.if_exists(path):
             raise IOError('read_traces_from_path @ sample: \n\tInvalid Path: %s' % path)
         else:
             try:
-                list_subdir = file.list_directory(path)
-                list_files = [subdir for subdir in list_subdir if file.is_file(path + subdir)]
+                list_subdir = filer.list_directory(path)
+                list_files = [subdir for subdir in list_subdir if filer.is_file(path + subdir)]
 
                 for filename in list_files:
-                    node_identifier, _ = file.split_extension(filename)
+                    node_identifier, _ = filer.split_extension(filename)
                     temp_trace = Sampler.__read_triples_from_file__(path + filename)
                     # if node_name.isdigit():
                     #     traces[int(node_name)] = temp_trace

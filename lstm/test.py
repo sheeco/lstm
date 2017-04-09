@@ -1,10 +1,9 @@
 # coding:utf-8
 
 import utils
-import file
-from file import Logger
-from sampler import *
-from model import *
+import filer
+import sampler
+import model
 
 
 if __name__ == '__main__':
@@ -15,9 +14,9 @@ if __name__ == '__main__':
 
         # utils.test()
         # file.test()
-        # Logger.test()
-        # Sampler.test()
-        SharedLSTM.test()
+        # filer.Logger.test()
+        # sampler.Sampler.test()
+        model.SharedLSTM.test()
 
     except KeyboardInterrupt, e:
         exit()

@@ -6,6 +6,7 @@ import win32con
 import shutil
 import copy
 import numpy
+import cPickle
 
 import config
 from utils import *
@@ -20,7 +21,12 @@ __all__ = [
     "list_directory",
     "split_path",
     "split_extension",
+    "assert_path_format",
+    "format_path",
+    "copy_file",
     "read_lines",
+    "dump_to_file",
+    "load_from_file",
     "test",
     "Logger"
 ]
@@ -42,6 +48,9 @@ def assert_exists(path, assertion=True, raising=True):
                 warn("assert_exists @ file: '%s' does not exists." % path)
             else:
                 warn("assert_exists @ file: '%s' already exists." % path)
+        return False
+    else:
+        return True
 
 
 def is_file(path):
@@ -49,8 +58,9 @@ def is_file(path):
 
 
 def create_path(path):
-    assert_exists(path, assertion=False, raising=False)
     try:
+        if not assert_exists(path, assertion=False, raising=False):
+            return
         os.makedirs(path)
         return True
     except:
@@ -58,9 +68,9 @@ def create_path(path):
 
 
 def rename_path(old, new):
-    assert_exists(old)
-    assert_exists(new, assertion=False)
     try:
+        assert_exists(old)
+        assert_exists(new, assertion=False)
         os.rename(old, new)
         return True
     except:
@@ -123,6 +133,24 @@ def split_extension(filename):
         raise
 
 
+def assert_path_format(path):
+    try:
+        path = path.replace('\\', '/')
+        return path
+    except:
+        raise
+
+
+def format_path(path, subpath='', isfile=True):
+    try:
+        ret = path + '/' if path[-1] != '/' else path
+        ret += subpath
+        ret = ret + '/' if ret[-1] != '/' and not isfile else ret
+        return ret
+    except:
+        raise
+
+
 def copy_file(frompath, topath):
     try:
         shutil.copy(frompath, topath)
@@ -138,11 +166,60 @@ def read_lines(path):
         raise
 
 
+def dump_to_file(path, what):
+    try:
+        PROTOCOL_ASCII = 0
+        PROTOCOL_BINARY = 2
+        PROTOCOL_HIGHEST = -1
+
+        pfile = open(path, 'w')
+        cPickle.dump(what, pfile, protocol=PROTOCOL_HIGHEST)
+    except:
+        raise
+
+
+def load_from_file(path):
+    try:
+        assert_exists(path)
+        pfile = open(path, 'r')
+        what = cPickle.load(pfile)
+        return what
+    except:
+        raise
+
+
 def test():
-    path = config.PATH_LOG
-    _hidden = is_hidden(path)
-    hide_path(path)
-    unhide_path(path)
+
+    def test_hiding():
+        path = config.PATH_LOG
+        _hidden = is_hidden(path)
+        hide_path(path)
+        unhide_path(path)
+
+    def test_formatting():
+        path = "\log/test"
+        path = assert_path_format(path)
+        path = format_path(path, '', isfile=False)
+        path = format_path(path, 'file.txt')
+        path = format_path(path, 'subfolder', isfile=False)
+
+        path = "\\log/test"
+        path = assert_path_format(path)
+
+    def test_pickling():
+        logger = Logger(identifier='pickle')
+        logger.register('pickle')
+        logger.log('content used for pickling test', name='pickle')
+        filename = format_path(logger.log_path, 'logger.pkl')
+        dump_to_file(filename, logger)
+        logger_loaded = load_from_file(filename)
+
+    try:
+        # test_hiding()
+        # test_formatting()
+        test_pickling()
+    except:
+        raise
 
 
 class Logger:
@@ -154,7 +231,7 @@ class Logger:
         if not(self.root_path[-1] == '/' or self.root_path[-1] == '\\'):
             self.root_path += '/'
         self.root_path = self.root_path.replace('\\', '/')
-        self.real_path = self.root_path
+        self.log_path = self.root_path
         self.identifier = identifier
 
         # {'name':
@@ -165,17 +242,15 @@ class Logger:
         self.logs = {}
 
         if self.identifier is not None:
-            self.real_path = self.real_path + '.' + self.identifier + '/'
-            create_path(self.real_path)
-            hide_path(self.real_path)
+            self.log_path = self.log_path + '.' + self.identifier + '/'
+            create_path(self.log_path)
+            hide_path(self.log_path)
 
-            self.filename_console = 'console'
-            self.register(self.filename_console)
-            self.copy_config()
+        self.filename_console = 'console'
 
     def copy_config(self):
         try:
-            copy_file('./config.py', self.real_path)
+            copy_file('./config.py', self.log_path)
 
         except:
             raise
@@ -190,7 +265,7 @@ class Logger:
                     content += [(tag, [])]
                 self.logs[name] = content
 
-                filepath = self.real_path + name + '.log'
+                filepath = self.log_path + name + '.log'
                 pfile = open(filepath, 'a')
                 hastag = False
                 for tag in tags:
@@ -208,6 +283,13 @@ class Logger:
         except:
             raise
 
+    def register_console(self, filename=None):
+        try:
+            self.filename_console = filename if filename is not None else self.filename_console
+            self.register(self.filename_console)
+        except:
+            raise
+
     def log(self, content, name=None):
         try:
             if name is None:
@@ -217,7 +299,7 @@ class Logger:
                                     Must `register` first.""" % name)
             else:
                 registry = self.logs[name]
-            path = self.real_path + name + '.log'
+            path = self.log_path + name + '.log'
             pfile = open(path, 'a')
 
             if isinstance(content, dict):
@@ -264,13 +346,13 @@ class Logger:
         try:
             if self.identifier is None:
                 return
-            directory, filename = split_path(self.real_path)
+            directory, filename = split_path(self.log_path)
             if filename[0] == '.':
                 filename = filename[1:]
             complete_path = directory + filename
-            rename_path(self.real_path, complete_path)
-            self.real_path = complete_path
-            unhide_path(self.real_path)
+            rename_path(self.log_path, complete_path)
+            self.log_path = complete_path
+            unhide_path(self.log_path)
 
         except:
             raise

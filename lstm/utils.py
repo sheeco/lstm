@@ -6,6 +6,7 @@ import warnings
 import numpy
 
 import config
+import filer
 
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "assert_unreachable",
     "confirm",
     "ask_int",
+    "ask_path",
     "mean_min_max",
     "format_var",
     "get_timestamp",
@@ -87,25 +89,42 @@ def assert_unreachable():
 def confirm(info):
     try:
         ans = raw_input("%s (y/n): " % info)
+        if ans == 'y' or ans == 'Y':
+            return True
+        elif ans == 'n' or ans == 'N':
+            return False
     except:
-        ans = confirm("Pardon?")
-    if ans == 'y' or ans == 'Y':
-        return True
-    elif ans == 'n' or ans == 'N':
-        return False
-    else:
-        return confirm("Pardon?")
+        pass
+    return confirm("Pardon?")
 
 
-def ask_int(info):
+def ask_int(info, code_quit='q'):
     try:
-        n = input("%s (positive integer): " % info)
+        answer = raw_input("%s (positive integer): " % info)
+        if answer == code_quit:
+            return None
+        n = int(answer)
+        if n >= 0:
+            return n
     except:
-        n = ask_int("Pardon?")
-    if isinstance(n, int) and n >= 0:
-        return n
-    else:
-        return ask_int("Pardon?")
+        pass
+    return ask_int("Pardon?", code_quit=code_quit)
+
+
+def ask_path(info, code_quit='q', assert_exist=False):
+    try:
+        answer = raw_input("%s " % info)
+        if answer == code_quit:
+            return None
+
+        path = filer.assert_path_format(answer)
+        if assert_exist and not filer.if_exists(path):
+            info = 'Path not found. Pardon?'
+        else:
+            return path
+    except Exception, e:
+        info = '%s Pardon?' % e.message
+    return ask_path(info, code_quit=code_quit, assert_exist=assert_exist)
 
 
 def mean_min_max(mat):
@@ -194,21 +213,34 @@ class Timer:
 
 
 def test():
-    # config.SHOW_WARNING = True
-    # warn("test warning")
-    # assert_type("test", str)
-    # timestamp = get_timestamp()
-    # yes = confirm("Confirm")
 
-    n = ask_int("How many?")
+    def test_warn():
+        config.SHOW_WARNING = True
+        warn("test warning")
 
-    xprint(format_time_string(59.9), level=1, newline=True)
-    xprint(format_time_string(222.2), level=1, newline=True)
-    xprint(format_time_string(7777.7), level=1, newline=True)
-    timer = Timer()
-    xprint(timer.stop(), level=1, newline=True)
-    timer.start()
-    xprint(timer.stop(), level=1, newline=True)
-    xprint(timer.stop(), level=1, newline=True)
-    timer = Timer(formatted=False)
-    xprint(timer.stop(), level=1, newline=True)
+    def test_assert():
+        assert_type("test", str)
+
+    def test_timestamp():
+        timestamp = get_timestamp()
+
+    def test_ask():
+        # yes = confirm("Confirm")
+        # n = ask_int("How many?")
+        path = ask_path('Enter Path:', assert_exist=True)
+
+    def test_xprint():
+        xprint(format_time_string(59.9), level=1, newline=True)
+        xprint(format_time_string(222.2), level=1, newline=True)
+        xprint(format_time_string(7777.7), level=1, newline=True)
+
+    def test_timer():
+        timer = Timer()
+        xprint(timer.stop(), level=1, newline=True)
+        timer.start()
+        xprint(timer.stop(), level=1, newline=True)
+        xprint(timer.stop(), level=1, newline=True)
+        timer = Timer(formatted=False)
+        xprint(timer.stop(), level=1, newline=True)
+
+    test_ask()

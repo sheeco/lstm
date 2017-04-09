@@ -192,9 +192,16 @@
 
 - ADD: Log loss info to root logging directory (`/log`);
 
-###### 2017-04-08
+###### [2017-04-08](b062884540d50f24097f6bcc3bc2dbb0c31b5c24)
 
 - ADD: Enable increasing of epoch number;
 
+###### 2017-04-09
 
+- ADD: Enable exporting & importing of model parameters;
+
+
+- [ ] RFCT: Extract initializers;
+- [ ] ADD: Pre-training;
+- [ ] ADD: Use `pprint` to improve printing;
 - [ ] TRY: Tuning `GRAD_CLIP`;
