@@ -5,8 +5,7 @@ import traceback
 import warnings
 import numpy
 
-import config
-import filer
+from config import configuration as config
 
 
 __all__ = [
@@ -19,7 +18,6 @@ __all__ = [
     "assert_unreachable",
     "confirm",
     "ask_int",
-    "ask_path",
     "mean_min_max",
     "format_var",
     "get_timestamp",
@@ -40,14 +38,14 @@ def xprint(what, level=0, newline=False, logger=None):
     if logger is not None:
         logger.log("%s\n" % what if newline else "%s" % what)
 
-    if level == 0 or level <= config.PRINT_LEVEL:
+    if level == 0 or level <= config['print_level']:
         print "%s\n" % what if newline else "%s" % what,
 
 
 def warn(info):
-    # if config.SHOW_WARNING:
+    # if config['show_warning']:
         # xprint("[Warning] %s" % info)
-    if not config.SHOW_WARNING:
+    if not config['show_warning']:
         warnings.filterwarnings("ignore")
     warnings.warn(info)
 
@@ -109,22 +107,6 @@ def ask_int(info, code_quit='q'):
     except:
         pass
     return ask_int("Pardon?", code_quit=code_quit)
-
-
-def ask_path(info, code_quit='q', assert_exist=False):
-    try:
-        answer = raw_input("%s " % info)
-        if answer == code_quit:
-            return None
-
-        path = filer.assert_path_format(answer)
-        if assert_exist and not filer.if_exists(path):
-            info = 'Path not found. Pardon?'
-        else:
-            return path
-    except Exception, e:
-        info = '%s Pardon?' % e.message
-    return ask_path(info, code_quit=code_quit, assert_exist=assert_exist)
 
 
 def mean_min_max(mat):
@@ -215,7 +197,7 @@ class Timer:
 def test():
 
     def test_warn():
-        config.SHOW_WARNING = True
+        config['show_warning'] = True
         warn("test warning")
 
     def test_assert():
@@ -243,4 +225,5 @@ def test():
         timer = Timer(formatted=False)
         xprint(timer.stop(), level=1, newline=True)
 
-    test_ask()
+    test_warn()
+    # test_ask()

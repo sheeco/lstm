@@ -2,7 +2,7 @@
 import numpy
 import copy
 
-import config
+from config import configuration as config
 import utils
 import filer
 
@@ -21,8 +21,8 @@ class GridSystem:
 
 class Sampler:
 
-    def __init__(self, path=config.PATH_TRACE_FILES, nodes=None, length=None, dimension_sample=config.DIMENSION_SAMPLE, length_sequence_input=config.LENGTH_SEQUENCE_INPUT,
-                 length_sequence_output=config.LENGTH_SEQUENCE_OUTPUT, size_batch=config.SIZE_BATCH, strict_batch_size=config.STRICT_BATCH_SIZE, keep_positive=True):
+    def __init__(self, path=config['path_trace'], nodes=None, length=None, dimension_sample=config['dimension_sample'], length_sequence_input=config['length_sequence_input'],
+                 length_sequence_output=config['length_sequence_output'], size_batch=config['size_batch'], strict_batch_size=config['strict_batch_size'], keep_positive=True):
 
         try:
             self.path = path
@@ -219,7 +219,7 @@ class Sampler:
         self.traces = traces
         return self.traces
 
-    def map_to_grid(self, grid_system=GridSystem(config.GRAIN_GRID)):
+    def map_to_grid(self, grid_system=GridSystem(config['grain_grid'])):
 
         traces = self.traces
         if grid_system.base_xy is None:
@@ -341,11 +341,11 @@ class Sampler:
             demo_list_triples = Sampler.__read_triples_from_file__('res/trace/2.trace')
             # utils.xprint(numpy.shape(demo_list_triples), level=1, newline=True)
 
-            sampler = Sampler(config.PATH_TRACE_FILES, nodes=1)
-            sampler = Sampler(config.PATH_TRACE_FILES, length=18)
-            sampler = Sampler(config.PATH_TRACE_FILES, nodes=['2'])
+            sampler = Sampler(config['path_trace'], nodes=1)
+            sampler = Sampler(config['path_trace'], length=18)
+            sampler = Sampler(config['path_trace'], nodes=['2'])
 
-            sampler = Sampler(config.PATH_TRACE_FILES)
+            sampler = Sampler(config['path_trace'])
             sampler.pan_to_positive()
             sampler.pan_to_positive()
             sampler.map_to_grid(GridSystem(100))

@@ -8,7 +8,7 @@ import copy
 import numpy
 import cPickle
 
-import config
+from config import configuration as config
 from utils import *
 
 
@@ -25,6 +25,7 @@ __all__ = [
     "format_path",
     "copy_file",
     "read_lines",
+    "ask_path",
     "dump_to_file",
     "load_from_file",
     "test",
@@ -166,6 +167,22 @@ def read_lines(path):
         raise
 
 
+def ask_path(info, code_quit='q', assert_exist=False):
+    try:
+        answer = raw_input("%s " % info)
+        if answer == code_quit:
+            return None
+
+        path = assert_path_format(answer)
+        if assert_exist and not if_exists(path):
+            info = 'Path not found. Pardon?'
+        else:
+            return path
+    except Exception, e:
+        info = '%s Pardon?' % e.message
+    return ask_path(info, code_quit=code_quit, assert_exist=assert_exist)
+
+
 def dump_to_file(path, what):
     try:
         PROTOCOL_ASCII = 0
@@ -191,7 +208,7 @@ def load_from_file(path):
 def test():
 
     def test_hiding():
-        path = config.PATH_LOG
+        path = config['path_log']
         _hidden = is_hidden(path)
         hide_path(path)
         unhide_path(path)
@@ -224,7 +241,7 @@ def test():
 
 class Logger:
 
-    def __init__(self, path=config.PATH_LOG, identifier=None):
+    def __init__(self, path=config['path_log'], identifier=None):
         self.root_path = path
         if not if_exists(path):
             create_path(self.root_path)
@@ -248,9 +265,14 @@ class Logger:
 
         self.filename_console = 'console'
 
-    def copy_config(self):
+    def log_config(self):
         try:
-            copy_file('./config.py', self.log_path)
+            self.register(name='config')
+            string = "{\n"
+            for key, value in config.items():
+                string += "\t'%s': '%s',\n" % (key, value) if isinstance(value, str) else "\t'%s': %s,\n" % (key, value)
+            string += "}"
+            self.log(string, name='config')
 
         except:
             raise
@@ -295,8 +317,8 @@ class Logger:
             if name is None:
                 name = self.filename_console
             if name not in self.logs:
-                raise ValueError("""log @ Logger: Cannot find '%s' in log registry.
-                                    Must `register` first.""" % name)
+                raise ValueError("log @ Logger: Cannot find '%s' in log registry. "
+                                 "Must `register` first." % name)
             else:
                 registry = self.logs[name]
             path = self.log_path + name + '.log'
@@ -360,7 +382,9 @@ class Logger:
     @staticmethod
     def test():
         try:
-            logger = Logger()
+            logger = Logger(identifier=get_timestamp())
+            logger.log_config()
+
             tags = ['time', 'x', 'y']
             arr = numpy.zeros((2, 3, 2))
             _dict = {'time': [1, 2, 3], 'x': ['x1', 'x2', 'x3'], 'y': [arr, arr, arr]}
@@ -387,6 +411,7 @@ class Logger:
             except Exception, e:
                 pass
 
+            logger.register_console()
             logger.log('test console output ...')
             logger.complete()
 

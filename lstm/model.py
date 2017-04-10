@@ -3,11 +3,11 @@
 import numpy
 import theano
 import theano.tensor as T
-from theano.compile.nanguardmode import NanGuardMode
 from theano.tensor.sharedvar import TensorSharedVariable
 import lasagne as L
 
-import config
+from config import configuration as config
+from config import update_config
 import utils
 from sampler import *
 import filer
@@ -18,16 +18,15 @@ __all__ = [
 
 
 # todo add debug info & assertion
-# todo write config to .log
 # todo read config from command line args
 
 
 class SharedLSTM:
-    def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=config.DIMENSION_EMBED_LAYER,
-                 dimension_hidden_layers=config.DIMENSION_HIDDEN_LAYERS, grad_clip=config.GRAD_CLIP,
-                 num_epoch=config.NUM_EPOCH,
-                 learning_rate_rmsprop=config.LEARNING_RATE_RMSPROP, rho_rmsprop=config.RHO_RMSPROP,
-                 epsilon_rmsprop=config.EPSILON_RMSPROP, logger=None):
+    def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=config['dimension_embed_layer'],
+                 dimension_hidden_layer=config['dimension_hidden_layer'], grad_clip=config['grad_clip'],
+                 num_epoch=config['num_epoch'],
+                 learning_rate_rmsprop=config['learning_rate_rmsprop'], rho_rmsprop=config['rho_rmsprop'],
+                 epsilon_rmsprop=config['epsilon_rmsprop'], logger=None):
         try:
             if sampler is None:
                 sampler = Sampler()
@@ -46,17 +45,17 @@ class SharedLSTM:
             self.size_batch = self.sampler.size_batch
             self.dimension_embed_layer = dimension_embed_layer
 
-            utils.assert_type(dimension_hidden_layers, tuple)
-            all(utils.assert_type(x, int) for x in dimension_hidden_layers)
+            utils.assert_type(dimension_hidden_layer, tuple)
+            all(utils.assert_type(x, int) for x in dimension_hidden_layer)
 
-            if len(dimension_hidden_layers) == 1:
-                dimension_hidden_layers = (1,) + dimension_hidden_layers
-            elif len(dimension_hidden_layers) == 2:
+            if len(dimension_hidden_layer) == 1:
+                dimension_hidden_layer = (1,) + dimension_hidden_layer
+            elif len(dimension_hidden_layer) == 2:
                 pass
             else:
                 raise ValueError("__init__ @ SharedLSTM: Expect len: 1~2 while getting %d instead.",
-                                 len(dimension_hidden_layers))
-            self.dimension_hidden_layers = dimension_hidden_layers
+                                 len(dimension_hidden_layer))
+            self.dimension_hidden_layers = dimension_hidden_layer
             self.grad_clip = grad_clip
             self.num_epoch = num_epoch
 
@@ -142,7 +141,7 @@ class SharedLSTM:
 
             if logger is None:
                 logger = filer.Logger(identifier=utils.get_timestamp())
-                logger.copy_config()
+                logger.log_config()
                 logger.register_console()
             self.logger = logger
             self.logger.register("training", tags=['epoch', 'batch', 'loss', 'deviations'])
@@ -557,7 +556,7 @@ class SharedLSTM:
 
         return self.check_embedded, self.checks_hid, self.check_outputs, self.check_params, self.check_probs
 
-    def train(self, log_slot=config.LOG_SLOT):
+    def train(self, log_slot=config['log_slot']):
         utils.xprint('Training ...', newline=True, logger=self.logger)
         timer = utils.Timer()
 
@@ -629,14 +628,15 @@ class SharedLSTM:
                         utils.assert_finite(params, 'params')
                     except Exception, e:
                         info = """
-                                    Unvalid training ... %s
-                                    Before this training:
-                                    %s
-                                    After:
-                                    %s
-                                """ % (utils.format_var(float(loss), name='loss'),
-                                       self.network_history[ibatch]['params'],
-                                       str_params)
+Invalid training ... %s
+Before this training:
+%s
+After:
+%s
+""" \
+                               % (utils.format_var(float(loss), name='loss'),
+                                  self.network_history[ibatch]['params'],
+                                  str_params)
                         e.message += info
                         raise
                     else:
@@ -693,6 +693,7 @@ class SharedLSTM:
                 path = filer.format_path(self.logger.log_path, FILENAME_EXPORT)
 
             utils.xprint("Exporting parameters to '%s' ... " % path, logger=self.logger)
+            update_config(config={'path_pickle': path})
 
             if self.check_params is None:
                 self.check_params = theano.function([], self.params_all, allow_input_downcast=True)
@@ -741,7 +742,6 @@ class SharedLSTM:
 
         timestamp = utils.get_timestamp()
         sub_logger = filer.Logger(identifier=timestamp)
-        sub_logger.copy_config()
         sub_logger.register_console()
 
         try:
@@ -786,6 +786,7 @@ class SharedLSTM:
 
             # test_importing()
 
+            sub_logger.log_config()
             root_logger.log({"timestamp": timestamp, "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True)},
                             name="loss")
             model.complete()

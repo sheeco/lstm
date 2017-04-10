@@ -196,9 +196,13 @@
 
 - ADD: Enable increasing of epoch number;
 
-###### 2017-04-09
+###### [2017-04-09](bb98a41deb0bdcb13aa064e6770be8dd45d022d6)
 
 - ADD: Enable exporting & importing of model parameters;
+
+###### 2017-04-10
+
+- RFCT: Redefine config as dictionary, to enable change & log of configs at any time;
 
 
 - [ ] RFCT: Extract initializers;
