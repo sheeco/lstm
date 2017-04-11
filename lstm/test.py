@@ -12,11 +12,14 @@ if __name__ == '__main__':
         if __debug__:
             utils.xprint('[Debug Mode]', level=1, newline=True)
 
+        utils.parse_command_line_args()
+
         # config.test()
         # utils.test()
         # file.test()
         # filer.Logger.test()
         # sampler.Sampler.test()
+
         model.SharedLSTM.test()
 
     except KeyboardInterrupt, e:

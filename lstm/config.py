@@ -130,7 +130,10 @@ def update_config(key=None, config=None):
         raise
 
 
-update_config(key='run')
+if __debug__:
+    update_config(key='debug')
+else:
+    update_config(key='run')
 
 
 def test():

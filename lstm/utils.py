@@ -4,11 +4,16 @@ import time
 import traceback
 import warnings
 import numpy
+import sys
+import getopt
+import ast
 
 from config import global_configuration as config
+from config import update_config
 
 
 __all__ = [
+    "parse_command_line_args",
     "match",
     "xprint",
     "warn",
@@ -25,6 +30,43 @@ __all__ = [
     "Timer",
     "test"
 ]
+
+
+def parse_command_line_args():
+    try:
+        args = sys.argv[1:]
+
+        # shortopts: "ha:i" means opt '-h' & '-i' don't take arg, '-a' does take arg
+        # longopts: ["--help", "--add="] means opt '--add' does take arg
+        opts, unknowns = getopt.getopt(args, "g:", longopts=["config="])
+        for opt, argv in opts:
+            if argv != '':
+                try:
+                    argv = ast.literal_eval(argv)
+                except:
+                    pass
+
+            if opt in ("-g", "--config"):
+                if isinstance(argv, dict):
+                    for key, value in argv.items():
+                        if key in config:
+                            xprint("Update configuration '%s' from %s to %s." % (key, config[key], value), newline=True)
+                        else:
+                            xprint("Add configuration '%s' to be %s." % (key, value), newline=True)
+                    update_config(config=argv)
+                else:
+                    raise ValueError("parse_command_line_args @ utils:"
+                                     "The configuration must be a dictionary.")
+            else:
+                raise ValueError("parse_command_line_args @ utils:"
+                                 "Unknown option '%s'." % opt)
+
+        if len(unknowns) > 0:
+            raise ValueError("parse_command_line_args @ utils:"
+                             "Unknown option(s) %s." % unknowns)
+
+    except:
+        raise
 
 
 def match(shape1, shape2):
@@ -93,11 +135,9 @@ def assert_unreachable():
 def confirm(info):
     try:
         ans = raw_input("%s (y/n): " % info)
-        if ans == 'y'\
-                or ans == 'Y':
+        if ans in ('y', 'Y'):
             return True
-        elif ans == 'n' \
-                or ans == 'N':
+        elif ans in ('n', 'N'):
             return False
     except:
         pass
@@ -203,6 +243,16 @@ class Timer:
             formatted = self.formatted
         return format_time_string(self.sec_elapse) if formatted else self.sec_elapse
 
+    @staticmethod
+    def test():
+        timer = Timer()
+        xprint(timer.stop(), level=1, newline=True)
+        timer.start()
+        xprint(timer.stop(), level=1, newline=True)
+        xprint(timer.stop(), level=1, newline=True)
+        timer = Timer(formatted=False)
+        xprint(timer.stop(), level=1, newline=True)
+
 
 def test():
 
@@ -221,13 +271,8 @@ def test():
         xprint(format_time_string(222.2), level=1, newline=True)
         xprint(format_time_string(7777.7), level=1, newline=True)
 
-    def test_timer():
-        timer = Timer()
-        xprint(timer.stop(), level=1, newline=True)
-        timer.start()
-        xprint(timer.stop(), level=1, newline=True)
-        xprint(timer.stop(), level=1, newline=True)
-        timer = Timer(formatted=False)
-        xprint(timer.stop(), level=1, newline=True)
+    def test_args():
+        parse_command_line_args()
 
-    test_warn()
+    # test_warn()
+    test_args()

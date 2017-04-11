@@ -217,9 +217,13 @@
 - OPT: Remove all the references of `config.configuration` in default value definition of method arguments, 
   to enable config modification to work properly;
   
-###### 2017-04-12
+###### [2017-04-12](29f56437347cc92b33349e5f9e6ba5b2e265dfe6)
 
 - RFCT: Some code style improvements according to [PEP8](https://www.python.org/dev/peps/pep-0008/#id36);
+
+###### 2017-04-12
+
+- ADD: Enable command line configurations, e.g. `test --config "{'num_node': 1, 'comment': 'something'}"`;
 
 
 - [ ] RFCT: Enable non-shared LSTM;

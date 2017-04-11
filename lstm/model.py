@@ -20,7 +20,6 @@ __all__ = [
 
 
 # todo add debug info & assertion
-# todo read config from command line args
 
 
 class SharedLSTM:
@@ -866,8 +865,6 @@ After:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
                 theano.config.optimizer = 'fast_compile'
-
-                update_config(key='debug')
 
             num_node = config['num_node'] if 'num_node' in config else None
 
