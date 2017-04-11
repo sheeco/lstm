@@ -221,6 +221,11 @@ class SharedLSTM:
 
     # todo change to pure theano
     def build_network(self, params=None):
+        """
+        Build computation graph from `inputs` to `outputs`, as well as `params` and so.
+        :param params: Give certain parameter values (exported previously maybe) to build the network based on.
+        :return: `outputs`, `params`
+        """
         try:
             timer = utils.Timer()
 
@@ -414,35 +419,47 @@ class SharedLSTM:
         except:
             raise
 
-    # todo extract decode() from compile()
-    def compile(self):
-
+    def build_decoder(self):
+        """
+        Build computation graph from `outputs` to `predictions`.
+        :return: `predictions`
+        """
         try:
-            timer = utils.Timer()
+            if self.outputs is None:
+                raise RuntimeError("build_decoder @ SharedLSTM: Must build the network first.")
 
-            utils.xprint('Preparing ...', logger=self.logger)
+            timer = utils.Timer()
+            utils.xprint('Decoding ...', logger=self.logger)
 
             # Use mean(x, y) as predictions directly
             predictions = self.outputs[:, :, :, 0:2]
+
+            self.predictions = predictions
+            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+            return self.predictions
+
+        except:
+            raise
+
+    def compute_loss(self):
+        """
+        NNL Loss for Training.
+        Build computation graph from `predictions`, `targets` to `loss`.
+        :return: `loss`
+        """
+        try:
+            if self.outputs is None:
+                raise RuntimeError("compute_loss @ SharedLSTM: Must build the network first.")
+            if self.predictions is None:
+                raise RuntimeError("compute_loss @ SharedLSTM: Must build the decoder first.")
+
+            timer = utils.Timer()
+            utils.xprint('Computing loss ...', logger=self.logger)
+
             # Remove time column
             facts = self.targets[:, :, :, 1:3]
             shape_facts = facts.shape
             shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
-
-            """
-            Euclidean Error for Observation
-            """
-
-            # Elemwise differences
-            differences = T.sub(predictions, facts)
-            differences = T.reshape(differences, shape_stacked_facts)
-            deviations = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
-            shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2])
-            deviations = T.reshape(deviations, shape_deviations)
-
-            """
-            NNL Loss for Training
-            """
 
             # Reshape for convenience
             facts = T.reshape(facts, shape_stacked_facts)
@@ -504,30 +521,77 @@ class SharedLSTM:
             nnls = T.neg(T.log(probs))
             # loss = T.sum(nnls)
             loss = T.mean(nnls)
-            # loss = T.mean(deviations)
 
+            self.probabilities = probs
+            self.loss = loss
             utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
-            timer.start()
-            utils.xprint('Computing updates ...', logger=self.logger)
+            return self.loss
+
+        except:
+            raise
+
+    def compute_deviation(self):
+        """
+        Euclidean Distance for Observation.
+        Build computation graph from `predictions`, `targets` to `deviations`.
+        :return: `deviations`
+        """
+        try:
+            if self.outputs is None:
+                raise RuntimeError("compute_deviation @ SharedLSTM: Must build the network first.")
+            if self.predictions is None:
+                raise RuntimeError("compute_deviation @ SharedLSTM: Must build the decoder first.")
+
+            timer = utils.Timer()
+            utils.xprint('Building observer ...', logger=self.logger)
+
+            # Remove time column
+            facts = self.targets[:, :, :, 1:3]
+            shape_facts = facts.shape
+            shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
+
+            # Elemwise differences
+            differences = T.sub(self.predictions, facts)
+            differences = T.reshape(differences, shape_stacked_facts)
+            deviations = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
+            shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2])
+            deviations = T.reshape(deviations, shape_deviations)
+
+            self.deviations = deviations
+            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+            return self.deviations
+        except:
+            raise
+
+    def compile(self):
+        """
+        Compile theano functions used for prediction, observation & training.
+        :return: `func_predict`, `func_compare`, `func_train`
+        """
+        try:
+            if self.outputs is None:
+                raise RuntimeError("compile @ SharedLSTM: Must build the network first.")
+            if self.predictions is None:
+                raise RuntimeError("compile @ SharedLSTM: Must build the decoder first.")
+            if self.loss is None:
+                raise RuntimeError("compile @ SharedLSTM: Must compute the loss first.")
+            if self.deviations is None:
+                raise RuntimeError("compile @ SharedLSTM: Must compute the deviation first.")
+
+            timer = utils.Timer()
+            utils.xprint('Compiling functions ...', logger=self.logger)
 
             # Compute RMSProp updates for training
-            RMSPROP = L.updates.rmsprop(loss, self.params_trainable, learning_rate=self.learning_rate_rmsprop, rho=self.rho_rmsprop,
+            RMSPROP = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate_rmsprop, rho=self.rho_rmsprop,
                                         epsilon=self.epsilon_rmsprop)
             updates = RMSPROP
 
             self.updates = updates
-            self.predictions = predictions
-            self.probabilities = probs
-            self.loss = loss
-            self.deviations = deviations
-
-            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
-            timer.start()
-            utils.xprint('Compiling functions ...', logger=self.logger)
 
             """
             Compile theano functions for prediction, observation & training
             """
+
             self.func_predict = theano.function([self.inputs], self.predictions, allow_input_downcast=True)
             self.func_compare = theano.function([self.inputs, self.targets], self.deviations, allow_input_downcast=True)
             self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates,
@@ -555,9 +619,25 @@ class SharedLSTM:
 
     def get_checks(self):
 
-        return self.check_embedded, self.checks_hid, self.check_outputs, self.check_params, self.check_probs
+        return self.check_embed, self.checks_hid, self.check_outputs, self.check_params, self.check_probs
 
     def train(self, log_slot=config['log_slot']):
+        """
+
+        :param log_slot: Print loss & deviations every `log_slot` * batches.
+        :return: Two <ndarray> containing average loss & deviation of each epoch.
+        """
+        if self.outputs is None:
+            raise RuntimeError("train @ SharedLSTM: Must build the network first.")
+        if self.predictions is None:
+            raise RuntimeError("train @ SharedLSTM: Must build the decoder first.")
+        if self.loss is None:
+            raise RuntimeError("train @ SharedLSTM: Must compute the loss first.")
+        if self.deviations is None:
+            raise RuntimeError("train @ SharedLSTM: Must compute the deviation first.")
+        if any(func is None for func in [self.func_predict, self.func_compare, self.func_train]):
+            raise RuntimeError("train @ SharedLSTM: Must compile the functions first.")
+
         utils.xprint('Training ...', newline=True, logger=self.logger)
         timer = utils.Timer()
 
@@ -585,7 +665,7 @@ class SharedLSTM:
                             raise RuntimeError("train @ SharedLSTM: Have only %d sample pairs, "
                                                "not enough for one single batch of size %d."
                                                % (self.sampler.length, self.size_batch))
-                        
+
                         self.sampler.reset_entry()
                         break
 
@@ -717,7 +797,7 @@ After:
     def import_params(self, path=None):
         try:
             if self.params_all is None:
-                raise RuntimeError("save_params @ SharedLSTM: Cannot export parameters before the model is built.")
+                raise RuntimeError("import_params @ SharedLSTM: Must build the network first.")
 
             if path is None:
                 path = filer.ask_path('Import from file path', assert_exist=True)
@@ -771,7 +851,10 @@ After:
             model = SharedLSTM(sampler=half, motion_range=sampler.motion_range, logger=sub_logger)
 
             outputs_var, params_var = model.build_network()
-            predict, compare, train = model.compile()
+            predictions_var = model.build_decoder()
+            loss_var = model.compute_loss()
+            deviations_var = model.compute_deviation()
+            func_predict, func_compare, func_train = model.compile()
 
             check_e, checks_hid, check_outputs, check_params, check_probs = model.get_checks()
 

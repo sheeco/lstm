@@ -204,9 +204,13 @@
 
 - RFCT: Redefine config as dictionary, to enable change & log of configs at any time;
 
-###### 2017-04-11
+###### [2017-04-11](f74c025ed4c8441ddd49845d47d4c67fad096e6a)
 
 - FIX: A major bug in `SharedLSTM.test()` & some other minor bugs;
+
+###### 2017-04-11
+
+- RFCT: Seperate decoding, computing of loss & deviations from compiling function;
 
 
 - [ ] FIX: Pass `config` into class initializers;
