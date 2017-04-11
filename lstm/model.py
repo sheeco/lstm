@@ -90,7 +90,7 @@ class SharedLSTM:
             self.func_compare = None
             self.func_train = None
 
-            self.check_embedded = None
+            self.check_embed = None
             self.checks_hid = []
             self.check_outputs = None
             self.check_params = None
@@ -379,7 +379,7 @@ class SharedLSTM:
             # Slice x-length sequence from the last, according to <length_sequence_output>
             layer_out = L.layers.SliceLayer(layer_distribution, indices=slice(-self.length_sequence_output, None),
                                             axis=2)
-            assert utils.match(layer_distribution.output_shape,
+            assert utils.match(layer_out.output_shape,
                                (self.num_node, self.size_batch, self.length_sequence_output, 5))
 
             self.embed = L.layers.get_output(layer_e)
@@ -539,7 +539,8 @@ class SharedLSTM:
             """
             Compile checking functions for debugging
             """
-            self.check_embedded = theano.function([self.inputs], self.embed, allow_input_downcast=True)
+
+            self.check_embed = theano.function([self.inputs], self.embed, allow_input_downcast=True)
             for ihid in self.hids:
                 self.checks_hid += [theano.function([self.inputs], ihid, allow_input_downcast=True)]
             self.check_outputs = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
@@ -578,13 +579,18 @@ class SharedLSTM:
                 try:
 
                     # retrieve 1 batch for each node
-                    instants, inputs, targets = self.sampler.load_batch(True)
+                    instants, inputs, targets = self.sampler.load_batch(with_target=True)
                     if inputs is None:
+                        if ibatch == 0:
+                            raise RuntimeError("train @ SharedLSTM: Have only %d sample pairs, "
+                                               "not enough for one single batch of size %d."
+                                               % (self.sampler.length, self.size_batch))
+                        
                         self.sampler.reset_entry()
                         break
 
                     def format_netflow():
-                        embedded = self.check_embedded(inputs)
+                        embedd = self.check_embed(inputs)
                         hids = []
                         for ihid in xrange(self.dimension_hidden_layers[0]):
                             check_hid = self.checks_hid[ihid]
@@ -592,7 +598,7 @@ class SharedLSTM:
                         netout = self.check_outputs(inputs)
 
                         string = ''
-                        string += utils.format_var(embedded[0, 0], name='embedded[0][0]') + '\n'
+                        string += utils.format_var(embedd[0, 0], name='embedd[0][0]') + '\n'
                         for ihid in xrange(self.dimension_hidden_layers[0]):
                             string += utils.format_var(hids[ihid][0][0], name='hidden-%d[0][0]' % ihid) + '\n'
                         string += utils.format_var(netout[0, 0], 'netout[0][0]') + '\n'
@@ -663,8 +669,8 @@ After:
                 utils.xprint(utils.format_var(float(loss), name='loss') + '; ' + utils.format_var(deviations, name='deviations'),
                              level=1, newline=True, logger=self.logger)
 
-            loss_epoch = numpy.append(loss_epoch, loss_batch[-1])
-            deviation_epoch = numpy.append(deviation_epoch, deviation_batch[-1])
+            loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
+            deviation_epoch = numpy.append(deviation_epoch, numpy.mean(deviation_batch))
 
             iepoch += 1
             if iepoch >= self.num_epoch:
@@ -679,7 +685,7 @@ After:
                     break
 
         utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
-        return loss_epoch
+        return loss_epoch, deviation_epoch
 
     def export_params(self, path=None):
         try:
@@ -687,7 +693,7 @@ After:
 
             timer = utils.Timer()
             if self.params_all is None:
-                raise RuntimeError("save_params @ SharedLSTM: Cannot save parameters before the model is built.")
+                raise RuntimeError("export_params @ SharedLSTM: Must build the network first.")
 
             if path is None:
                 path = filer.format_path(self.logger.log_path, FILENAME_EXPORT)
@@ -714,7 +720,7 @@ After:
                 raise RuntimeError("save_params @ SharedLSTM: Cannot export parameters before the model is built.")
 
             if path is None:
-                path = utils.ask_path('Import from which file?', assert_exist=True)
+                path = filer.ask_path('Import from file path', assert_exist=True)
                 if path is None:
                     return
 
@@ -758,7 +764,9 @@ After:
                 theano.config.exception_verbosity = 'high'
                 theano.config.optimizer = 'fast_compile'
 
-            sampler = Sampler(nodes=3, keep_positive=True)
+            num_node = config['num_node'] if 'num_node' in config else None
+
+            sampler = Sampler(nodes=num_node, keep_positive=True)
             half = Sampler.clip(sampler, indices=(sampler.length / 2))
             model = SharedLSTM(sampler=half, motion_range=sampler.motion_range, logger=sub_logger)
 
@@ -768,9 +776,9 @@ After:
             check_e, checks_hid, check_outputs, check_params, check_probs = model.get_checks()
 
             root_logger = filer.Logger()
-            root_logger.register("loss", tags=["timestamp", "loss-by-epoch"])
+            root_logger.register("loss", tags=["timestamp", "loss-by-epoch", "deviation-by-epoch"])
 
-            loss = model.train()
+            loss, deviations = model.train()
             path_params = model.export_params()
 
             def test_importing():
@@ -787,7 +795,9 @@ After:
             # test_importing()
 
             sub_logger.log_config()
-            root_logger.log({"timestamp": timestamp, "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True)},
+            root_logger.log({"timestamp": timestamp,
+                             "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
+                             "deviation-by-epoch": '%s\n' % utils.format_var(deviations, detail=True)},
                             name="loss")
             model.complete()
 

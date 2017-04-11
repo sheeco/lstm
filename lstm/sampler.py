@@ -32,7 +32,6 @@ class Sampler:
             self.node_filter = nodes
             self.traces = Sampler.__dict_to_array__(dict_traces, length)
             self.num_node = int(self.traces.shape[0])
-            self.length = int(self.traces.shape[1])
             self.motion_range = Sampler.__compute_range__(self.traces)
             self.grid_system = None
             self.entry = 0
@@ -40,6 +39,8 @@ class Sampler:
             self.dimension_sample = dimension_sample
             self.length_sequence_input = length_sequence_input
             self.length_sequence_output = length_sequence_output
+            # inputs without targets will de discarded
+            self.length = int(self.traces.shape[1]) - self.length_sequence_output
             self.size_batch = size_batch
             self.strict_batch_size = strict_batch_size
             if keep_positive:
@@ -119,10 +120,14 @@ class Sampler:
             if isinstance(node_filter, int):
                 if 0 < node_filter < len(dict_traces):
                     nodes_requested = dict_traces.keys()[:node_filter]
-                else:
-                    if node_filter > len(dict_traces):
-                        utils.warn("__filter__ @ Sampler: Cannot find enough nodes in the given path.")
-                    return dict_traces
+                elif node_filter < 0:
+                    raise ValueError("__filter__ @ Sampler: Expect a positive integer for `node_filter`, "
+                                     "while getting %d instead." % node_filter)
+                elif node_filter > len(dict_traces):
+                    raise ValueError("__filter__ @ Sampler: %d nodes are expected, "
+                                     "while only %d nodes in the given path are available."
+                                     % (node_filter, len(dict_traces)))
+                return dict_traces
 
             # 指定 node identifiers
             elif isinstance(node_filter, list) and len(node_filter) > 0:
@@ -174,10 +179,14 @@ class Sampler:
             else:
                 utils.assert_type(indices, [list, tuple, int])
                 return None
+            if ifrom < 0 or ito >= a.length:
+                raise ValueError("clip @ SharedLSTM: Invalid indices (%d, %d). Index must be within [0, %d)." % (ifrom, ito, a.length))
+
+            ito += a.length_sequence_output
             traces = a.traces
             traces = numpy.array([trace[ifrom:ito, :] for trace in traces], dtype=numpy.float32)
             out.traces = traces
-            out.length = int(out.traces.shape[1])
+            out.length = int(out.traces.shape[1]) - a.length_sequence_output
             out.motion_range = Sampler.__compute_range__(out.traces)
             return out
 
@@ -260,7 +269,7 @@ class Sampler:
             end_line_target = begin_line_target + self.length_sequence_output
 
             # 如果超出采样数，返回 None, None, None
-            if end_line_input >= self.length or end_line_target > self.length:
+            if end_line_input > self.length:
                 return None, None, None
             else:
                 self.entry = end_line_input
@@ -346,26 +355,50 @@ class Sampler:
             sampler = Sampler(config['path_trace'], nodes=['2'])
 
             sampler = Sampler(config['path_trace'])
-            sampler.pan_to_positive()
-            sampler.pan_to_positive()
-            sampler.map_to_grid(GridSystem(100))
 
-            clipped = Sampler.clip(sampler, indices=20)
+            def test_panning():
+                sampler.pan_to_positive()
+                sampler.pan_to_positive()
 
+            test_panning()
+
+            def test_grid():
+                sampler.map_to_grid(GridSystem(100))
+
+            # test_grid()
+
+            def test_clipping():
+                clipped = Sampler.clip(sampler, indices=20)
+                try:
+                    invalid = Sampler.clip(clipped, indices=(-1, 19))
+                except Exception, e:
+                    pass
+                try:
+                    invalid = Sampler.clip(clipped, indices=(5, 20))
+                except Exception, e:
+                    pass
+
+            test_clipping()
             instants, inputs, targets = sampler.load_batch(with_target=False)
-            # utils.xprint([to_check.shape if to_check is not None else 'None' 
-            # for to_check in (instants, inputs, targets)], level=1, newline=True)
 
-            sampler.strict_batch_size = False
+            sampler.reset_entry()
             while True:
                 # 1 batch for each node
                 instants, inputs, targets = sampler.load_batch(with_target=True)
-                # utils.xprint([to_check.shape if to_check is not None else 'None' 
-                # for to_check in (instants, inputs, targets)], level=1, newline=True)
                 check_entry = sampler.entry
                 if inputs is None:
                     break
 
+            def test_loose_batch_size():
+                sampler.strict_batch_size = False
+                while True:
+                    # 1 batch for each node
+                    instants, inputs, targets = sampler.load_batch(with_target=True)
+                    check_entry = sampler.entry
+                    if inputs is None:
+                        break
+
+            test_loose_batch_size()
             utils.xprint('Fine', level=1, newline=True)
             return True
 

@@ -223,6 +223,11 @@ def test():
         path = "\\log/test"
         path = assert_path_format(path)
 
+    def test_ask():
+        # yes = confirm("Confirm")
+        # n = ask_int("How many?")
+        path = ask_path('Enter Path:', assert_exist=True)
+
     def test_pickling():
         logger = Logger(identifier='pickle')
         logger.register('pickle')
@@ -234,6 +239,7 @@ def test():
     try:
         # test_hiding()
         # test_formatting()
+        # test_ask()
         test_pickling()
     except:
         raise

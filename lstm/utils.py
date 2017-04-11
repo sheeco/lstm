@@ -126,6 +126,8 @@ def format_var(var, name=None, detail=False):
         if isinstance(var, numpy.ndarray):
             if detail:
                 string += '\n%s' % var if name is not None else '%s' % var
+            elif var.size == 1:
+                string += '%.1f' % var[0]
             elif numpy.isfinite(var).all():
                 string += '(mean: %.1f, min: %.1f, max: %.1f)' % tuple(mean_min_max(var))
             elif numpy.isnan(var).all():
@@ -206,11 +208,6 @@ def test():
     def test_timestamp():
         timestamp = get_timestamp()
 
-    def test_ask():
-        # yes = confirm("Confirm")
-        # n = ask_int("How many?")
-        path = ask_path('Enter Path:', assert_exist=True)
-
     def test_xprint():
         xprint(format_time_string(59.9), level=1, newline=True)
         xprint(format_time_string(222.2), level=1, newline=True)
@@ -226,4 +223,3 @@ def test():
         xprint(timer.stop(), level=1, newline=True)
 
     test_warn()
-    # test_ask()

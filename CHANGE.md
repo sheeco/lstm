@@ -200,12 +200,17 @@
 
 - ADD: Enable exporting & importing of model parameters;
 
-###### 2017-04-10
+###### [2017-04-10](af7bb86f56d7b80bc35d5a7cdf9db5d0d1a2b63e)
 
 - RFCT: Redefine config as dictionary, to enable change & log of configs at any time;
 
+###### 2017-04-11
 
-- [ ] RFCT: Extract initializers;
+- FIX: A major bug in `SharedLSTM.test()` & some other minor bugs;
+
+
+- [ ] FIX: Pass `config` into class initializers;
+- [ ] RFCT: Extract weight & bias initializers;
 - [ ] ADD: Pre-training;
 - [ ] ADD: Use `pprint` to improve printing;
 - [ ] TRY: Tuning `GRAD_CLIP`;

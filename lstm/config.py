@@ -2,7 +2,6 @@
 
 __all__ = [
     "configuration",
-    "make_config",
     "update_config",
     "test"
 ]
@@ -23,7 +22,7 @@ config_pool = {
             # 0 means mandatory printing only
             'print_level': 3,
             # How many nodes to learn on
-            'num_node': 3,
+            'num_node': 1,
             # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
             'dimension_sample': 3,
             # If only a full size batch will be accepted
@@ -90,7 +89,7 @@ config_pool = {
             # Number of epochs to train the net
             'num_epoch': 50,
             # Optimization learning rate
-            'learning_rate_rmsprop': .001,
+            'learning_rate_rmsprop': .003,
             'rho_rmsprop': .95,
             'epsilon_rmsprop': 1e-8,
             # All gradients above this will be clipped
@@ -99,54 +98,50 @@ config_pool = {
 }
 
 
-def make_config(key='run'):
+def __get_config_from_pool__(key='default'):
     try:
-        default = config_pool['default']
-
-        if key not in config_pool or key == 'default':
+        if key not in config_pool:
             available_keys = config_pool.keys()
-            available_keys.remove('default')
-            raise ValueError("make_config @ config: Invalid key '%s'. Must choose from %s."
+            raise ValueError("get_config_from_pool @ config: Invalid key '%s'. Must choose from %s."
                              % (key, available_keys))
 
-        requested = config_pool[key]
-        ret = {}
-        ret.update(default)
-        # Requested value will overwrite default value for the same config item
-        ret.update(requested)
-        return ret
+        return config_pool[key]
 
     except:
         raise
 
 
-configuration = make_config()
+configuration = __get_config_from_pool__('default')
 
 
-def update_config(key='run', config=None):
+def update_config(key=None, config=None):
     try:
         global configuration
-        if config is None:
-            configuration.update(make_config(key=key))
-        elif not isinstance(config, dict):
-            raise ValueError("update_config @ config: Expect <dict> while getting %s instead." % type(config))
-        else:
-            configuration.update(config)
+        if key is not None:
+            configuration.update(__get_config_from_pool__(key=key))
+        if config is not None:
+            if isinstance(config, dict):
+                configuration.update(config)
+            else:
+                raise ValueError("update_config @ config: Expect <dict> while getting %s instead." % type(config))
     except:
         raise
+
+
+update_config(key='run')
 
 
 def test():
     try:
-        run = make_config()
+        run = __get_config_from_pool__()
         config_pool['debug']['show_warning'] = True
-        debug = make_config(key='debug')
+        debug = __get_config_from_pool__(key='debug')
         try:
-            invalid = make_config(key='default')
+            invalid = __get_config_from_pool__(key='default')
         except Exception, e:
             pass
         try:
-            invalid = make_config(key='invalid-key')
+            invalid = __get_config_from_pool__(key='invalid-key')
         except Exception, e:
             pass
         update_config(config={'_': True})
