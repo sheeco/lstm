@@ -1,16 +1,18 @@
-# coding:GBK
+# coding:utf-8
 
 import numpy
+
 import theano
 import theano.tensor as T
 from theano.tensor.sharedvar import TensorSharedVariable
 import lasagne as L
 
-from config import configuration as config
+from config import global_configuration as config
 from config import update_config
 import utils
-from sampler import *
 import filer
+from sampler import Sampler
+
 
 __all__ = [
     'SharedLSTM'
@@ -41,8 +43,10 @@ class SharedLSTM:
             self.length_sequence_input = self.sampler.length_sequence_input
             self.length_sequence_output = self.sampler.length_sequence_output
             self.size_batch = self.sampler.size_batch
-            self.dimension_embed_layer = dimension_embed_layer if dimension_embed_layer is not None else config['dimension_embed_layer']
-            dimension_hidden_layer = dimension_hidden_layer if dimension_hidden_layer is not None else config['dimension_hidden_layer']
+            self.dimension_embed_layer = dimension_embed_layer \
+                if dimension_embed_layer is not None else config['dimension_embed_layer']
+            dimension_hidden_layer = dimension_hidden_layer \
+                if dimension_hidden_layer is not None else config['dimension_hidden_layer']
             utils.assert_type(dimension_hidden_layer, tuple)
             all(utils.assert_type(x, int) for x in dimension_hidden_layer)
 
@@ -51,13 +55,15 @@ class SharedLSTM:
             elif len(dimension_hidden_layer) == 2:
                 pass
             else:
-                raise ValueError("__init__ @ SharedLSTM: Expect len: 1~2 while getting %d instead.",
+                raise ValueError("__init__ @ SharedLSTM: "
+                                 "Expect len: 1~2 while getting %d instead.",
                                  len(dimension_hidden_layer))
             self.dimension_hidden_layers = dimension_hidden_layer
             self.grad_clip = grad_clip if grad_clip is not None else config['grad_clip']
             self.num_epoch = num_epoch if num_epoch is not None else config['num_epoch']
 
-            self.learning_rate_rmsprop = learning_rate_rmsprop if learning_rate_rmsprop is not None else config['learning_rate_rmsprop']
+            self.learning_rate_rmsprop = learning_rate_rmsprop \
+                if learning_rate_rmsprop is not None else config['learning_rate_rmsprop']
             self.rho_rmsprop = rho_rmsprop if rho_rmsprop is not None else config['rho_rmsprop']
             self.epsilon_rmsprop = epsilon_rmsprop if epsilon_rmsprop is not None else config['epsilon_rmsprop']
 
@@ -99,7 +105,6 @@ class SharedLSTM:
             """
 
             self.w_e = L.init.Uniform(std=0.005, mean=(1. / self.dimension_sample))
-            # self.w_e = L.init.Uniform(range=(0., 1.))
             self.b_e = L.init.Constant(0.)
             self.f_e = None
 
@@ -107,8 +112,6 @@ class SharedLSTM:
             self.w_lstm_hid = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
             self.w_lstm_cell = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
             self.b_lstm = L.init.Constant(0.)
-            # self.f_lstm_hid = L.nonlinearities.softplus
-            # self.f_lstm_cell = L.nonlinearities.softplus
             self.f_lstm_hid = L.nonlinearities.rectify
             self.f_lstm_cell = L.nonlinearities.rectify
             self.init_lstm_hid = L.init.Constant(0.)
@@ -243,11 +246,9 @@ class SharedLSTM:
             layers_in_lstms = []
             for inode in xrange(0, self.num_node):
                 layers_in_lstms += [L.layers.SliceLayer(layer_e, indices=inode, axis=0)]
-            assert all(
-                utils.match(ilayer_in_lstm.output_shape,
-                            (self.size_batch, self.length_sequence_input, self.dimension_embed_layer)) for
-                ilayer_in_lstm
-                in layers_in_lstms)
+            assert all(utils.match(ilayer_in_lstm.output_shape,
+                                   (self.size_batch, self.length_sequence_input, self.dimension_embed_layer))
+                       for ilayer_in_lstm in layers_in_lstms)
 
             n_hid = self.dimension_hidden_layers[0]
             dim_hid = self.dimension_hidden_layers[1]
@@ -365,14 +366,13 @@ class SharedLSTM:
                 layers_hid += [layer_concated_lstms]
 
             layer_last_hid = layers_hid[-1]
-            layer_means = L.layers.DenseLayer(layer_last_hid, name="means-layer", num_units=2, W=self.w_means, b=self.b_means,
-                                              nonlinearity=self.f_means, num_leading_axes=3)
-            layer_deviations = L.layers.DenseLayer(layer_last_hid, name="deviations-layer", num_units=2, W=self.w_deviations,
-                                                   b=self.b_deviations,
+            layer_means = L.layers.DenseLayer(layer_last_hid, name="means-layer", num_units=2, W=self.w_means,
+                                              b=self.b_means, nonlinearity=self.f_means, num_leading_axes=3)
+            layer_deviations = L.layers.DenseLayer(layer_last_hid, name="deviations-layer", num_units=2,
+                                                   W=self.w_deviations, b=self.b_deviations,
                                                    nonlinearity=self.f_deviations, num_leading_axes=3)
             layer_correlation = L.layers.DenseLayer(layer_last_hid, name="correlation-layer", num_units=1,
-                                                    W=self.w_correlation,
-                                                    b=self.b_correlation,
+                                                    W=self.w_correlation, b=self.b_correlation,
                                                     nonlinearity=self.f_correlation, num_leading_axes=3)
             layer_distribution = L.layers.ConcatLayer([layer_means, layer_deviations, layer_correlation], axis=-1)
 
@@ -393,7 +393,6 @@ class SharedLSTM:
             self.outputs = L.layers.get_output(layer_out)
             self.params_all = L.layers.get_all_params(layer_out)
             self.params_trainable = L.layers.get_all_params(layer_out, trainable=True)
-            # self.params = L.layers.get_all_params(layer_out, unwrap_shared=True, trainable=True)
 
             def get_names_for_params(list_params):
                 utils.assert_type(list_params, list)
@@ -401,7 +400,6 @@ class SharedLSTM:
                 for param in list_params:
                     # utils.assert_type(param, TensorSharedVariable)
                     name = param.name
-                    # ndim = param.ndim
                     param_keys += [name]
                 return param_keys
 
@@ -424,7 +422,8 @@ class SharedLSTM:
         """
         try:
             if self.outputs is None:
-                raise RuntimeError("build_decoder @ SharedLSTM: Must build the network first.")
+                raise RuntimeError("build_decoder @ SharedLSTM: "
+                                   "Must build the network first.")
 
             timer = utils.Timer()
             utils.xprint('Decoding ...', logger=self.logger)
@@ -447,9 +446,11 @@ class SharedLSTM:
         """
         try:
             if self.outputs is None:
-                raise RuntimeError("compute_loss @ SharedLSTM: Must build the network first.")
+                raise RuntimeError("compute_loss @ SharedLSTM: "
+                                   "Must build the network first.")
             if self.predictions is None:
-                raise RuntimeError("compute_loss @ SharedLSTM: Must build the decoder first.")
+                raise RuntimeError("compute_loss @ SharedLSTM: "
+                                   "Must build the decoder first.")
 
             timer = utils.Timer()
             utils.xprint('Computing loss ...', logger=self.logger)
@@ -462,7 +463,8 @@ class SharedLSTM:
             # Reshape for convenience
             facts = T.reshape(facts, shape_stacked_facts)
             shape_distributions = self.outputs.shape
-            shape_stacked_distributions = (shape_distributions[0] * shape_distributions[1] * shape_distributions[2], shape_distributions[3])
+            shape_stacked_distributions = (shape_distributions[0] * shape_distributions[1] * shape_distributions[2],
+                                           shape_distributions[3])
             distributions = T.reshape(self.outputs, shape_stacked_distributions)
 
             # Use scan to replace loop with tensors
@@ -507,12 +509,10 @@ class SharedLSTM:
 
             if self.scaled_deviation:
                 motion_range = T.constant(self.motion_range[1] - self.motion_range[0])
-                probs, updates_loss = theano.scan(fn=step_loss_scaled,
-                                                  sequences=[indices],
+                probs, updates_loss = theano.scan(fn=step_loss_scaled, sequences=[indices],
                                                   non_sequences=[distributions, facts, motion_range])
             else:
-                probs, updates_loss = theano.scan(fn=step_loss,
-                                                  sequences=[indices],
+                probs, updates_loss = theano.scan(fn=step_loss, sequences=[indices],
                                                   non_sequences=[distributions, facts])
 
             # Normal Negative Log-likelihood
@@ -536,9 +536,11 @@ class SharedLSTM:
         """
         try:
             if self.outputs is None:
-                raise RuntimeError("compute_deviation @ SharedLSTM: Must build the network first.")
+                raise RuntimeError("compute_deviation @ SharedLSTM: "
+                                   "Must build the network first.")
             if self.predictions is None:
-                raise RuntimeError("compute_deviation @ SharedLSTM: Must build the decoder first.")
+                raise RuntimeError("compute_deviation @ SharedLSTM: "
+                                   "Must build the decoder first.")
 
             timer = utils.Timer()
             utils.xprint('Building observer ...', logger=self.logger)
@@ -568,20 +570,24 @@ class SharedLSTM:
         """
         try:
             if self.outputs is None:
-                raise RuntimeError("compile @ SharedLSTM: Must build the network first.")
+                raise RuntimeError("compile @ SharedLSTM: "
+                                   "Must build the network first.")
             if self.predictions is None:
-                raise RuntimeError("compile @ SharedLSTM: Must build the decoder first.")
+                raise RuntimeError("compile @ SharedLSTM: "
+                                   "Must build the decoder first.")
             if self.loss is None:
-                raise RuntimeError("compile @ SharedLSTM: Must compute the loss first.")
+                raise RuntimeError("compile @ SharedLSTM: "
+                                   "Must compute the loss first.")
             if self.deviations is None:
-                raise RuntimeError("compile @ SharedLSTM: Must compute the deviation first.")
+                raise RuntimeError("compile @ SharedLSTM: "
+                                   "Must compute the deviation first.")
 
             timer = utils.Timer()
             utils.xprint('Compiling functions ...', logger=self.logger)
 
             # Compute RMSProp updates for training
-            RMSPROP = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate_rmsprop, rho=self.rho_rmsprop,
-                                        epsilon=self.epsilon_rmsprop)
+            RMSPROP = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate_rmsprop,
+                                        rho=self.rho_rmsprop, epsilon=self.epsilon_rmsprop)
             updates = RMSPROP
 
             self.updates = updates
@@ -596,7 +602,9 @@ class SharedLSTM:
                                               allow_input_downcast=True)
             # self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates,
             #                                   allow_input_downcast=True,
-            #                                   mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True))
+            #                                   mode=NanGuardMode(nan_is_error=True,
+            #                                                     inf_is_error=True,
+            #                                                     big_is_error=True))
 
             """
             Compile checking functions for debugging
@@ -607,7 +615,8 @@ class SharedLSTM:
                 self.checks_hid += [theano.function([self.inputs], ihid, allow_input_downcast=True)]
             self.check_outputs = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
             self.check_params = theano.function([], self.params_all, allow_input_downcast=True)
-            self.check_probs = theano.function([self.inputs, self.targets], self.probabilities, allow_input_downcast=True)
+            self.check_probs = theano.function([self.inputs, self.targets], self.probabilities,
+                                               allow_input_downcast=True)
 
             utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
             return self.func_predict, self.func_compare, self.func_train
@@ -626,15 +635,20 @@ class SharedLSTM:
         :return: Two <ndarray> containing average loss & deviation of each epoch.
         """
         if self.outputs is None:
-            raise RuntimeError("train @ SharedLSTM: Must build the network first.")
+            raise RuntimeError("train @ SharedLSTM: "
+                               "Must build the network first.")
         if self.predictions is None:
-            raise RuntimeError("train @ SharedLSTM: Must build the decoder first.")
+            raise RuntimeError("train @ SharedLSTM: "
+                               "Must build the decoder first.")
         if self.loss is None:
-            raise RuntimeError("train @ SharedLSTM: Must compute the loss first.")
+            raise RuntimeError("train @ SharedLSTM: "
+                               "Must compute the loss first.")
         if self.deviations is None:
-            raise RuntimeError("train @ SharedLSTM: Must compute the deviation first.")
+            raise RuntimeError("train @ SharedLSTM: "
+                               "Must compute the deviation first.")
         if any(func is None for func in [self.func_predict, self.func_compare, self.func_train]):
-            raise RuntimeError("train @ SharedLSTM: Must compile the functions first.")
+            raise RuntimeError("train @ SharedLSTM: "
+                               "Must compile the functions first.")
 
         log_slot = log_slot if log_slot is not None else config['log_slot']
 
@@ -662,7 +676,8 @@ class SharedLSTM:
                     instants, inputs, targets = self.sampler.load_batch(with_target=True)
                     if inputs is None:
                         if ibatch == 0:
-                            raise RuntimeError("train @ SharedLSTM: Have only %d sample pairs, "
+                            raise RuntimeError("train @ SharedLSTM: "
+                                               "Have only %d sample pairs, "
                                                "not enough for one single batch of size %d."
                                                % (self.sampler.length, self.size_batch))
 
@@ -678,10 +693,10 @@ class SharedLSTM:
                         netout = self.check_outputs(inputs)
 
                         string = ''
-                        string += utils.format_var(embedd[0, 0], name='embedd[0][0]') + '\n'
+                        string += '%s\n' % utils.format_var(embedd[0, 0], name='embedd[0][0]')
                         for ihid in xrange(self.dimension_hidden_layers[0]):
-                            string += utils.format_var(hids[ihid][0][0], name='hidden-%d[0][0]' % ihid) + '\n'
-                        string += utils.format_var(netout[0, 0], 'netout[0][0]') + '\n'
+                            string += '%s\n' % utils.format_var(hids[ihid][0][0], name='hidden-%d[0][0]' % ihid)
+                        string += '%s\n' % utils.format_var(netout[0, 0], 'netout[0][0]')
                         return string
 
                     utils.xprint('    Batch %d ...' % ibatch, level=2, logger=self.logger)
@@ -732,11 +747,14 @@ After:
                     deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
 
                     self.logger.log({'epoch': iepoch, 'batch': ibatch,
-                                     'loss': utils.format_var(float(loss)), 'deviations': utils.format_var(deviations)}, name="training")
+                                     'loss': utils.format_var(float(loss)), 'deviations': utils.format_var(deviations)},
+                                    name="training")
 
                     if divmod(ibatch, log_slot)[1] == 0:
                         # utils.xprint('    Batch %d ...' % ibatch, level=1, logger=self.logger)
-                        utils.xprint(utils.format_var(float(loss), name='loss') + '; ' + utils.format_var(deviations, name='deviations'),
+                        utils.xprint('%s; %s'
+                                     % (utils.format_var(float(loss), name='loss'),
+                                        utils.format_var(deviations, name='deviations')),
                                      level=1, newline=True, logger=self.logger)
 
                     ibatch += 1
@@ -746,7 +764,9 @@ After:
 
             if divmod(ibatch, log_slot)[1] != 0:
                 utils.xprint('    Batch %d ...' % ibatch, level=1, logger=self.logger)
-                utils.xprint(utils.format_var(float(loss), name='loss') + '; ' + utils.format_var(deviations, name='deviations'),
+                utils.xprint('%s; %s'
+                             % (utils.format_var(float(loss), name='loss'),
+                                utils.format_var(deviations, name='deviations')),
                              level=1, newline=True, logger=self.logger)
 
             loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
@@ -757,7 +777,8 @@ After:
                 more = utils.confirm("Try more epochs?")
                 if more:
                     num_more = utils.ask_int("How many?")
-                    if num_more is not None and num_more > 0:
+                    if num_more is not None \
+                            and num_more > 0:
                         self.num_epoch += num_more
                     else:
                         break
@@ -773,7 +794,8 @@ After:
 
             timer = utils.Timer()
             if self.params_all is None:
-                raise RuntimeError("export_params @ SharedLSTM: Must build the network first.")
+                raise RuntimeError("export_params @ SharedLSTM: "
+                                   "Must build the network first.")
 
             if path is None:
                 path = filer.format_path(self.logger.log_path, FILENAME_EXPORT)
@@ -786,7 +808,7 @@ After:
 
             params_all = self.check_params()
 
-            filer.dump_to_file(path, params_all)
+            filer.dump_to_file(params_all, path)
 
             utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
             return path
@@ -797,7 +819,8 @@ After:
     def import_params(self, path=None):
         try:
             if self.params_all is None:
-                raise RuntimeError("import_params @ SharedLSTM: Must build the network first.")
+                raise RuntimeError("import_params @ SharedLSTM: "
+                                   "Must build the network first.")
 
             if path is None:
                 path = filer.ask_path('Import from file path', assert_exist=True)

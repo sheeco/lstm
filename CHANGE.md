@@ -212,10 +212,14 @@
 
 - RFCT: Seperate decoding, computing of loss & deviations from compiling function;
 
-###### 2017-04-11
+###### [2017-04-11](feb0fdd2abaf124e6a19277fe0d3ff762bf78adc)
 
 - OPT: Remove all the references of `config.configuration` in default value definition of method arguments, 
   to enable config modification to work properly;
+  
+###### 2017-04-12
+
+- RFCT: Some code style improvements according to [PEP8](https://www.python.org/dev/peps/pep-0008/#id36);
 
 
 - [ ] RFCT: Enable non-shared LSTM;

@@ -1,8 +1,9 @@
 # coding:utf-8
+
 import numpy
 import copy
 
-from config import configuration as config
+from config import global_configuration as config
 import utils
 import filer
 
@@ -26,19 +27,21 @@ class Sampler:
 
         try:
             self.path = path if path is not None else config['path_trace']
-            dict_traces = Sampler.__read_traces_from_path__(self.path)
-            dict_traces = Sampler.__filter__(dict_traces, nodes)
+            dict_traces = Sampler._read_traces_from_path_(self.path)
+            dict_traces = Sampler._filter_(dict_traces, nodes)
             self.node_identifiers = dict_traces.keys()
             self.node_filter = nodes
-            self.traces = Sampler.__dict_to_array__(dict_traces, length)
+            self.traces = Sampler._dict_to_array_(dict_traces, length)
             self.num_node = int(self.traces.shape[0])
-            self.motion_range = Sampler.__compute_range__(self.traces)
+            self.motion_range = Sampler._compute_range_(self.traces)
             self.grid_system = None
             self.entry = 0
 
             self.dimension_sample = dimension_sample if dimension_sample is not None else config['dimension_sample']
-            self.length_sequence_input = length_sequence_input if length_sequence_input is not None else config['length_sequence_input']
-            self.length_sequence_output = length_sequence_output if length_sequence_output is not None else config['length_sequence_output']
+            self.length_sequence_input = length_sequence_input \
+                if length_sequence_input is not None else config['length_sequence_input']
+            self.length_sequence_output = length_sequence_output \
+                if length_sequence_output is not None else config['length_sequence_output']
             # inputs without targets will de discarded
             self.length = int(self.traces.shape[1]) - self.length_sequence_output
             self.size_batch = size_batch if size_batch is not None else config['size_batch']
@@ -54,7 +57,7 @@ class Sampler:
         self.entry = 0
 
     @staticmethod
-    def __read_triples_from_file__(filename):
+    def _read_triples_from_file_(filename):
         """
         从单个文件读入 (time, x, y) 的三元组序列，放入返回 list。
         注意：暂无格式检查，文件中每一行必须对应一次定位采样，格式为 'time x y'
@@ -78,7 +81,7 @@ class Sampler:
             raise
 
     @staticmethod
-    def __read_traces_from_path__(path):
+    def _read_traces_from_path_(path):
         # todo add filename filter
         """
         对给定目录下的所有文件，读取轨迹序列，放入返回 dict。
@@ -90,7 +93,8 @@ class Sampler:
         dict_traces = {}
 
         if not filer.if_exists(path):
-            raise IOError('read_traces_from_path @ sample: \n\tInvalid Path: %s' % path)
+            raise IOError("read_traces_from_path @ sample: "
+                          "Invalid path '%s'" % path)
         else:
             try:
                 list_subdir = filer.list_directory(path)
@@ -98,7 +102,7 @@ class Sampler:
 
                 for filename in list_files:
                     node_identifier, _ = filer.split_extension(filename)
-                    temp_trace = Sampler.__read_triples_from_file__(path + filename)
+                    temp_trace = Sampler._read_triples_from_file_(path + filename)
                     # if node_name.isdigit():
                     #     traces[int(node_name)] = temp_trace
                     # else:
@@ -111,7 +115,7 @@ class Sampler:
         return dict_traces
 
     @staticmethod
-    def __filter__(dict_traces, node_filter):
+    def _filter_(dict_traces, node_filter):
 
         try:
             if node_filter is None:
@@ -121,16 +125,19 @@ class Sampler:
                 if 0 < node_filter < len(dict_traces):
                     nodes_requested = dict_traces.keys()[:node_filter]
                 elif node_filter < 0:
-                    raise ValueError("__filter__ @ Sampler: Expect a positive integer for `node_filter`, "
+                    raise ValueError("_filter_ @ Sampler: "
+                                     "Expect a positive integer for `node_filter`, "
                                      "while getting %d instead." % node_filter)
                 elif node_filter > len(dict_traces):
-                    raise ValueError("__filter__ @ Sampler: %d nodes are expected, "
+                    raise ValueError("_filter_ @ Sampler: "
+                                     "%d nodes are expected, "
                                      "while only %d nodes in the given path are available."
                                      % (node_filter, len(dict_traces)))
                 return dict_traces
 
             # 指定 node identifiers
-            elif isinstance(node_filter, list) and len(node_filter) > 0:
+            elif isinstance(node_filter, list) \
+                    and len(node_filter) > 0:
                 nodes_requested = node_filter
             else:
                 return dict_traces
@@ -142,7 +149,7 @@ class Sampler:
             raise
 
     @staticmethod
-    def __dict_to_array__(dict_traces, length=None):
+    def _dict_to_array_(dict_traces, length=None):
 
         try:
             # 计算不同节点轨迹长度的最小值
@@ -150,8 +157,7 @@ class Sampler:
                 length = min([len(trace) for trace in dict_traces.values()])
             # 以 length 为最后一行，对齐截断
             # 并将选中 dict 中的 value 转换成 array，顺序由给定的 node_identifiers 决定
-            array_traces = numpy.array([trace[:length, :] for trace in dict_traces.values()],
-                                           dtype=numpy.float32)
+            array_traces = numpy.array([trace[:length, :] for trace in dict_traces.values()], dtype=numpy.float32)
             return array_traces
 
         except:
@@ -171,7 +177,8 @@ class Sampler:
             out = copy.deepcopy(a)
             if indices is None:
                 return None
-            elif isinstance(indices, list) or isinstance(indices, tuple):
+            elif isinstance(indices, list) \
+                    or isinstance(indices, tuple):
                 assert len(indices) == 2
                 ifrom, ito = indices[0], indices[1]
             elif isinstance(indices, int):
@@ -179,22 +186,26 @@ class Sampler:
             else:
                 utils.assert_type(indices, [list, tuple, int])
                 return None
-            if ifrom < 0 or ito >= a.length:
-                raise ValueError("clip @ SharedLSTM: Invalid indices (%d, %d). Index must be within [0, %d)." % (ifrom, ito, a.length))
+            if ifrom < 0 \
+                    or ito >= a.length:
+                raise ValueError("clip @ SharedLSTM: "
+                                 "Invalid indices (%d, %d). "
+                                 "Index must be within [0, %d)."
+                                 % (ifrom, ito, a.length))
 
             ito += a.length_sequence_output
             traces = a.traces
             traces = numpy.array([trace[ifrom:ito, :] for trace in traces], dtype=numpy.float32)
             out.traces = traces
             out.length = int(out.traces.shape[1]) - a.length_sequence_output
-            out.motion_range = Sampler.__compute_range__(out.traces)
+            out.motion_range = Sampler._compute_range_(out.traces)
             return out
 
         except:
             raise
 
     @staticmethod
-    def __compute_range__(array_traces):
+    def _compute_range_(array_traces):
 
         """
 
@@ -239,16 +250,18 @@ class Sampler:
             for triple in trace:
                 triple[1:3] = numpy.floor_divide((triple[1:3] - grid_system.base_xy), grid_system.grain)
 
-        self.motion_range = Sampler.__compute_range__(traces)
+        self.motion_range = Sampler._compute_range_(traces)
         self.traces = traces
         self.grid_system = grid_system
         return self.traces
 
-    def __load_sample__(self, with_target=True):
+    def _load_sample_(self, with_target=True):
         """
         指定起始位置，为单次训练/测试生成所有节点的输入序列（及目标序列）。
         注意：如果超出最大采样数，将返回 None，因此需要对返回值进行验证之后再使用
-        :format: [:LENGTH_SEQUENCE_INPUT], [:所选节点数, :LENGTH_SEQUENCE_INPUT, :DIMENSION_SAMPLE], [:所选节点数, :LENGTH_SEQUENCE_OUTPUT， :DIMENSION_SAMPLE]
+        :format: instants: [length_sequence_input],
+                 inputs: [num_node, length_sequence_input, dimension_sample],
+                 outputs: [num_node, length_sequence_output, dimension_sample]
         """
 
         try:
@@ -286,12 +299,13 @@ class Sampler:
         except:
             raise
 
-
     def load_batch(self, size_batch=None, with_target=True):
         """
         为单批次的训练/测试生成所有节点的时刻、输入、目标序列。
         注意：如果超出最大采样数，将返回 3 个 None，因此需要对返回值进行验证之后再使用
-        :format: [size_batch, LENGTH_SEQUENCE_INPUT], [N_NODES, size_batch, LENGTH_SEQUENCE_INPUT, DIMENSION_SAMPLE], [N_NODES, size_batch, LENGTH_SEQUENCE_OUTPUT, DIMENSION_SAMPLE]
+        :format: instants: [size_batch, length_sequence_input],
+                 inputs: [num_nodes, size_batch, length_sequence_input, dimension_sample],
+                 target: [n_nodes, size_batch, length_sequence_output, dimension_sample]
         """
         # todo add boolean arg redundant_batch
 
@@ -302,18 +316,11 @@ class Sampler:
             batch_input = numpy.zeros((0, 0, 0, 0))
             batch_target = numpy.zeros((0, 0, 0, 0))
             for i in range(size_batch):
-                sample_instants, sample_input, sample_target = self.__load_sample__(with_target)
+                sample_instants, sample_input, sample_target = self._load_sample_(with_target)
                 if sample_input is not None:
                     shape_in = sample_input.shape
 
                     batch_instants = numpy.resize(batch_instants, (i + 1, shape_in[1]))
-                    #     batch_input = numpy.resize(batch_input, (i + 1, shape_in[0], shape_in[1], shape_in[2]))
-                    #     batch_input[i] = sample_input
-                    #     # batch_input = numpy.concatenate((batch_input, sample_input), 1) if len(batch_input) > 0 else sample_input
-                    #     if with_target:
-                    #         shape_target = sample_target.shape
-                    #         batch_target = numpy.resize(batch_target, (i + 1, shape_target[0], shape_target[1], shape_target[2]))
-                    #         batch_target[i] = sample_target
 
                     batch_input = numpy.resize(batch_input, (shape_in[0], i + 1, shape_in[1], shape_in[2]))
                     batch_instants[i] = sample_instants
@@ -329,10 +336,14 @@ class Sampler:
                 elif len(batch_input) == 0:
                     return None, None, None
                 elif self.strict_batch_size:
-                    utils.warn("load_batch @ Sampler: An insufficient batch of %s samples is discarded." % batch_input.shape[1])
+                    utils.warn("load_batch @ Sampler: "
+                               "An insufficient batch of %s samples is discarded."
+                               % batch_input.shape[1])
                     return None, None, None
                 elif not self.strict_batch_size:
-                    utils.warn("load_batch @ Sampler: Insufficient batch. Only  %s  samples are left." % batch_input.shape[1])
+                    utils.warn("load_batch @ Sampler: "
+                               "Insufficient batch. Only  %s  samples are left."
+                               % batch_input.shape[1])
                     break
                 else:
                     utils.assert_unreachable()
@@ -349,8 +360,7 @@ class Sampler:
         try:
             utils.xprint('Testing Sampler...', level=1)
 
-            demo_list_triples = Sampler.__read_triples_from_file__('res/trace/2.trace')
-            # utils.xprint(numpy.shape(demo_list_triples), level=1, newline=True)
+            demo_list_triples = Sampler._read_triples_from_file_('res/trace/2.trace')
 
             sampler = Sampler(config['path_trace'], nodes=1)
             sampler = Sampler(config['path_trace'], length=18)

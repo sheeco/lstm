@@ -1,7 +1,7 @@
 # coding:utf-8
 
 __all__ = [
-    "configuration",
+    "global_configuration",
     "update_config",
     "test"
 ]
@@ -98,11 +98,12 @@ config_pool = {
 }
 
 
-def __get_config_from_pool__(key='default'):
+def _get_config_from_pool_(key='default'):
     try:
         if key not in config_pool:
             available_keys = config_pool.keys()
-            raise ValueError("get_config_from_pool @ config: Invalid key '%s'. Must choose from %s."
+            raise ValueError("get_config_from_pool @ config: "
+                             "Invalid key '%s'. Must choose from %s."
                              % (key, available_keys))
 
         return config_pool[key]
@@ -111,19 +112,20 @@ def __get_config_from_pool__(key='default'):
         raise
 
 
-configuration = __get_config_from_pool__('default')
+global_configuration = _get_config_from_pool_('default')
 
 
 def update_config(key=None, config=None):
     try:
-        global configuration
+        global global_configuration
         if key is not None:
-            configuration.update(__get_config_from_pool__(key=key))
+            global_configuration.update(_get_config_from_pool_(key=key))
         if config is not None:
             if isinstance(config, dict):
-                configuration.update(config)
+                global_configuration.update(config)
             else:
-                raise ValueError("update_config @ config: Expect <dict> while getting %s instead." % type(config))
+                raise ValueError("update_config @ config: "
+                                 "Expect <dict> while getting %s instead." % type(config))
     except:
         raise
 
@@ -133,15 +135,15 @@ update_config(key='run')
 
 def test():
     try:
-        run = __get_config_from_pool__()
+        run = _get_config_from_pool_()
         config_pool['debug']['show_warning'] = True
-        debug = __get_config_from_pool__(key='debug')
+        debug = _get_config_from_pool_(key='debug')
         try:
-            invalid = __get_config_from_pool__(key='default')
+            invalid = _get_config_from_pool_(key='default')
         except Exception, e:
             pass
         try:
-            invalid = __get_config_from_pool__(key='invalid-key')
+            invalid = _get_config_from_pool_(key='invalid-key')
         except Exception, e:
             pass
         update_config(config={'_': True})

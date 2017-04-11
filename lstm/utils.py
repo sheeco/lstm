@@ -5,7 +5,7 @@ import traceback
 import warnings
 import numpy
 
-from config import configuration as config
+from config import global_configuration as config
 
 
 __all__ = [
@@ -28,9 +28,11 @@ __all__ = [
 
 
 def match(shape1, shape2):
-    return (len(shape1) == len(shape2) and
-            all(s1 is None or s2 is None or s1 == s2
-                for s1, s2 in zip(shape1, shape2)))
+    return (len(shape1) == len(shape2)
+            and all(s1 is None
+                    or s2 is None
+                    or s1 == s2
+                    for s1, s2 in zip(shape1, shape2)))
 
 
 def xprint(what, level=0, newline=False, logger=None):
@@ -56,8 +58,8 @@ def handle(exception, logger=None):
     xprint(traceback.format_exc(), newline=True)
     if logger is not None:
         logger.register("exception")
-        logger.log(exception.message + '\n', name="exception")
-        logger.log(traceback.format_exc() + '\n', name="exception")
+        logger.log('%s\n\n' % exception.message, name="exception")
+        logger.log('%s\n' % traceback.format_exc(), name="exception")
 
 
 def assert_type(var, assertion, raising=True):
@@ -66,8 +68,10 @@ def assert_type(var, assertion, raising=True):
         fine = any(assert_type(var, iassertion, raising=False) for iassertion in assertion)
     else:
         fine = isinstance(var, assertion)
-    if raising and not fine:
-        raise ValueError("assert_type @ utils: Expect %s while getting %s instead." % (assertion, type(var)))
+    if raising \
+            and not fine:
+        raise ValueError("assert_type @ utils: "
+                         "Expect %s while getting %s instead." % (assertion, type(var)))
     return fine
 
 
@@ -75,21 +79,25 @@ def assert_finite(var, name):
     if not isinstance(var, list):
         var = [var]
     if any((not numpy.isfinite(ivar).all()) for ivar in var):
-        raise AssertionError("assert_finite @ utils: <%s> contains 'nan' or 'inf'." % name)
+        raise AssertionError("assert_finite @ utils: "
+                             "`%s` contains 'nan' or 'inf'." % name)
     else:
         return True
 
 
 def assert_unreachable():
-    raise RuntimeError("assert_unreachable @ utils: \n\tUnexpected access of this block.")
+    raise RuntimeError("assert_unreachable @ utils: "
+                       "Unexpected access of this block.")
 
 
 def confirm(info):
     try:
         ans = raw_input("%s (y/n): " % info)
-        if ans == 'y' or ans == 'Y':
+        if ans == 'y'\
+                or ans == 'Y':
             return True
-        elif ans == 'n' or ans == 'N':
+        elif ans == 'n' \
+                or ans == 'N':
             return False
     except:
         pass
@@ -119,7 +127,7 @@ def format_var(var, name=None, detail=False):
         assert isinstance(name, list)
         assert len(var) == len(name)
         for i in xrange(len(var)):
-            string += format_var(var[i], name=name[i], detail=detail) + '\n'
+            string += '%s\n' % format_var(var[i], name=name[i], detail=detail)
     else:
         if name is not None:
             string += "%s: " % name

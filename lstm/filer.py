@@ -8,7 +8,7 @@ import copy
 import numpy
 import cPickle
 
-from config import configuration as config
+from config import global_configuration as config
 from utils import *
 
 
@@ -41,14 +41,18 @@ def assert_exists(path, assertion=True, raising=True):
     if not if_exists(path) is assertion:
         if raising:
             if assertion is True:
-                raise IOError("assert_exists @ file: '%s' does not exists." % path)
+                raise IOError("assert_exists @ file: "
+                              "'%s' does not exists." % path)
             else:
-                raise IOError("assert_exists @ file: '%s' already exists." % path)
+                raise IOError("assert_exists @ file: "
+                              "'%s' already exists." % path)
         else:
             if assertion is True:
-                warn("assert_exists @ file: '%s' does not exists." % path)
+                warn("assert_exists @ file: "
+                     "'%s' does not exists." % path)
             else:
-                warn("assert_exists @ file: '%s' already exists." % path)
+                warn("assert_exists @ file: "
+                     "'%s' already exists." % path)
         return False
     else:
         return True
@@ -115,13 +119,14 @@ def list_directory(path):
 
 def split_path(path):
     try:
-        if path[-1] == '/' or path[-1] == '\\':
+        if path[-1] == '/' \
+                or path[-1] == '\\':
             tail = '/'
             path = path[:-1]
         else:
             tail = ''
         directory, filename = os.path.split(path)
-        return directory + '/', filename + tail
+        return '%s/' % directory, '%s%s' % (filename, tail)
     except:
         raise
 
@@ -144,9 +149,10 @@ def assert_path_format(path):
 
 def format_path(path, subpath='', isfile=True):
     try:
-        ret = path + '/' if path[-1] != '/' else path
+        ret = '%s/' % path if path[-1] != '/' else path
         ret += subpath
-        ret = ret + '/' if ret[-1] != '/' and not isfile else ret
+        ret = '%s/' % ret if ret[-1] != '/' \
+                           and not isfile else ret
         return ret
     except:
         raise
@@ -174,7 +180,8 @@ def ask_path(info, code_quit='q', assert_exist=False):
             return None
 
         path = assert_path_format(answer)
-        if assert_exist and not if_exists(path):
+        if assert_exist \
+                and not if_exists(path):
             info = 'Path not found. Pardon?'
         else:
             return path
@@ -183,7 +190,7 @@ def ask_path(info, code_quit='q', assert_exist=False):
     return ask_path(info, code_quit=code_quit, assert_exist=assert_exist)
 
 
-def dump_to_file(path, what):
+def dump_to_file(what, path):
     try:
         PROTOCOL_ASCII = 0
         PROTOCOL_BINARY = 2
@@ -233,7 +240,7 @@ def test():
         logger.register('pickle')
         logger.log('content used for pickling test', name='pickle')
         filename = format_path(logger.log_path, 'logger.pkl')
-        dump_to_file(filename, logger)
+        dump_to_file(logger, filename)
         logger_loaded = load_from_file(filename)
 
     try:
@@ -251,7 +258,8 @@ class Logger:
         self.root_path = path if path is not None else config['path_log']
         if not if_exists(self.root_path):
             create_path(self.root_path)
-        if not(self.root_path[-1] == '/' or self.root_path[-1] == '\\'):
+        if not(self.root_path[-1] == '/'
+               or self.root_path[-1] == '\\'):
             self.root_path += '/'
         self.root_path = self.root_path.replace('\\', '/')
         self.log_path = self.root_path
@@ -265,7 +273,7 @@ class Logger:
         self.logs = {}
 
         if self.identifier is not None:
-            self.log_path = self.log_path + '.' + self.identifier + '/'
+            self.log_path = '%s.%s/' % (self.log_path, self.identifier)
             create_path(self.log_path)
             hide_path(self.log_path)
 
@@ -293,7 +301,7 @@ class Logger:
                     content += [(tag, [])]
                 self.logs[name] = content
 
-                filepath = self.log_path + name + '.log'
+                filepath = '%s%s.log' % (self.log_path, name)
                 pfile = open(filepath, 'a')
                 hastag = False
                 for tag in tags:
@@ -323,11 +331,12 @@ class Logger:
             if name is None:
                 name = self.filename_console
             if name not in self.logs:
-                raise ValueError("log @ Logger: Cannot find '%s' in log registry. "
+                raise ValueError("log @ Logger: "
+                                 "Cannot find '%s' in log registry. "
                                  "Must `register` first." % name)
             else:
                 registry = self.logs[name]
-            path = self.log_path + name + '.log'
+            path = '%s%s.log' % (self.log_path, name)
             pfile = open(path, 'a')
 
             if isinstance(content, dict):
@@ -344,7 +353,8 @@ class Logger:
                     else:
                         rows += ['-']
                 if len(dict_content) > 0:
-                    raise ValueError("log @ Logger: Cannot find tag %s in log registry. " % dict_content.keys())
+                    raise ValueError("log @ Logger: "
+                                     "Cannot find tag %s in log registry. " % dict_content.keys())
 
                 for column in registry:
                     pfile.write('%s\t' % column[1][-1])
@@ -355,8 +365,10 @@ class Logger:
                 tag0 = column0[0]
                 rows0 = column0[1]
 
-                if len(registry) > 1 or tag0 != '':
-                    raise ValueError("log @ Logger: A tag among %s is requested. " % [column[0] for column in registry])
+                if len(registry) > 1 \
+                        or tag0 != '':
+                    raise ValueError("log @ Logger: "
+                                     "A tag among %s is requested. " % [column[0] for column in registry])
 
                 rows0 += [content]
                 pfile.write(content)
