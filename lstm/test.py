@@ -2,9 +2,6 @@
 
 import config
 
-if __debug__:
-    config.update_config(key='debug')
-
 import utils
 import filer
 import sampler

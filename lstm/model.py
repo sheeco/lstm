@@ -22,11 +22,9 @@ __all__ = [
 
 
 class SharedLSTM:
-    def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=config['dimension_embed_layer'],
-                 dimension_hidden_layer=config['dimension_hidden_layer'], grad_clip=config['grad_clip'],
-                 num_epoch=config['num_epoch'],
-                 learning_rate_rmsprop=config['learning_rate_rmsprop'], rho_rmsprop=config['rho_rmsprop'],
-                 epsilon_rmsprop=config['epsilon_rmsprop'], logger=None):
+    def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=None,
+                 dimension_hidden_layer=None, grad_clip=None, num_epoch=None, learning_rate_rmsprop=None,
+                 rho_rmsprop=None, epsilon_rmsprop=None, logger=None):
         try:
             if sampler is None:
                 sampler = Sampler()
@@ -43,8 +41,8 @@ class SharedLSTM:
             self.length_sequence_input = self.sampler.length_sequence_input
             self.length_sequence_output = self.sampler.length_sequence_output
             self.size_batch = self.sampler.size_batch
-            self.dimension_embed_layer = dimension_embed_layer
-
+            self.dimension_embed_layer = dimension_embed_layer if dimension_embed_layer is not None else config['dimension_embed_layer']
+            dimension_hidden_layer = dimension_hidden_layer if dimension_hidden_layer is not None else config['dimension_hidden_layer']
             utils.assert_type(dimension_hidden_layer, tuple)
             all(utils.assert_type(x, int) for x in dimension_hidden_layer)
 
@@ -56,12 +54,12 @@ class SharedLSTM:
                 raise ValueError("__init__ @ SharedLSTM: Expect len: 1~2 while getting %d instead.",
                                  len(dimension_hidden_layer))
             self.dimension_hidden_layers = dimension_hidden_layer
-            self.grad_clip = grad_clip
-            self.num_epoch = num_epoch
+            self.grad_clip = grad_clip if grad_clip is not None else config['grad_clip']
+            self.num_epoch = num_epoch if num_epoch is not None else config['num_epoch']
 
-            self.learning_rate_rmsprop = learning_rate_rmsprop
-            self.rho_rmsprop = rho_rmsprop
-            self.epsilon_rmsprop = epsilon_rmsprop
+            self.learning_rate_rmsprop = learning_rate_rmsprop if learning_rate_rmsprop is not None else config['learning_rate_rmsprop']
+            self.rho_rmsprop = rho_rmsprop if rho_rmsprop is not None else config['rho_rmsprop']
+            self.epsilon_rmsprop = epsilon_rmsprop if epsilon_rmsprop is not None else config['epsilon_rmsprop']
 
             if inputs is None:
                 inputs = T.tensor4("input_var", dtype='float32')
@@ -621,7 +619,7 @@ class SharedLSTM:
 
         return self.check_embed, self.checks_hid, self.check_outputs, self.check_params, self.check_probs
 
-    def train(self, log_slot=config['log_slot']):
+    def train(self, log_slot=None):
         """
 
         :param log_slot: Print loss & deviations every `log_slot` * batches.
@@ -637,6 +635,8 @@ class SharedLSTM:
             raise RuntimeError("train @ SharedLSTM: Must compute the deviation first.")
         if any(func is None for func in [self.func_predict, self.func_compare, self.func_train]):
             raise RuntimeError("train @ SharedLSTM: Must compile the functions first.")
+
+        log_slot = log_slot if log_slot is not None else config['log_slot']
 
         utils.xprint('Training ...', newline=True, logger=self.logger)
         timer = utils.Timer()
@@ -843,6 +843,8 @@ After:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
                 theano.config.optimizer = 'fast_compile'
+
+                update_config(key='debug')
 
             num_node = config['num_node'] if 'num_node' in config else None
 

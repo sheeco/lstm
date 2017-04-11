@@ -247,9 +247,9 @@ def test():
 
 class Logger:
 
-    def __init__(self, path=config['path_log'], identifier=None):
-        self.root_path = path
-        if not if_exists(path):
+    def __init__(self, path=None, identifier=None):
+        self.root_path = path if path is not None else config['path_log']
+        if not if_exists(self.root_path):
             create_path(self.root_path)
         if not(self.root_path[-1] == '/' or self.root_path[-1] == '\\'):
             self.root_path += '/'

@@ -21,12 +21,12 @@ class GridSystem:
 
 class Sampler:
 
-    def __init__(self, path=config['path_trace'], nodes=None, length=None, dimension_sample=config['dimension_sample'], length_sequence_input=config['length_sequence_input'],
-                 length_sequence_output=config['length_sequence_output'], size_batch=config['size_batch'], strict_batch_size=config['strict_batch_size'], keep_positive=True):
+    def __init__(self, path=None, nodes=None, length=None, dimension_sample=None, length_sequence_input=None,
+                 length_sequence_output=None, size_batch=None, strict_batch_size=None, keep_positive=True):
 
         try:
-            self.path = path
-            dict_traces = Sampler.__read_traces_from_path__(path)
+            self.path = path if path is not None else config['path_trace']
+            dict_traces = Sampler.__read_traces_from_path__(self.path)
             dict_traces = Sampler.__filter__(dict_traces, nodes)
             self.node_identifiers = dict_traces.keys()
             self.node_filter = nodes
@@ -36,13 +36,13 @@ class Sampler:
             self.grid_system = None
             self.entry = 0
 
-            self.dimension_sample = dimension_sample
-            self.length_sequence_input = length_sequence_input
-            self.length_sequence_output = length_sequence_output
+            self.dimension_sample = dimension_sample if dimension_sample is not None else config['dimension_sample']
+            self.length_sequence_input = length_sequence_input if length_sequence_input is not None else config['length_sequence_input']
+            self.length_sequence_output = length_sequence_output if length_sequence_output is not None else config['length_sequence_output']
             # inputs without targets will de discarded
             self.length = int(self.traces.shape[1]) - self.length_sequence_output
-            self.size_batch = size_batch
-            self.strict_batch_size = strict_batch_size
+            self.size_batch = size_batch if size_batch is not None else config['size_batch']
+            self.strict_batch_size = strict_batch_size if strict_batch_size is not None else config['strict_batch_size']
             if keep_positive:
                 self.pan_to_positive()
 
@@ -228,9 +228,11 @@ class Sampler:
         self.traces = traces
         return self.traces
 
-    def map_to_grid(self, grid_system=GridSystem(config['grain_grid'])):
+    def map_to_grid(self, grid_system=None):
 
         traces = self.traces
+        if grid_system is None:
+            grid_system = GridSystem(config['grain_grid'])
         if grid_system.base_xy is None:
             grid_system.base_xy = numpy.floor_divide(self.motion_range[0, :], grid_system.grain) * grid_system.grain
         for trace in traces:

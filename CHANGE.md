@@ -206,14 +206,19 @@
 
 ###### [2017-04-11](f74c025ed4c8441ddd49845d47d4c67fad096e6a)
 
-- FIX: A major bug in `SharedLSTM.test()` & some other minor bugs;
+- FIX: Major bugs with sampler & some other minor bugs;
 
-###### 2017-04-11
+###### [2017-04-11](d63fe3e0c9ba1bbc5e351b5504059bd4e1a3caa8)
 
 - RFCT: Seperate decoding, computing of loss & deviations from compiling function;
 
+###### 2017-04-11
 
-- [ ] FIX: Pass `config` into class initializers;
+- OPT: Remove all the references of `config.configuration` in default value definition of method arguments, 
+  to enable config modification to work properly;
+
+
+- [ ] RFCT: Enable non-shared LSTM;
 - [ ] RFCT: Extract weight & bias initializers;
 - [ ] ADD: Pre-training;
 - [ ] ADD: Use `pprint` to improve printing;
