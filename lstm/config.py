@@ -87,10 +87,10 @@ config_pool = {
             # Batch Size
             'size_batch': 10,
             # Number of epochs to train the net
-            'num_epoch': 50,
+            'num_epoch': 300,
             # Optimization learning rate
             'learning_rate_rmsprop': .003,
-            'rho_rmsprop': .95,
+            'rho_rmsprop': .9,
             'epsilon_rmsprop': 1e-8,
             # All gradients above this will be clipped
             'grad_clip': 0
@@ -102,9 +102,7 @@ def _get_config_from_pool_(key='default'):
     try:
         if key not in config_pool:
             available_keys = config_pool.keys()
-            raise ValueError("get_config_from_pool @ config: "
-                             "Invalid key '%s'. Must choose from %s."
-                             % (key, available_keys))
+            raise ValueError("Invalid key '%s'. Must choose from %s." % (key, available_keys))
 
         return config_pool[key]
 
@@ -124,8 +122,7 @@ def update_config(key=None, config=None):
             if isinstance(config, dict):
                 global_configuration.update(config)
             else:
-                raise ValueError("update_config @ config: "
-                                 "Expect <dict> while getting %s instead." % type(config))
+                raise ValueError("Expect <dict> while getting %s instead." % type(config))
     except:
         raise
 

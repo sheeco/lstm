@@ -55,15 +55,12 @@ def parse_command_line_args():
                             xprint("Add configuration '%s' to be %s." % (key, value), newline=True)
                     update_config(config=argv)
                 else:
-                    raise ValueError("parse_command_line_args @ utils:"
-                                     "The configuration must be a dictionary.")
+                    raise ValueError("The configuration must be a dictionary.")
             else:
-                raise ValueError("parse_command_line_args @ utils:"
-                                 "Unknown option '%s'." % opt)
+                raise ValueError("Unknown option '%s'." % opt)
 
         if len(unknowns) > 0:
-            raise ValueError("parse_command_line_args @ utils:"
-                             "Unknown option(s) %s." % unknowns)
+            raise ValueError("Unknown option(s) %s." % unknowns)
 
     except:
         raise
@@ -96,7 +93,7 @@ def warn(info):
 
 def handle(exception, logger=None):
     xprint('\n\n')
-    xprint(exception.message, newline=True)
+    xprint('%s\n' % exception.message, newline=True)
     xprint(traceback.format_exc(), newline=True)
     if logger is not None:
         logger.register("exception")
@@ -112,8 +109,7 @@ def assert_type(var, assertion, raising=True):
         fine = isinstance(var, assertion)
     if raising \
             and not fine:
-        raise ValueError("assert_type @ utils: "
-                         "Expect %s while getting %s instead." % (assertion, type(var)))
+        raise ValueError("Expect %s while getting %s instead." % (assertion, type(var)))
     return fine
 
 
@@ -121,15 +117,13 @@ def assert_finite(var, name):
     if not isinstance(var, list):
         var = [var]
     if any((not numpy.isfinite(ivar).all()) for ivar in var):
-        raise AssertionError("assert_finite @ utils: "
-                             "`%s` contains 'nan' or 'inf'." % name)
+        raise AssertionError("`%s` contains 'nan' or 'inf'." % name)
     else:
         return True
 
 
 def assert_unreachable():
-    raise RuntimeError("assert_unreachable @ utils: "
-                       "Unexpected access of this block.")
+    raise RuntimeError("Unexpected access of this block.")
 
 
 def confirm(info):

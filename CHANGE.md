@@ -221,9 +221,13 @@
 
 - RFCT: Some code style improvements according to [PEP8](https://www.python.org/dev/peps/pep-0008/#id36);
 
-###### 2017-04-12
+###### [2017-04-12](01271b55e4847273a4805746882dc4820584d5db)
 
 - ADD: Enable command line configurations, e.g. `test --config "{'num_node': 1, 'comment': 'something'}"`;
+
+###### 2017-04-12
+
+- FIX: Major bugs with sampler. & Some other minor bugs & opts;
 
 
 - [ ] RFCT: Enable non-shared LSTM;

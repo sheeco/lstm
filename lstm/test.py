@@ -23,6 +23,6 @@ if __name__ == '__main__':
         model.SharedLSTM.test()
 
     except KeyboardInterrupt, e:
-        exit()
+        exit(0)
     except Exception, e:
         utils.handle(e)

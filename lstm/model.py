@@ -54,8 +54,7 @@ class SharedLSTM:
             elif len(dimension_hidden_layer) == 2:
                 pass
             else:
-                raise ValueError("__init__ @ SharedLSTM: "
-                                 "Expect len: 1~2 while getting %d instead.",
+                raise ValueError("Expect len: 1~2 while getting %d instead.",
                                  len(dimension_hidden_layer))
             self.dimension_hidden_layers = dimension_hidden_layer
             self.grad_clip = grad_clip if grad_clip is not None else config['grad_clip']
@@ -421,8 +420,7 @@ class SharedLSTM:
         """
         try:
             if self.outputs is None:
-                raise RuntimeError("build_decoder @ SharedLSTM: "
-                                   "Must build the network first.")
+                raise RuntimeError("Must build the network first.")
 
             timer = utils.Timer()
             utils.xprint('Decoding ...', logger=self.logger)
@@ -445,11 +443,9 @@ class SharedLSTM:
         """
         try:
             if self.outputs is None:
-                raise RuntimeError("compute_loss @ SharedLSTM: "
-                                   "Must build the network first.")
+                raise RuntimeError("Must build the network first.")
             if self.predictions is None:
-                raise RuntimeError("compute_loss @ SharedLSTM: "
-                                   "Must build the decoder first.")
+                raise RuntimeError("Must build the decoder first.")
 
             timer = utils.Timer()
             utils.xprint('Computing loss ...', logger=self.logger)
@@ -535,11 +531,9 @@ class SharedLSTM:
         """
         try:
             if self.outputs is None:
-                raise RuntimeError("compute_deviation @ SharedLSTM: "
-                                   "Must build the network first.")
+                raise RuntimeError("Must build the network first.")
             if self.predictions is None:
-                raise RuntimeError("compute_deviation @ SharedLSTM: "
-                                   "Must build the decoder first.")
+                raise RuntimeError("Must build the decoder first.")
 
             timer = utils.Timer()
             utils.xprint('Building observer ...', logger=self.logger)
@@ -569,17 +563,13 @@ class SharedLSTM:
         """
         try:
             if self.outputs is None:
-                raise RuntimeError("compile @ SharedLSTM: "
-                                   "Must build the network first.")
+                raise RuntimeError("Must build the network first.")
             if self.predictions is None:
-                raise RuntimeError("compile @ SharedLSTM: "
-                                   "Must build the decoder first.")
+                raise RuntimeError("Must build the decoder first.")
             if self.loss is None:
-                raise RuntimeError("compile @ SharedLSTM: "
-                                   "Must compute the loss first.")
+                raise RuntimeError("Must compute the loss first.")
             if self.deviations is None:
-                raise RuntimeError("compile @ SharedLSTM: "
-                                   "Must compute the deviation first.")
+                raise RuntimeError("Must compute the deviation first.")
 
             timer = utils.Timer()
             utils.xprint('Compiling functions ...', logger=self.logger)
@@ -634,20 +624,15 @@ class SharedLSTM:
         :return: Two <ndarray> containing average loss & deviation of each epoch.
         """
         if self.outputs is None:
-            raise RuntimeError("train @ SharedLSTM: "
-                               "Must build the network first.")
+            raise RuntimeError("Must build the network first.")
         if self.predictions is None:
-            raise RuntimeError("train @ SharedLSTM: "
-                               "Must build the decoder first.")
+            raise RuntimeError("Must build the decoder first.")
         if self.loss is None:
-            raise RuntimeError("train @ SharedLSTM: "
-                               "Must compute the loss first.")
+            raise RuntimeError("Must compute the loss first.")
         if self.deviations is None:
-            raise RuntimeError("train @ SharedLSTM: "
-                               "Must compute the deviation first.")
+            raise RuntimeError("Must compute the deviation first.")
         if any(func is None for func in [self.func_predict, self.func_compare, self.func_train]):
-            raise RuntimeError("train @ SharedLSTM: "
-                               "Must compile the functions first.")
+            raise RuntimeError("Must compile the functions first.")
 
         log_slot = log_slot if log_slot is not None else config['log_slot']
 
@@ -675,8 +660,7 @@ class SharedLSTM:
                     instants, inputs, targets = self.sampler.load_batch(with_target=True)
                     if inputs is None:
                         if ibatch == 0:
-                            raise RuntimeError("train @ SharedLSTM: "
-                                               "Have only %d sample pairs, "
+                            raise RuntimeError("Have only %d sample pairs, "
                                                "not enough for one single batch of size %d."
                                                % (self.sampler.length, self.size_batch))
 
@@ -793,8 +777,7 @@ After:
 
             timer = utils.Timer()
             if self.params_all is None:
-                raise RuntimeError("export_params @ SharedLSTM: "
-                                   "Must build the network first.")
+                raise RuntimeError("Must build the network first.")
 
             if path is None:
                 path = filer.format_path(self.logger.log_path, FILENAME_EXPORT)
@@ -818,8 +801,7 @@ After:
     def import_params(self, path=None):
         try:
             if self.params_all is None:
-                raise RuntimeError("import_params @ SharedLSTM: "
-                                   "Must build the network first.")
+                raise RuntimeError("Must build the network first.")
 
             if path is None:
                 path = filer.ask_path('Import from file path', assert_exist=True)
@@ -850,6 +832,7 @@ After:
 
         timestamp = utils.get_timestamp()
         sub_logger = filer.Logger(identifier=timestamp)
+        sub_logger.log_config()
         sub_logger.register_console()
 
         try:
@@ -899,7 +882,6 @@ After:
 
             # test_importing()
 
-            sub_logger.log_config()
             root_logger.log({"timestamp": timestamp,
                              "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
                              "deviation-by-epoch": '%s\n' % utils.format_var(deviations, detail=True)},
@@ -908,4 +890,4 @@ After:
 
         except Exception, e:
             utils.handle(e, logger=sub_logger)
-            raise
+            exit(-1)

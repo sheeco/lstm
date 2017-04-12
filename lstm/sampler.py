@@ -27,6 +27,7 @@ class Sampler:
 
         try:
             self.path = path if path is not None else config['path_trace']
+            self.path = filer.assert_path_format(self.path)
             dict_traces = Sampler._read_traces_from_path_(self.path)
             dict_traces = Sampler._filter_(dict_traces, nodes)
             self.node_identifiers = dict_traces.keys()
@@ -93,8 +94,7 @@ class Sampler:
         dict_traces = {}
 
         if not filer.if_exists(path):
-            raise IOError("read_traces_from_path @ sample: "
-                          "Invalid path '%s'" % path)
+            raise IOError("Invalid path '%s'" % path)
         else:
             try:
                 list_subdir = filer.list_directory(path)
@@ -125,12 +125,10 @@ class Sampler:
                 if 0 < node_filter < len(dict_traces):
                     nodes_requested = dict_traces.keys()[:node_filter]
                 elif node_filter < 0:
-                    raise ValueError("_filter_ @ Sampler: "
-                                     "Expect a positive integer for `node_filter`, "
+                    raise ValueError("Expect a positive integer for `node_filter`, "
                                      "while getting %d instead." % node_filter)
                 elif node_filter > len(dict_traces):
-                    raise ValueError("_filter_ @ Sampler: "
-                                     "%d nodes are expected, "
+                    raise ValueError("%d nodes are expected, "
                                      "while only %d nodes in the given path are available."
                                      % (node_filter, len(dict_traces)))
                 return dict_traces
@@ -188,8 +186,7 @@ class Sampler:
                 return None
             if ifrom < 0 \
                     or ito >= a.length:
-                raise ValueError("clip @ SharedLSTM: "
-                                 "Invalid indices (%d, %d). "
+                raise ValueError("Invalid indices (%d, %d). "
                                  "Index must be within [0, %d)."
                                  % (ifrom, ito, a.length))
 
@@ -286,8 +283,6 @@ class Sampler:
             # 如果超出采样数，返回 None, None, None
             if end_line_input > self.length:
                 return None, None, None
-            else:
-                self.entry = end_line_input
 
             sequences_instants = instants[begin_line_input: end_line_input]
             sequences_input = array_traces[:, begin_line_input: end_line_input, :]
@@ -318,6 +313,7 @@ class Sampler:
             for i in range(size_batch):
                 sample_instants, sample_input, sample_target = self._load_sample_(with_target)
                 if sample_input is not None:
+                    self.entry += 1
                     shape_in = sample_input.shape
 
                     batch_instants = numpy.resize(batch_instants, (i + 1, shape_in[1]))

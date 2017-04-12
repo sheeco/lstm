@@ -41,11 +41,9 @@ def assert_exists(path, assertion=True, raising=True):
     if not if_exists(path) is assertion:
         if raising:
             if assertion is True:
-                raise IOError("assert_exists @ file: "
-                              "'%s' does not exists." % path)
+                raise IOError("'%s' does not exists." % path)
             else:
-                raise IOError("assert_exists @ file: "
-                              "'%s' already exists." % path)
+                raise IOError("'%s' already exists." % path)
         else:
             if assertion is True:
                 warn("assert_exists @ file: "
@@ -331,8 +329,7 @@ class Logger:
             if name is None:
                 name = self.filename_console
             if name not in self.logs:
-                raise ValueError("log @ Logger: "
-                                 "Cannot find '%s' in log registry. "
+                raise ValueError("Cannot find '%s' in log registry. "
                                  "Must `register` first." % name)
             else:
                 registry = self.logs[name]
@@ -353,8 +350,7 @@ class Logger:
                     else:
                         rows += ['-']
                 if len(dict_content) > 0:
-                    raise ValueError("log @ Logger: "
-                                     "Cannot find tag %s in log registry. " % dict_content.keys())
+                    raise ValueError("Cannot find tag %s in log registry. " % dict_content.keys())
 
                 for column in registry:
                     pfile.write('%s\t' % column[1][-1])
@@ -367,8 +363,7 @@ class Logger:
 
                 if len(registry) > 1 \
                         or tag0 != '':
-                    raise ValueError("log @ Logger: "
-                                     "A tag among %s is requested. " % [column[0] for column in registry])
+                    raise ValueError("A tag among %s is requested. " % [column[0] for column in registry])
 
                 rows0 += [content]
                 pfile.write(content)
