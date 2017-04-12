@@ -831,7 +831,8 @@ After:
     def test():
 
         timestamp = utils.get_timestamp()
-        sub_logger = filer.Logger(identifier=timestamp)
+        identifier = '[%s]%s' % (config['tag'], timestamp) if 'tag' in config else timestamp
+        sub_logger = filer.Logger(identifier=identifier)
         sub_logger.log_config()
         sub_logger.register_console()
 
@@ -882,7 +883,7 @@ After:
 
             # test_importing()
 
-            root_logger.log({"timestamp": timestamp,
+            root_logger.log({"identifier": identifier,
                              "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
                              "deviation-by-epoch": '%s\n' % utils.format_var(deviations, detail=True)},
                             name="loss")

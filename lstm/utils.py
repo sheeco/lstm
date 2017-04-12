@@ -32,13 +32,17 @@ __all__ = [
 ]
 
 
-def parse_command_line_args():
+def parse_command_line_args(args=None):
+    """
+    e.g. test.py [-c | --config <dict-config>] [-t | --tag <tag-for-logging>]
+    :return:
+    """
     try:
-        args = sys.argv[1:]
+        args = sys.argv[1:] if args is None else args
 
         # shortopts: "ha:i" means opt '-h' & '-i' don't take arg, '-a' does take arg
         # longopts: ["--help", "--add="] means opt '--add' does take arg
-        opts, unknowns = getopt.getopt(args, "g:", longopts=["config="])
+        opts, unknowns = getopt.getopt(args, "c:t:", longopts=["config=", "tag="])
         for opt, argv in opts:
             if argv != '':
                 try:
@@ -46,7 +50,7 @@ def parse_command_line_args():
                 except:
                     pass
 
-            if opt in ("-g", "--config"):
+            if opt in ("-c", "--config"):
                 if isinstance(argv, dict):
                     for key, value in argv.items():
                         if key in config:
@@ -56,6 +60,12 @@ def parse_command_line_args():
                     update_config(config=argv)
                 else:
                     raise ValueError("The configuration must be a dictionary.")
+            elif opt in ("-t", "--tag"):
+                key = 'tag'
+                if key in config:
+                    xprint("Update tag from '%s' to '%s'." % (config[key], argv), newline=True)
+                else:
+                    xprint("Set tag to be '%s'." % argv, newline=True)
             else:
                 raise ValueError("Unknown option '%s'." % opt)
 
@@ -267,6 +277,9 @@ def test():
 
     def test_args():
         parse_command_line_args()
+        parse_command_line_args(args=[])
+        args = ["-c", "{'num_node': 9, 'tag': 'x'}", "-t", "xxx"]
+        parse_command_line_args(args=args)
 
     # test_warn()
     test_args()
