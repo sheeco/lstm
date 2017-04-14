@@ -1,5 +1,6 @@
 # coding:utf-8
 
+import time
 import numpy
 
 import theano
@@ -12,7 +13,6 @@ from config import update_config
 import utils
 import filer
 from sampler import Sampler
-
 
 __all__ = [
     'SharedLSTM'
@@ -407,7 +407,7 @@ class SharedLSTM:
             if params is not None:
                 self.set_params(params)
 
-            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
             return self.outputs, self.params_all
 
         except:
@@ -429,7 +429,7 @@ class SharedLSTM:
             predictions = self.outputs[:, :, :, 0:2]
 
             self.predictions = predictions
-            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
             return self.predictions
 
         except:
@@ -517,7 +517,7 @@ class SharedLSTM:
 
             self.probabilities = probs
             self.loss = loss
-            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
             return self.loss
 
         except:
@@ -551,7 +551,7 @@ class SharedLSTM:
             deviations = T.reshape(deviations, shape_deviations)
 
             self.deviations = deviations
-            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
             return self.deviations
         except:
             raise
@@ -607,7 +607,7 @@ class SharedLSTM:
             self.check_probs = theano.function([self.inputs, self.targets], self.probabilities,
                                                allow_input_downcast=True)
 
-            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
             return self.func_predict, self.func_compare, self.func_train
 
         except:
@@ -643,6 +643,8 @@ class SharedLSTM:
         deviation_epoch = numpy.zeros((0,))
         params = None
         str_params = None
+        stop = False  # Whether to stop and exit
+        completed = None  # Whether a batch has got proceeded completely
         # for iepoch in range(self.num_epoch):
         iepoch = 0
         while True:
@@ -656,8 +658,13 @@ class SharedLSTM:
             while True:
                 try:
 
-                    # retrieve 1 batch for each node
-                    instants, inputs, targets = self.sampler.load_batch(with_target=True)
+                    # retrieve the next batch for nodes
+                    # only if the previous batch is completed
+                    # else, redo the previous batch
+                    if completed is None \
+                            or completed:
+                        completed = False
+                        instants, inputs, targets = self.sampler.load_batch(with_target=True)
                     if inputs is None:
                         if ibatch == 0:
                             raise RuntimeError("Have only %d sample pairs, "
@@ -665,6 +672,7 @@ class SharedLSTM:
                                                % (self.sampler.length, self.size_batch))
 
                         self.sampler.reset_entry()
+                        completed = None
                         break
 
                     def format_netflow():
@@ -701,11 +709,14 @@ class SharedLSTM:
                     else:
                         pass
 
-
                     # prediction = self.func_predict(inputs)
                     deviations = self.func_compare(inputs, targets)
 
                     loss = self.func_train(inputs, targets)
+
+                    # consider successful if training is done
+                    completed = True
+
                     params = self.check_params()
                     str_params = utils.format_var(params, self.param_names)
                     try:
@@ -726,24 +737,33 @@ After:
                     else:
                         pass
 
-                    loss_batch = numpy.append(loss_batch, loss)
-                    deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
-
-                    self.logger.log({'epoch': iepoch, 'batch': ibatch,
-                                     'loss': utils.format_var(float(loss)), 'deviations': utils.format_var(deviations)},
-                                    name="training")
-
-                    if divmod(ibatch, log_slot)[1] == 0:
-                        # utils.xprint('    Batch %d ...' % ibatch, level=1, logger=self.logger)
-                        utils.xprint('%s; %s'
-                                     % (utils.format_var(float(loss), name='loss'),
-                                        utils.format_var(deviations, name='deviations')),
-                                     level=1, newline=True, logger=self.logger)
-
-                    ibatch += 1
-
                 except KeyboardInterrupt, e:
-                    raise
+                    print ''
+                    stop = utils.confirm("Stop and exit?")
+                    if stop:
+                        self.num_epoch = iepoch + 1
+                        update_config(config={'num_epoch': self.num_epoch})
+                        break
+                    else:
+                        continue
+
+                finally:
+                    if completed:
+                        loss_batch = numpy.append(loss_batch, loss)
+                        deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
+
+                        self.logger.log({'epoch': iepoch, 'batch': ibatch,
+                                         'loss': utils.format_var(float(loss)), 'deviations': utils.format_var(deviations)},
+                                        name="training")
+
+                        if divmod(ibatch, log_slot)[1] == 0:
+                            # utils.xprint('    Batch %d ...' % ibatch, level=1, logger=self.logger)
+                            utils.xprint('%s; %s'
+                                         % (utils.format_var(float(loss), name='loss'),
+                                            utils.format_var(deviations, name='deviations')),
+                                         level=1, newline=True, logger=self.logger)
+
+                        ibatch += 1
 
             if divmod(ibatch, log_slot)[1] != 0:
                 utils.xprint('    Batch %d ...' % ibatch, level=1, logger=self.logger)
@@ -756,19 +776,24 @@ After:
             deviation_epoch = numpy.append(deviation_epoch, numpy.mean(deviation_batch))
 
             iepoch += 1
-            if iepoch >= self.num_epoch:
+
+            if stop:
+                break
+
+            elif iepoch >= self.num_epoch:
                 more = utils.confirm("Try more epochs?")
                 if more:
                     num_more = utils.ask_int("How many?")
                     if num_more is not None \
                             and num_more > 0:
                         self.num_epoch += num_more
+                        update_config(config={'num_epoch': self.num_epoch})
                     else:
                         break
                 else:
                     break
 
-        utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+        utils.xprint('Done in %s.' % timer.stop(), newline=True, logger=self.logger)
         return loss_epoch, deviation_epoch
 
     def export_params(self, path=None):
@@ -792,7 +817,7 @@ After:
 
             filer.dump_to_file(params_all, path)
 
-            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
             return path
 
         except:
@@ -819,7 +844,7 @@ After:
             timer = utils.Timer()
             utils.xprint('Importing given parameters ...', logger=self.logger)
             L.layers.set_all_param_values(self.network, params)
-            utils.xprint('Done in %s' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
 
         except:
             raise
@@ -833,7 +858,6 @@ After:
         timestamp = utils.get_timestamp()
         identifier = '[%s]%s' % (config['tag'], timestamp) if 'tag' in config else timestamp
         sub_logger = filer.Logger(identifier=identifier)
-        sub_logger.log_config()
         sub_logger.register_console()
 
         try:
@@ -883,6 +907,7 @@ After:
 
             # test_importing()
 
+            sub_logger.log_config()
             root_logger.log({"identifier": identifier,
                              "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
                              "deviation-by-epoch": '%s\n' % utils.format_var(deviations, detail=True)},
@@ -891,4 +916,3 @@ After:
 
         except Exception, e:
             utils.handle(e, logger=sub_logger)
-            exit(-1)

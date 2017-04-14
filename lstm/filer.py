@@ -271,7 +271,8 @@ class Logger:
         self.logs = {}
 
         if self.identifier is not None:
-            self.log_path = '%s.%s/' % (self.log_path, self.identifier)
+            # self.log_path = '%s.%s/' % (self.log_path, self.identifier)
+            self.log_path = '%s%s/' % (self.log_path, self.identifier)
             create_path(self.log_path)
             hide_path(self.log_path)
 
@@ -384,9 +385,9 @@ class Logger:
             directory, filename = split_path(self.log_path)
             if filename[0] == '.':
                 filename = filename[1:]
-            complete_path = directory + filename
-            rename_path(self.log_path, complete_path)
-            self.log_path = complete_path
+                complete_path = directory + filename
+                rename_path(self.log_path, complete_path)
+                self.log_path = complete_path
             unhide_path(self.log_path)
 
         except:

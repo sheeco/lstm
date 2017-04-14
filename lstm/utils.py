@@ -54,9 +54,9 @@ def parse_command_line_args(args=None):
                 if isinstance(argv, dict):
                     for key, value in argv.items():
                         if key in config:
-                            xprint("Update configuration '%s' from %s to %s." % (key, config[key], value), newline=True)
+                            xprint("Update configuration '%s' from %s to %s (from command line)." % (key, config[key], value), newline=True)
                         else:
-                            xprint("Add configuration '%s' to be %s." % (key, value), newline=True)
+                            xprint("Add configuration '%s' to be %s (from command line)." % (key, value), newline=True)
                     update_config(config=argv)
                 else:
                     raise ValueError("The configuration must be a dictionary.")
@@ -109,6 +109,8 @@ def handle(exception, logger=None):
         logger.register("exception")
         logger.log('%s\n\n' % exception.message, name="exception")
         logger.log('%s\n' % traceback.format_exc(), name="exception")
+
+    exit(exception.message)
 
 
 def assert_type(var, assertion, raising=True):
@@ -281,5 +283,42 @@ def test():
         args = ["-c", "{'num_node': 9, 'tag': 'x'}", "-t", "xxx"]
         parse_command_line_args(args=args)
 
+    def test_exception():
+
+        # import thread
+        # import win32api
+        #
+        # # Load the DLL manually to ensure its handler gets
+        # # set before our handler.
+        # # basepath = imp.find_module('numpy')[1]
+        # # ctypes.CDLL(os.path.join(basepath, 'core', 'libmmd.dll'))
+        # # ctypes.CDLL(os.path.join(basepath, 'core', 'libifcoremd.dll'))
+        #
+        # # Now set our handler for CTRL_C_EVENT. Other control event
+        # # types will chain to the next handler.
+        # def handler(dw_ctrl_type, hook_sigint=thread.interrupt_main):
+        #     if dw_ctrl_type == 0:  # CTRL_C_EVENT
+        #         hook_sigint()
+        #         return 1  # don't chain to the next handler
+        #     return 0  # chain to the next handler
+        #
+        # win32api.SetConsoleCtrlHandler(handler, 1)
+
+        def _test():
+            i = 0
+            while True:
+                try:
+                    print "%d ..." % i
+                    i += 1
+                    time.sleep(1)
+                except KeyboardInterrupt, e:
+                    print "KeyboardInterrupt caught: %s" % e.message
+                    return i
+                finally:
+                    print "finally %d" % i
+
+        print "return %d" % _test()
+
     # test_warn()
-    test_args()
+    # test_args()
+    test_exception()

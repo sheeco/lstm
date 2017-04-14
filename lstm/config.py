@@ -6,7 +6,6 @@ __all__ = [
     "test"
 ]
 
-
 config_pool = {
     'default':
         {
@@ -38,7 +37,7 @@ config_pool = {
             # Length of observed sequence
             'length_sequence_input': 4,
             # Length of predicted sequence
-            'length_sequence_output': 4,
+            'length_sequence_output': 1,
             # Number of units in embedding layer ([x, y] -> e)
             'dimension_embed_layer': 2,
             # Number of units in hidden (LSTM) layers
@@ -62,12 +61,12 @@ config_pool = {
             'rho_rmsprop': .9,
             'epsilon_rmsprop': 1e-8,
             # All gradients above this will be clipped
-            'grad_clip': 100
+            'grad_clip': 0
         },
     'run':
         {
-			# Selected nodes
-			'nodes': ['31', '32'],
+            # Selected nodes
+            'nodes': ['31', '32'],
             # Length of observed sequence
             'length_sequence_input': 10,
             # Length of predicted sequence
@@ -131,8 +130,10 @@ def update_config(key=None, config=None):
 
 if __debug__:
     update_config(key='debug')
+    print "Debugging configuration loaded."
 else:
     update_config(key='run')
+    print "Running configuration loaded."
 
 
 def test():
