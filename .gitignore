@@ -1,9 +1,5 @@
 # Specific files for this project ( trace-predict ) ( Created by Eco on 2016-06-28 )
 
-test_theano.py
-
-test_theano_gpu.py
-
 *.trace
 
 *.train
@@ -11,6 +7,8 @@ test_theano_gpu.py
 *.predict
 
 *.data
+
+*.bat
 
 */log/
 

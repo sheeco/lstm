@@ -229,9 +229,13 @@
 
 - FIX: Major bugs with sampler. & Some other minor bugs & opts;
 
-###### 2017-04-12
+###### [2017-04-12](3b5f2155d341748f9b30174b223714ce478a37c8)
 
 - ADD: Command `-t|--tag <some-tag>`, to tag the log folder e.g. "\[some-tag\]2017-04-12-16-00-00";
+
+###### 2017-04-13
+
+- MOD: Choose node 31 & 32 from dataset NCSU for testing;
 
 
 - [ ] RFCT: Enable non-shared LSTM;

@@ -512,8 +512,8 @@ class SharedLSTM:
 
             # Normal Negative Log-likelihood
             nnls = T.neg(T.log(probs))
-            # loss = T.sum(nnls)
-            loss = T.mean(nnls)
+            loss = T.sum(nnls)
+            # loss = T.mean(nnls)
 
             self.probabilities = probs
             self.loss = loss
@@ -850,9 +850,9 @@ After:
                 theano.config.exception_verbosity = 'high'
                 theano.config.optimizer = 'fast_compile'
 
-            num_node = config['num_node'] if 'num_node' in config else None
+            nodes = config['nodes'] if 'nodes' in config else None
 
-            sampler = Sampler(nodes=num_node, keep_positive=True)
+            sampler = Sampler(nodes=nodes, keep_positive=True)
             half = Sampler.clip(sampler, indices=(sampler.length / 2))
             model = SharedLSTM(sampler=half, motion_range=sampler.motion_range, logger=sub_logger)
 
@@ -865,7 +865,7 @@ After:
             check_e, checks_hid, check_outputs, check_params, check_probs = model.get_checks()
 
             root_logger = filer.Logger()
-            root_logger.register("loss", tags=["timestamp", "loss-by-epoch", "deviation-by-epoch"])
+            root_logger.register("loss", tags=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
             loss, deviations = model.train()
             path_params = model.export_params()

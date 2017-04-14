@@ -11,7 +11,7 @@ config_pool = {
     'default':
         {
             # Path for trace files
-            'path_trace': 'res/trace/',
+            'path_trace': 'res/trace/NCSU/',
             # Path for logs
             'path_log': 'log/',
             # How often should we check the output
@@ -21,8 +21,8 @@ config_pool = {
             # Level of printing detail
             # 0 means mandatory printing only
             'print_level': 3,
-            # How many nodes to learn on
-            'num_node': 1,
+            # # How many nodes to learn on
+            # 'num_node': 3,
             # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
             'dimension_sample': 3,
             # If only a full size batch will be accepted
@@ -66,10 +66,12 @@ config_pool = {
         },
     'run':
         {
+			# Selected nodes
+			'nodes': ['31', '32'],
             # Length of observed sequence
             'length_sequence_input': 10,
             # Length of predicted sequence
-            'length_sequence_output': 10,
+            'length_sequence_output': 1,
             # Number of units in embedding layer ([x, y] -> e)
             'dimension_embed_layer': 64,
             # Number of units in hidden (LSTM) layers
@@ -89,7 +91,7 @@ config_pool = {
             # Number of epochs to train the net
             'num_epoch': 300,
             # Optimization learning rate
-            'learning_rate_rmsprop': .003,
+            'learning_rate_rmsprop': .01,
             'rho_rmsprop': .9,
             'epsilon_rmsprop': 1e-8,
             # All gradients above this will be clipped
