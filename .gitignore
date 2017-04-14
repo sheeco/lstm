@@ -1,22 +1,18 @@
 # Specific files for this project ( trace-predict ) ( Created by Eco on 2016-06-28 )
 
+log/
+
+res/
+
 *.trace
-
-*.train
-
-*.predict
-
-*.data
-
-*.bat
-
-*/log/
 
 .idea/
 
 *.docx
 
 *.lnk
+
+*.bat
 
 
 # Byte-compiled / optimized / DLL files

@@ -233,11 +233,23 @@
 
 - ADD: Command `-t|--tag <some-tag>`, to tag the log folder e.g. "\[some-tag\]2017-04-12-16-00-00";
 
-###### 2017-04-13
+###### [2017-04-13](90213d5973a5d2deefc2c85949b77c6740285c7b)
 
 - MOD: Choose node 31 & 32 from dataset NCSU for testing;
 
+###### [2017-04-15](be6cb6e200abb3962809ec4ac665e0d8bd28d7d6)
 
+- ADD: Enable to stop by `CTRL+C` between batches, and get logged properly;
+
+###### 2017-04-15
+
+- MNT: Remove RNN packages written by YAN Yuan-Chi & jraiman package;
+
+
+- [ ] ADD: Log predictions;
+- [ ] ADD: Enable config params importing from command line args;
+- [ ] TRY: Momentum-RMS;
+- [ ] TRY: Decrease rho in rmsprop;
 - [ ] RFCT: Enable non-shared LSTM;
 - [ ] RFCT: Extract weight & bias initializers;
 - [ ] ADD: Pre-training;

@@ -18,19 +18,11 @@
 
     README.md
     CHANGE.md
-    contineous/
-    |-- ...
-    disperse/
-    |-- ...
-    regression/
-    |-- ...
+    test.py
     lstm/   
-    |-- jraiman_lstm/
-        |-- __init__.py
-        |-- masked_loss.py   
-    |-- utils.py   
+    |-- __init__.py   
     |-- config.py   
+    |-- utils.py   
     |-- filer.py 
     |-- sampler.py 
-    |-- model.py    
-    |-- test.py
+    |-- model.py
