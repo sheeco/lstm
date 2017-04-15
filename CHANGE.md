@@ -241,11 +241,16 @@
 
 - ADD: Enable to stop by `CTRL+C` between batches, and get logged properly;
 
-###### 2017-04-15
+###### [2017-04-15](8f7ae27b2275e8b221b2f82f9c489e5a53fc0591)
 
 - MNT: Remove RNN packages written by YAN Yuan-Chi & jraiman package;
 
+###### 2017-04-15
 
+- FIX: Bugs with pickling;
+
+
+- [ ] ADD: Enable to change learning rate if training failure has occured;
 - [ ] ADD: Log predictions;
 - [ ] ADD: Enable config params importing from command line args;
 - [ ] TRY: Momentum-RMS;

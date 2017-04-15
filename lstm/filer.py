@@ -166,7 +166,10 @@ def copy_file(frompath, topath):
 def read_lines(path):
     assert_exists(path)
     try:
-        return open(path, 'rb').readlines()
+        pfile = open(path, 'r')
+        lines = pfile.readlines()
+        pfile.close()
+        return lines
     except:
         raise
 
@@ -194,8 +197,9 @@ def dump_to_file(what, path):
         PROTOCOL_BINARY = 2
         PROTOCOL_HIGHEST = -1
 
-        pfile = open(path, 'w')
+        pfile = open(path, 'wb')
         cPickle.dump(what, pfile, protocol=PROTOCOL_HIGHEST)
+        pfile.close()
     except:
         raise
 
@@ -203,8 +207,21 @@ def dump_to_file(what, path):
 def load_from_file(path):
     try:
         assert_exists(path)
-        pfile = open(path, 'r')
+        pfile = open(path, 'rb')
+
+        # To fix wrongly pickled files,
+        # which were written thru mode 'w' instead of 'wb', or closed improperly.
+        original = pfile.read()
+        pfile.close()
+        converted = original.replace('\r\n', '\n')
+        pfile = open(path, 'wb')
+        pfile.write(converted)
+        pfile.close()
+        pfile = open(path, 'rb')
+
         what = cPickle.load(pfile)
+        pfile.close()
+
         return what
     except:
         raise
