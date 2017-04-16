@@ -1,6 +1,5 @@
 # coding:utf-8
 
-import time
 import numpy
 
 import theano
@@ -8,10 +7,7 @@ import theano.tensor as T
 from theano.tensor.sharedvar import TensorSharedVariable
 import lasagne as L
 
-from config import global_configuration as config
-from config import update_config
 import utils
-import filer
 from sampler import Sampler
 
 __all__ = [
@@ -25,7 +21,7 @@ __all__ = [
 class SharedLSTM:
     def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=None,
                  dimension_hidden_layer=None, grad_clip=None, num_epoch=None, learning_rate_rmsprop=None,
-                 rho_rmsprop=None, epsilon_rmsprop=None, logger=None):
+                 rho_rmsprop=None, epsilon_rmsprop=None):
         try:
             if sampler is None:
                 sampler = Sampler()
@@ -43,9 +39,9 @@ class SharedLSTM:
             self.length_sequence_output = self.sampler.length_sequence_output
             self.size_batch = self.sampler.size_batch
             self.dimension_embed_layer = dimension_embed_layer \
-                if dimension_embed_layer is not None else config['dimension_embed_layer']
+                if dimension_embed_layer is not None else utils.get_config(key='dimension_embed_layer')
             dimension_hidden_layer = dimension_hidden_layer \
-                if dimension_hidden_layer is not None else config['dimension_hidden_layer']
+                if dimension_hidden_layer is not None else utils.get_config(key='dimension_hidden_layer')
             utils.assert_type(dimension_hidden_layer, tuple)
             all(utils.assert_type(x, int) for x in dimension_hidden_layer)
 
@@ -57,13 +53,13 @@ class SharedLSTM:
                 raise ValueError("Expect len: 1~2 while getting %d instead.",
                                  len(dimension_hidden_layer))
             self.dimension_hidden_layers = dimension_hidden_layer
-            self.grad_clip = grad_clip if grad_clip is not None else config['grad_clip']
-            self.num_epoch = num_epoch if num_epoch is not None else config['num_epoch']
+            self.grad_clip = grad_clip if grad_clip is not None else utils.get_config(key='grad_clip')
+            self.num_epoch = num_epoch if num_epoch is not None else utils.get_config(key='num_epoch')
 
             self.learning_rate_rmsprop = learning_rate_rmsprop \
-                if learning_rate_rmsprop is not None else config['learning_rate_rmsprop']
-            self.rho_rmsprop = rho_rmsprop if rho_rmsprop is not None else config['rho_rmsprop']
-            self.epsilon_rmsprop = epsilon_rmsprop if epsilon_rmsprop is not None else config['epsilon_rmsprop']
+                if learning_rate_rmsprop is not None else utils.get_config(key='learning_rate_rmsprop')
+            self.rho_rmsprop = rho_rmsprop if rho_rmsprop is not None else utils.get_config(key='rho_rmsprop')
+            self.epsilon_rmsprop = epsilon_rmsprop if epsilon_rmsprop is not None else utils.get_config(key='epsilon_rmsprop')
 
             if inputs is None:
                 inputs = T.tensor4("input_var", dtype='float32')
@@ -138,12 +134,10 @@ class SharedLSTM:
             else:
                 self.f_correlation = SharedLSTM.safe_tanh
 
-            if logger is None:
-                logger = filer.Logger(identifier=utils.get_timestamp())
-                logger.log_config()
-                logger.register_console()
-            self.logger = logger
-            self.logger.register("training", tags=['epoch', 'batch', 'loss', 'deviations'])
+            self.root_logger = utils.get_rootlogger()
+            self.sub_logger = utils.get_sublogger()
+
+            self.sub_logger.register("training", tags=['epoch', 'batch', 'loss', 'deviations'])
 
         except:
             raise
@@ -228,7 +222,7 @@ class SharedLSTM:
         try:
             timer = utils.Timer()
 
-            utils.xprint('Building shared LSTM network ...', logger=self.logger)
+            utils.xprint('Building shared LSTM network ...')
 
             # IN = [(sec, x, y)]
             layer_in = L.layers.InputLayer(name="input-layer", input_var=self.inputs,
@@ -407,7 +401,7 @@ class SharedLSTM:
             if params is not None:
                 self.set_params(params)
 
-            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.outputs, self.params_all
 
         except:
@@ -423,13 +417,13 @@ class SharedLSTM:
                 raise RuntimeError("Must build the network first.")
 
             timer = utils.Timer()
-            utils.xprint('Decoding ...', logger=self.logger)
+            utils.xprint('Decoding ...')
 
             # Use mean(x, y) as predictions directly
             predictions = self.outputs[:, :, :, 0:2]
 
             self.predictions = predictions
-            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.predictions
 
         except:
@@ -448,7 +442,7 @@ class SharedLSTM:
                 raise RuntimeError("Must build the decoder first.")
 
             timer = utils.Timer()
-            utils.xprint('Computing loss ...', logger=self.logger)
+            utils.xprint('Computing loss ...')
 
             # Remove time column
             facts = self.targets[:, :, :, 1:3]
@@ -517,7 +511,7 @@ class SharedLSTM:
 
             self.probabilities = probs
             self.loss = loss
-            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.loss
 
         except:
@@ -536,7 +530,7 @@ class SharedLSTM:
                 raise RuntimeError("Must build the decoder first.")
 
             timer = utils.Timer()
-            utils.xprint('Building observer ...', logger=self.logger)
+            utils.xprint('Building observer ...')
 
             # Remove time column
             facts = self.targets[:, :, :, 1:3]
@@ -551,7 +545,7 @@ class SharedLSTM:
             deviations = T.reshape(deviations, shape_deviations)
 
             self.deviations = deviations
-            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.deviations
         except:
             raise
@@ -572,7 +566,7 @@ class SharedLSTM:
                 raise RuntimeError("Must compute the deviation first.")
 
             timer = utils.Timer()
-            utils.xprint('Compiling functions ...', logger=self.logger)
+            utils.xprint('Compiling functions ...')
 
             # Compute RMSProp updates for training
             RMSPROP = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate_rmsprop,
@@ -607,7 +601,7 @@ class SharedLSTM:
             self.check_probs = theano.function([self.inputs, self.targets], self.probabilities,
                                                allow_input_downcast=True)
 
-            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.func_predict, self.func_compare, self.func_train
 
         except:
@@ -634,9 +628,9 @@ class SharedLSTM:
         if any(func is None for func in [self.func_predict, self.func_compare, self.func_train]):
             raise RuntimeError("Must compile the functions first.")
 
-        log_slot = log_slot if log_slot is not None else config['log_slot']
+        log_slot = log_slot if log_slot is not None else utils.get_config(key='log_slot')
 
-        utils.xprint('Training ...', newline=True, logger=self.logger)
+        utils.xprint('Training ...', newline=True)
         timer = utils.Timer()
 
         loss_epoch = numpy.zeros((0,))
@@ -649,7 +643,7 @@ class SharedLSTM:
         iepoch = 0
         while True:
 
-            utils.xprint('  Epoch %d ...' % iepoch, newline=True, logger=self.logger)
+            utils.xprint('  Epoch %d ...' % iepoch, newline=True)
             loss = None
             deviations = None
             loss_batch = numpy.zeros((0,))
@@ -690,9 +684,8 @@ class SharedLSTM:
                         string += '%s\n' % utils.format_var(netout[0, 0], 'netout[0][0]')
                         return string
 
-                    utils.xprint('    Batch %d ...' % ibatch, level=2, logger=self.logger)
+                    utils.xprint('    Batch %d ...' % ibatch)
 
-                    # todo log parameter values to file
                     if params is None:
                         params = self.check_params()
                         str_params = utils.format_var(params, self.param_names)
@@ -738,11 +731,11 @@ After:
                         pass
 
                 except KeyboardInterrupt, e:
-                    print ''
+                    utils.xprint('', newline=True)
                     stop = utils.confirm("Stop and exit?")
                     if stop:
                         self.num_epoch = iepoch + 1
-                        update_config(config={'num_epoch': self.num_epoch})
+                        utils.update_config('num_epoch', self.num_epoch, 'runtime')
                         break
                     else:
                         continue
@@ -752,25 +745,26 @@ After:
                         loss_batch = numpy.append(loss_batch, loss)
                         deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
 
-                        self.logger.log({'epoch': iepoch, 'batch': ibatch,
-                                         'loss': utils.format_var(float(loss)), 'deviations': utils.format_var(deviations)},
-                                        name="training")
+                        self.sub_logger.log({'epoch': iepoch, 'batch': ibatch,
+                                             'loss': utils.format_var(float(loss)),
+                                             'deviations': utils.format_var(deviations)},
+                                            name="training")
 
                         if divmod(ibatch, log_slot)[1] == 0:
-                            # utils.xprint('    Batch %d ...' % ibatch, level=1, logger=self.logger)
+                            # utils.xprint('    Batch %d ...' % ibatch)
                             utils.xprint('%s; %s'
                                          % (utils.format_var(float(loss), name='loss'),
                                             utils.format_var(deviations, name='deviations')),
-                                         level=1, newline=True, logger=self.logger)
+                                         newline=True)
 
                         ibatch += 1
 
             if divmod(ibatch, log_slot)[1] != 0:
-                utils.xprint('    Batch %d ...' % ibatch, level=1, logger=self.logger)
+                utils.xprint('    Batch %d ...' % ibatch)
                 utils.xprint('%s; %s'
                              % (utils.format_var(float(loss), name='loss'),
                                 utils.format_var(deviations, name='deviations')),
-                             level=1, newline=True, logger=self.logger)
+                             newline=True)
 
             loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
             deviation_epoch = numpy.append(deviation_epoch, numpy.mean(deviation_batch))
@@ -787,13 +781,13 @@ After:
                     if num_more is not None \
                             and num_more > 0:
                         self.num_epoch += num_more
-                        update_config(config={'num_epoch': self.num_epoch})
+                        utils.update_config('num_epoch', self.num_epoch, 'runtime')
                     else:
                         break
                 else:
                     break
 
-        utils.xprint('Done in %s.' % timer.stop(), newline=True, logger=self.logger)
+        utils.xprint('Done in %s.' % timer.stop(), newline=True)
         return loss_epoch, deviation_epoch
 
     def export_params(self, path=None):
@@ -805,19 +799,19 @@ After:
                 raise RuntimeError("Must build the network first.")
 
             if path is None:
-                path = filer.format_path(self.logger.log_path, FILENAME_EXPORT)
+                path = utils.format_subpath(self.sub_logger.log_path, FILENAME_EXPORT)
 
-            utils.xprint("Exporting parameters to '%s' ... " % path, logger=self.logger)
-            update_config(config={'path_pickle': path})
+            utils.xprint("Exporting parameters to '%s' ... " % path)
+            utils.update_config('path_pickle', path, 'runtime', tags=['path'])
 
             if self.check_params is None:
                 self.check_params = theano.function([], self.params_all, allow_input_downcast=True)
 
             params_all = self.check_params()
 
-            filer.dump_to_file(params_all, path)
+            utils.dump_to_file(params_all, path)
 
-            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
+            utils.xprint('done in %s.' % timer.stop(), newline=True)
             return path
 
         except:
@@ -829,36 +823,30 @@ After:
                 raise RuntimeError("Must build the network first.")
 
             if path is None:
-                path = filer.ask_path('Import from file path', assert_exist=True)
+                path = utils.ask_path('Import from file path', assert_exist=True)
                 if path is None:
                     return
 
-            params_all = filer.load_from_file(path)
+            params_all = utils.load_from_file(path)
             self.set_params(params_all)
+            utils.xprint('done.', newline=True)
 
         except:
             raise
 
     def set_params(self, params):
         try:
-            timer = utils.Timer()
-            utils.xprint('Importing given parameters ...', logger=self.logger)
+            utils.xprint('Importing given parameters ...')
             L.layers.set_all_param_values(self.network, params)
-            utils.xprint('done in %s.' % timer.stop(), newline=True, logger=self.logger)
 
         except:
             raise
 
     def complete(self):
-        self.logger.complete()
+        self.sub_logger.complete()
 
     @staticmethod
     def test():
-
-        timestamp = utils.get_timestamp()
-        identifier = '[%s]%s' % (config['tag'], timestamp) if 'tag' in config else timestamp
-        sub_logger = filer.Logger(identifier=identifier)
-        sub_logger.register_console()
 
         try:
 
@@ -874,13 +862,25 @@ After:
                 theano.config.exception_verbosity = 'high'
                 theano.config.optimizer = 'fast_compile'
 
-            nodes = config['nodes'] if 'nodes' in config else None
+            # Select certain nodes if requested
+            nodes = utils.get_config(key='nodes') if utils.has_config('nodes') else None
+            nodes = utils.get_config(key='num_node') if nodes is None and utils.has_config('num_node') else None
 
+            # Build sampler
             sampler = Sampler(nodes=nodes, keep_positive=True)
             half = Sampler.clip(sampler, indices=(sampler.length / 2))
-            model = SharedLSTM(sampler=half, motion_range=sampler.motion_range, logger=sub_logger)
 
-            outputs_var, params_var = model.build_network()
+            # Define the model
+            model = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
+
+            # Import previously pickled parameters if requested
+            path_unpickle = utils.get_config(key='path_unpickle') if utils.has_config('path_unpickle') else None
+            params_unpickled = utils.load_from_file(path_unpickle) if path_unpickle is not None else None
+            if params_unpickled is not None:
+                utils.get_sublogger().log_file(path_unpickle, rename='params-imported.pkl')
+
+            # Build & compile the model
+            outputs_var, params_var = model.build_network(params=params_unpickled)
             predictions_var = model.build_decoder()
             loss_var = model.compute_loss()
             deviations_var = model.compute_deviation()
@@ -888,31 +888,32 @@ After:
 
             check_e, checks_hid, check_outputs, check_params, check_probs = model.get_checks()
 
-            root_logger = filer.Logger()
-            root_logger.register("loss", tags=["identifier", "loss-by-epoch", "deviation-by-epoch"])
+            # root_logger = utils.Logger()
+            utils.get_rootlogger().register("loss", tags=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
+            # Do training
             loss, deviations = model.train()
             path_params = model.export_params()
 
             def test_importing():
-                model2 = SharedLSTM(sampler=half, motion_range=sampler.motion_range, logger=sub_logger)
-                params = filer.load_from_file(path_params)
+                model2 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
+                params = utils.load_from_file(path_params)
                 model2.build_network(params=params)
                 model2.compile()
 
-                model3 = SharedLSTM(sampler=half, motion_range=sampler.motion_range, logger=sub_logger)
+                model3 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
                 model3.build_network()
                 model3.import_params()
                 model3.compile()
 
             # test_importing()
 
-            sub_logger.log_config()
-            root_logger.log({"identifier": identifier,
-                             "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
-                             "deviation-by-epoch": '%s\n' % utils.format_var(deviations, detail=True)},
-                            name="loss")
+            utils.get_sublogger().log_config()
+            utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
+                                        "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
+                                        "deviation-by-epoch": '%s\n' % utils.format_var(deviations, detail=True)},
+                                       name="loss")
             model.complete()
 
         except Exception, e:
-            utils.handle(e, logger=sub_logger)
+            utils.handle(e)

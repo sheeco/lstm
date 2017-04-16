@@ -245,14 +245,19 @@
 
 - MNT: Remove RNN packages written by YAN Yuan-Chi & jraiman package;
 
-###### 2017-04-15
+###### [2017-04-15](b5a5e18f2c351c14ae06bea3ac16a9b446788521)
 
 - FIX: Bugs with pickling;
+
+###### 2017-04-17
+
+- ADD: Enable importing of configs & pickled params from command line, e.g. `-i|--import log/xx-xx-xx-xx-xx-xx/`;
+- RFCT: Redefine structure of configs, config source & tags included;
+- RFCT: Merge `filer.py` into `utils.py`. & Move mandatory initialzations into `__init__.py`;
 
 
 - [ ] ADD: Enable to change learning rate if training failure has occured;
 - [ ] ADD: Log predictions;
-- [ ] ADD: Enable config params importing from command line args;
 - [ ] TRY: Momentum-RMS;
 - [ ] TRY: Decrease rho in rmsprop;
 - [ ] RFCT: Enable non-shared LSTM;

@@ -23,6 +23,5 @@
     |-- __init__.py   
     |-- config.py   
     |-- utils.py   
-    |-- filer.py 
     |-- sampler.py 
     |-- model.py

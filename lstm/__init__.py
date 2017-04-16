@@ -4,7 +4,6 @@
 # all the needed packages get imported before the handler is reset
 import config
 import utils
-import filer
 import sampler
 import model
 
@@ -28,3 +27,37 @@ def handler(dw_ctrl_type, hook_sigint=thread.interrupt_main):
 
 
 win32api.SetConsoleCtrlHandler(handler, 1)
+
+
+def _init_config_():
+    try:
+        config._update_config_from_pool_(group='default')
+        if __debug__:
+            config._update_config_from_pool_(group='debug')
+            utils.xprint("Debugging configuration loaded.", newline=True)
+        else:
+            config._update_config_from_pool_(group='run')
+            utils.xprint("Running configuration loaded.", newline=True)
+
+    except:
+        raise
+
+
+def _init_logger_():
+    try:
+        utils.root_logger = utils.Logger()
+
+        timestamp = utils.get_timestamp()
+        identifier = '[%s]%s' % (config.get_config(key='tag'), timestamp) if config.has_config('tag') else timestamp
+        utils.sub_logger = utils.Logger(identifier=identifier, bound=True)
+        utils.sub_logger.register_console()
+        utils.update_config('identifier', identifier, 'runtime')
+
+        utils.process_command_line_args()
+
+    except:
+        raise
+
+
+_init_config_()
+_init_logger_()
