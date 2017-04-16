@@ -29,6 +29,7 @@ class SharedLSTM:
             self.sampler = sampler
             self.sampler.reset_entry()
             self.num_node = self.sampler.num_node
+            self.nodes = self.sampler.node_identifiers
             if motion_range is None:
                 self.motion_range = self.sampler.motion_range
             else:
@@ -138,6 +139,10 @@ class SharedLSTM:
             self.sub_logger = utils.get_sublogger()
 
             self.sub_logger.register("training", tags=['epoch', 'batch', 'loss', 'deviations'])
+
+            tags_log_prediction = ['epoch', 'batch', 'sample', 'instant'] + self.nodes
+            self.sub_logger.register("prediction", tags=tags_log_prediction)
+
 
         except:
             raise
@@ -702,7 +707,7 @@ class SharedLSTM:
                     else:
                         pass
 
-                    # prediction = self.func_predict(inputs)
+                    predictions = self.func_predict(inputs)
                     deviations = self.func_compare(inputs, targets)
 
                     loss = self.func_train(inputs, targets)
@@ -729,6 +734,22 @@ After:
                         raise
                     else:
                         pass
+
+                    # Log predictions
+                    
+                    size_this_batch = len(instants)
+                    for isample in xrange(0, size_this_batch):
+
+                        log_predictions = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
+
+                        for iseq in xrange(0, self.length_sequence_output):
+                            # index in [-n, -1]
+                            log_predictions['instant'] = instants[isample, iseq - self.length_sequence_output]
+                            for inode in xrange(0, self.num_node):
+                                # [x, y]
+                                log_predictions[self.nodes[inode]] = "%s" % predictions[inode, isample, iseq]
+
+                            self.sub_logger.log(log_predictions, name="prediction")
 
                 except KeyboardInterrupt, e:
                     utils.xprint('', newline=True)
@@ -864,7 +885,7 @@ After:
 
             # Select certain nodes if requested
             nodes = utils.get_config(key='nodes') if utils.has_config('nodes') else None
-            nodes = utils.get_config(key='num_node') if nodes is None and utils.has_config('num_node') else None
+            nodes = utils.get_config(key='num_node') if nodes is None and utils.has_config('num_node') else nodes
 
             # Build sampler
             sampler = Sampler(nodes=nodes, keep_positive=True)
@@ -888,7 +909,6 @@ After:
 
             check_e, checks_hid, check_outputs, check_params, check_probs = model.get_checks()
 
-            # root_logger = utils.Logger()
             utils.get_rootlogger().register("loss", tags=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
             # Do training

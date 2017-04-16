@@ -147,7 +147,8 @@ class Sampler:
                 return self.dict_traces
 
             self.dict_traces = {node_id: self.dict_all_traces[node_id] for node_id in nodes_requested}
-            utils.xprint("Select node %s according to node filter %s." % (nodes_requested, self.node_filter),
+            self.node_identifiers = self.dict_traces.keys()
+            utils.xprint("Select node %s according to node filter %s." % (self.node_identifiers, self.node_filter),
                          newline=True)
             return self.dict_traces
 

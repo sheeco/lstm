@@ -169,15 +169,15 @@ class Logger:
     def _update_log_path_(self, identifier, tag):
         try:
             # todo test
-            identifier = '' if identifier is None else identifier
             if identifier != self.identifier \
                     or tag != self.tag:
-                new_log_path = Logger._format_log_path_(self.root_path, identifier, tag)
+                new_log_path = Logger._format_log_path_(self.root_path, identifier if identifier is not None else '', tag)
 
                 # Initialize log path
                 if self.log_path is None:
                     create_path(new_log_path)
-                    hide_path(new_log_path)
+                    if identifier is not None:
+                        hide_path(new_log_path)
 
                 # Update log path
                 else:
@@ -357,7 +357,7 @@ class Logger:
                 complete_path = directory + filename
                 rename_path(self.log_path, complete_path)
                 self.log_path = complete_path
-                unhide_path(self.log_path)
+            unhide_path(self.log_path)
 
         except:
             raise

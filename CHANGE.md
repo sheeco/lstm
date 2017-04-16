@@ -249,15 +249,19 @@
 
 - FIX: Bugs with pickling;
 
-###### 2017-04-17
+###### [2017-04-17](1e8b24675cb00e8737e3b95474c30c0920e41d46)
 
 - ADD: Enable importing of configs & pickled params from command line, e.g. `-i|--import log/xx-xx-xx-xx-xx-xx/`;
 - RFCT: Redefine structure of configs, config source & tags included;
 - RFCT: Merge `filer.py` into `utils.py`. & Move mandatory initialzations into `__init__.py`;
 
+###### 2017-04-17
 
+- ADD: Log predictions to `prediction.log`;
+
+
+- [ ] ADD: Enable timer to pause & continue;
 - [ ] ADD: Enable to change learning rate if training failure has occured;
-- [ ] ADD: Log predictions;
 - [ ] TRY: Momentum-RMS;
 - [ ] TRY: Decrease rho in rmsprop;
 - [ ] RFCT: Enable non-shared LSTM;
