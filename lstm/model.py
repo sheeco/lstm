@@ -60,7 +60,8 @@ class SharedLSTM:
             self.learning_rate_rmsprop = learning_rate_rmsprop \
                 if learning_rate_rmsprop is not None else utils.get_config(key='learning_rate_rmsprop')
             self.rho_rmsprop = rho_rmsprop if rho_rmsprop is not None else utils.get_config(key='rho_rmsprop')
-            self.epsilon_rmsprop = epsilon_rmsprop if epsilon_rmsprop is not None else utils.get_config(key='epsilon_rmsprop')
+            self.epsilon_rmsprop = epsilon_rmsprop if epsilon_rmsprop is not None else utils.get_config(
+                key='epsilon_rmsprop')
 
             if inputs is None:
                 inputs = T.tensor4("input_var", dtype='float32')
@@ -138,11 +139,10 @@ class SharedLSTM:
             self.root_logger = utils.get_rootlogger()
             self.sub_logger = utils.get_sublogger()
 
-            self.sub_logger.register("training", tags=['epoch', 'batch', 'loss', 'deviations'])
+            self.sub_logger.register("training", columns=['epoch', 'batch', 'loss', 'deviations'])
 
-            tags_log_prediction = ['epoch', 'batch', 'sample', 'instant'] + self.nodes
-            self.sub_logger.register("prediction", tags=tags_log_prediction)
-
+            columns_prediction = ['epoch', 'batch', 'sample', 'instant'] + self.nodes
+            self.sub_logger.register("prediction", columns=columns_prediction)
 
         except:
             raise
@@ -404,6 +404,7 @@ class SharedLSTM:
 
             # Assign saved parameter values to the built network
             if params is not None:
+                utils.xprint('Importing given parameters ...')
                 self.set_params(params)
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
@@ -418,8 +419,7 @@ class SharedLSTM:
         :return: `predictions`
         """
         try:
-            if self.outputs is None:
-                raise RuntimeError("Must build the network first.")
+            utils.assert_not_none(self.outputs, "Must build the network first.")
 
             timer = utils.Timer()
             utils.xprint('Decoding ...')
@@ -441,10 +441,8 @@ class SharedLSTM:
         :return: `loss`
         """
         try:
-            if self.outputs is None:
-                raise RuntimeError("Must build the network first.")
-            if self.predictions is None:
-                raise RuntimeError("Must build the decoder first.")
+            utils.assert_not_none(self.outputs, "Must build the network first.")
+            utils.assert_not_none(self.predictions, "Must build the decoder first.")
 
             timer = utils.Timer()
             utils.xprint('Computing loss ...')
@@ -529,10 +527,8 @@ class SharedLSTM:
         :return: `deviations`
         """
         try:
-            if self.outputs is None:
-                raise RuntimeError("Must build the network first.")
-            if self.predictions is None:
-                raise RuntimeError("Must build the decoder first.")
+            utils.assert_not_none(self.outputs, "Must build the network first.")
+            utils.assert_not_none(self.predictions, "Must build the decoder first.")
 
             timer = utils.Timer()
             utils.xprint('Building observer ...')
@@ -555,23 +551,19 @@ class SharedLSTM:
         except:
             raise
 
-    def compile(self):
+    def compute_update(self):
         """
-        Compile theano functions used for prediction, observation & training.
-        :return: `func_predict`, `func_compare`, `func_train`
+        RMSProp training.
+        Build computation graph from `loss` to `updates`.
+        :return: `updates`
         """
         try:
-            if self.outputs is None:
-                raise RuntimeError("Must build the network first.")
-            if self.predictions is None:
-                raise RuntimeError("Must build the decoder first.")
-            if self.loss is None:
-                raise RuntimeError("Must compute the loss first.")
-            if self.deviations is None:
-                raise RuntimeError("Must compute the deviation first.")
+            utils.assert_not_none(self.outputs, "Must build the network first.")
+            utils.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assert_not_none(self.deviations, "Must compute the deviation first.")
 
             timer = utils.Timer()
-            utils.xprint('Compiling functions ...')
+            utils.xprint('Computing updates ...')
 
             # Compute RMSProp updates for training
             RMSPROP = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate_rmsprop,
@@ -579,6 +571,25 @@ class SharedLSTM:
             updates = RMSPROP
 
             self.updates = updates
+            utils.xprint('done in %s.' % timer.stop(), newline=True)
+            return self.updates
+        except:
+            raise
+
+    def compile(self):
+        """
+        Compile theano functions used for prediction, observation & training.
+        :return: `func_predict`, `func_compare`, `func_train`
+        """
+        try:
+            utils.assert_not_none(self.outputs, "Must build the network first.")
+            utils.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assert_not_none(self.loss, "Must compute the loss first.")
+            utils.assert_not_none(self.deviations, "Must compute the deviation first.")
+            utils.assert_not_none(self.updates, "Must compute the updates first.")
+
+            timer = utils.Timer()
+            utils.xprint('Compiling functions ...')
 
             """
             Compile theano functions for prediction, observation & training
@@ -586,7 +597,7 @@ class SharedLSTM:
 
             self.func_predict = theano.function([self.inputs], self.predictions, allow_input_downcast=True)
             self.func_compare = theano.function([self.inputs, self.targets], self.deviations, allow_input_downcast=True)
-            self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates,
+            self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=self.updates,
                                               allow_input_downcast=True)
             # self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates,
             #                                   allow_input_downcast=True,
@@ -616,24 +627,17 @@ class SharedLSTM:
 
         return self.check_embed, self.checks_hid, self.check_outputs, self.check_params, self.check_probs
 
-    def train(self, log_slot=None):
+    def train(self):
         """
 
-        :param log_slot: Print loss & deviations every `log_slot` * batches.
         :return: Two <ndarray> containing average loss & deviation of each epoch.
         """
-        if self.outputs is None:
-            raise RuntimeError("Must build the network first.")
-        if self.predictions is None:
-            raise RuntimeError("Must build the decoder first.")
-        if self.loss is None:
-            raise RuntimeError("Must compute the loss first.")
-        if self.deviations is None:
-            raise RuntimeError("Must compute the deviation first.")
+        utils.assert_not_none(self.outputs, "Must build the network first.")
+        utils.assert_not_none(self.predictions, "Must build the decoder first.")
+        utils.assert_not_none(self.loss, "Must compute the loss first.")
+        utils.assert_not_none(self.deviations, "Must compute the deviation first.")
         if any(func is None for func in [self.func_predict, self.func_compare, self.func_train]):
             raise RuntimeError("Must compile the functions first.")
-
-        log_slot = log_slot if log_slot is not None else utils.get_config(key='log_slot')
 
         utils.xprint('Training ...', newline=True)
         timer = utils.Timer()
@@ -644,10 +648,11 @@ class SharedLSTM:
         str_params = None
         stop = False  # Whether to stop and exit
         completed = None  # Whether a batch has got proceeded completely
+
         # for iepoch in range(self.num_epoch):
         iepoch = 0
         while True:
-
+            # start of single epoch
             utils.xprint('  Epoch %d ...' % iepoch, newline=True)
             loss = None
             deviations = None
@@ -655,6 +660,7 @@ class SharedLSTM:
             deviation_batch = numpy.zeros((0,))
             ibatch = 0
             while True:
+                # start of single batch
                 try:
 
                     # retrieve the next batch for nodes
@@ -666,7 +672,7 @@ class SharedLSTM:
                         instants, inputs, targets = self.sampler.load_batch(with_target=True)
                     if inputs is None:
                         if ibatch == 0:
-                            raise RuntimeError("Have only %d sample pairs, "
+                            raise RuntimeError("Only %d sample pairs are found, "
                                                "not enough for one single batch of size %d."
                                                % (self.sampler.length, self.size_batch))
 
@@ -674,95 +680,112 @@ class SharedLSTM:
                         completed = None
                         break
 
-                    def format_netflow():
-                        embedd = self.check_embed(inputs)
+                    def check_netflow():
+                        embed = self.check_embed(inputs)
                         hids = []
                         for ihid in xrange(self.dimension_hidden_layers[0]):
                             check_hid = self.checks_hid[ihid]
                             hids += [check_hid(inputs)]
                         netout = self.check_outputs(inputs)
 
-                        string = ''
-                        string += '%s\n' % utils.format_var(embedd[0, 0], name='embedd[0][0]')
-                        for ihid in xrange(self.dimension_hidden_layers[0]):
-                            string += '%s\n' % utils.format_var(hids[ihid][0][0], name='hidden-%d[0][0]' % ihid)
-                        string += '%s\n' % utils.format_var(netout[0, 0], 'netout[0][0]')
-                        return string
+                        dict_netflow = {'embed': embed, 'hiddens': hids, 'netout': netout}
+                        return dict_netflow
 
                     utils.xprint('    Batch %d ...' % ibatch)
 
-                    if params is None:
-                        params = self.check_params()
-                        str_params = utils.format_var(params, self.param_names)
-                    str_netflow = format_netflow()
-                    self.network_history[ibatch] = {'params': str_params, 'netflow': str_netflow}
-
+                    # record params, flow of data & probabilities to network history BEFORE training
+                    params = self.check_params()
+                    netflow = check_netflow()
                     probs = self.check_probs(inputs, targets)
-                    try:
-                        utils.assert_finite(probs, 'probs')
-                    except Exception, e:
-                        e.message += '\n'
-                        e.message += '%s' % str_netflow
-                        raise
-                    else:
-                        pass
+                    # note that record [i, j] contains variable values BEFORE this training
+                    self.network_history[iepoch, ibatch] = {'params': params, 'netflow': netflow, 'probs': probs}
 
                     predictions = self.func_predict(inputs)
                     deviations = self.func_compare(inputs, targets)
 
+                    # Validate loss
+
                     loss = self.func_train(inputs, targets)
-
-                    # consider successful if training is done
-                    completed = True
-
-                    params = self.check_params()
-                    str_params = utils.format_var(params, self.param_names)
                     try:
-                        utils.assert_finite(params, 'params')
-                    except Exception, e:
-                        info = """
-Invalid training ... %s
-Before this training:
-%s
-After:
-%s
-""" \
-                               % (utils.format_var(float(loss), name='loss'),
-                                  self.network_history[ibatch]['params'],
-                                  str_params)
-                        e.message += info
-                        raise
+                        utils.assert_finite(loss, 'loss')
+
+                    except AssertionError, e:
+                        raise AssertionError("Get loss of 'inf'. Cannot proceed training.")
+
+                    # Validate params after training
+
+                    new_params = self.check_params()
+                    try:
+                        utils.assert_finite(new_params, 'params')
+
+                        # consider successful if training is done and successful
+                        completed = True
+
+                    except AssertionError, e:
+                        utils.xprint("Get parameters containing 'nan' or 'inf' after training.\n"
+                                     "Restore parameters from last training ...")
+                        try:
+                            self.set_params(params)
+                            utils.xprint("done.", newline=True)
+                            new_learning_rate = utils.ask("Change learning rate from %f to ?"
+                                                          % self.learning_rate_rmsprop,
+                                                          interpretor=utils.interpret_positive_float)
+
+                            # ask to stop & exit if quit
+                            if new_learning_rate is None:
+                                raise KeyboardInterrupt
+
+                            utils.xprint("Update config 'learning_rate_rmsprop' from %f to %f."
+                                         % (self.learning_rate_rmsprop, new_learning_rate), newline=True)
+                            self.learning_rate_rmsprop = new_learning_rate
+                            utils.update_config('learning_rate_rmsprop', new_learning_rate, source='runtime')
+
+                            self.compute_update()
+                            self.compile()
+
+                            # Reprocess current batch
+                            completed = False
+                            continue
+
+                        except:
+                            raise
                     else:
                         pass
 
-                    # Log predictions
-                    
-                    size_this_batch = len(instants)
-                    for isample in xrange(0, size_this_batch):
-
-                        log_predictions = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
-
-                        for iseq in xrange(0, self.length_sequence_output):
-                            # index in [-n, -1]
-                            log_predictions['instant'] = instants[isample, iseq - self.length_sequence_output]
-                            for inode in xrange(0, self.num_node):
-                                # [x, y]
-                                log_predictions[self.nodes[inode]] = "%s" % predictions[inode, isample, iseq]
-
-                            self.sub_logger.log(log_predictions, name="prediction")
-
                 except KeyboardInterrupt, e:
                     utils.xprint('', newline=True)
-                    stop = utils.confirm("Stop and exit?")
+                    stop = utils.ask("Stop and exit?", code_quit=None, interpretor=utils.interpret_confirm)
                     if stop:
-                        self.num_epoch = iepoch + 1
+                        # means n complete epochs
                         utils.update_config('num_epoch', self.num_epoch, 'runtime')
                         break
                     else:
                         continue
 
+                except:
+                    raise
+
                 finally:
                     if completed:
+
+                        # Log predictions
+
+                        size_this_batch = len(instants)
+                        for isample in xrange(0, size_this_batch):
+
+                            log_predictions = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
+
+                            for iseq in xrange(0, self.length_sequence_output):
+                                # index in [-n, -1]
+                                log_predictions['instant'] = instants[isample, iseq - self.length_sequence_output]
+                                for inode in xrange(0, self.num_node):
+                                    # [x, y]
+                                    log_predictions[self.nodes[inode]] = "%s" % predictions[inode, isample, iseq]
+
+                                self.sub_logger.log(log_predictions, name="prediction")
+
+                        # Log loss & deviations
+
                         loss_batch = numpy.append(loss_batch, loss)
                         deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
 
@@ -771,21 +794,14 @@ After:
                                              'deviations': utils.format_var(deviations)},
                                             name="training")
 
-                        if divmod(ibatch, log_slot)[1] == 0:
-                            # utils.xprint('    Batch %d ...' % ibatch)
-                            utils.xprint('%s; %s'
-                                         % (utils.format_var(float(loss), name='loss'),
-                                            utils.format_var(deviations, name='deviations')),
-                                         newline=True)
+                        utils.xprint('%s; %s'
+                                     % (utils.format_var(float(loss), name='loss'),
+                                        utils.format_var(deviations, name='deviations')),
+                                     newline=True)
 
                         ibatch += 1
-
-            if divmod(ibatch, log_slot)[1] != 0:
-                utils.xprint('    Batch %d ...' % ibatch)
-                utils.xprint('%s; %s'
-                             % (utils.format_var(float(loss), name='loss'),
-                                utils.format_var(deviations, name='deviations')),
-                             newline=True)
+                        # end of ingle batch
+            # end of single epoch
 
             loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
             deviation_epoch = numpy.append(deviation_epoch, numpy.mean(deviation_batch))
@@ -796,9 +812,10 @@ After:
                 break
 
             elif iepoch >= self.num_epoch:
-                more = utils.confirm("Try more epochs?")
+                more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
                 if more:
-                    num_more = utils.ask_int("How many?")
+                    num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
+                    # quit means no more epochs
                     if num_more is not None \
                             and num_more > 0:
                         self.num_epoch += num_more
@@ -816,8 +833,7 @@ After:
             FILENAME_EXPORT = 'params.pkl'
 
             timer = utils.Timer()
-            if self.params_all is None:
-                raise RuntimeError("Must build the network first.")
+            utils.assert_not_none(self.params_all, "Must build the network first.")
 
             if path is None:
                 path = utils.format_subpath(self.sub_logger.log_path, FILENAME_EXPORT)
@@ -840,14 +856,13 @@ After:
 
     def import_params(self, path=None):
         try:
-            if self.params_all is None:
-                raise RuntimeError("Must build the network first.")
+            utils.assert_not_none(self.params_all, "Must build the network first.")
 
             if path is None:
-                path = utils.ask_path('Import from file path', assert_exist=True)
+                path = utils.ask('Import from file path?', interpretor=utils.interpret_file_path)
                 if path is None:
                     return
-
+            utils.xprint('Importing given parameters ...')
             params_all = utils.load_from_file(path)
             self.set_params(params_all)
             utils.xprint('done.', newline=True)
@@ -857,7 +872,6 @@ After:
 
     def set_params(self, params):
         try:
-            utils.xprint('Importing given parameters ...')
             L.layers.set_all_param_values(self.network, params)
 
         except:
@@ -894,46 +908,59 @@ After:
             # Define the model
             model = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
 
-            # Import previously pickled parameters if requested
-            path_unpickle = utils.get_config(key='path_unpickle') if utils.has_config('path_unpickle') else None
-            params_unpickled = utils.load_from_file(path_unpickle) if path_unpickle is not None else None
-            if params_unpickled is not None:
-                utils.get_sublogger().log_file(path_unpickle, rename='params-imported.pkl')
+            try:
+                # Import previously pickled parameters if requested
+                path_unpickle = utils.get_config(key='path_unpickle') if utils.has_config('path_unpickle') else None
+                params_unpickled = utils.load_from_file(path_unpickle) if path_unpickle is not None else None
+                if params_unpickled is not None:
+                    utils.get_sublogger().log_file(path_unpickle, rename='params-imported.pkl')
 
-            # Build & compile the model
-            outputs_var, params_var = model.build_network(params=params_unpickled)
-            predictions_var = model.build_decoder()
-            loss_var = model.compute_loss()
-            deviations_var = model.compute_deviation()
-            func_predict, func_compare, func_train = model.compile()
+                # Build & compile the model
+                outputs_var, params_var = model.build_network(params=params_unpickled)
+                predictions_var = model.build_decoder()
+                loss_var = model.compute_loss()
+                deviations_var = model.compute_deviation()
+                updates_var = model.compute_update()
+                func_predict, func_compare, func_train = model.compile()
 
-            check_e, checks_hid, check_outputs, check_params, check_probs = model.get_checks()
+                check_e, checks_hid, check_outputs, check_params, check_probs = model.get_checks()
 
-            utils.get_rootlogger().register("loss", tags=["identifier", "loss-by-epoch", "deviation-by-epoch"])
+                utils.get_rootlogger().register("loss", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
-            # Do training
-            loss, deviations = model.train()
-            path_params = model.export_params()
+                # Do training
+                loss, deviations = model.train()
+                path_params = model.export_params()
 
-            def test_importing():
-                model2 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
-                params = utils.load_from_file(path_params)
-                model2.build_network(params=params)
-                model2.compile()
+                def test_importing():
+                    model2 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
+                    params = utils.load_from_file(path_params)
+                    model2.build_network(params=params)
+                    model2.build_decoder()
+                    model2.compute_loss()
+                    model2.compute_deviation()
+                    model2.compute_update()
+                    model2.compile()
 
-                model3 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
-                model3.build_network()
-                model3.import_params()
-                model3.compile()
+                    model3 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
+                    model3.build_network()
+                    model3.import_params()
+                    model3.build_decoder()
+                    model3.compute_loss()
+                    model3.compute_deviation()
+                    model3.compute_update()
+                    model3.compile()
 
-            # test_importing()
+                # test_importing()
 
-            utils.get_sublogger().log_config()
-            utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
-                                        "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
-                                        "deviation-by-epoch": '%s\n' % utils.format_var(deviations, detail=True)},
-                                       name="loss")
-            model.complete()
+                utils.get_sublogger().log_config()
+                utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
+                                            "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
+                                            "deviation-by-epoch": '%s\n' % utils.format_var(deviations, detail=True)},
+                                           name="loss")
+            except:
+                raise
+            finally:
+                model.complete()
 
         except Exception, e:
-            utils.handle(e)
+            raise

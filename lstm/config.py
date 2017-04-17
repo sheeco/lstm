@@ -21,17 +21,13 @@ config_pool = {
                 'value': 'log/',
                 'tags': ['path']
             },
-            # How often should we check the output
-            'log_slot': {
-                'value': 1,
-                'tags': []
-            },
             # How many nodes to learn on
             'num_node': {
                 'value': 2,
                 'tags': ['build']
             },
             # Selected nodes
+            # This will override 'num_node'
             'nodes': {
                 'value': ['31', '32'],
                 'tags': []
@@ -73,10 +69,8 @@ config_pool = {
         },
 
     'debug':
+        # Nano-size net config for debugging
         {
-
-            # Nano-size net config for debugging
-
             # Length of observed sequence
             'length_sequence_input': {
                 'value': 4,
@@ -170,7 +164,6 @@ def _update_(config, source, tags=None):
     try:
 
         global global_configuration
-        # todo
         tags = [] if tags is None else tags
         tags = [tags] if not isinstance(tags, list) else tags
         for key, content in config.iteritems():

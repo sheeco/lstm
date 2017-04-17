@@ -314,7 +314,6 @@ class Sampler:
                  inputs: [num_nodes, size_batch, length_sequence_input, dimension_sample],
                  target: [n_nodes, size_batch, length_sequence_output, dimension_sample]
         """
-        # todo add boolean arg redundant_batch
 
         if size_batch is None:
             size_batch = self.size_batch

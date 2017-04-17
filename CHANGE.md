@@ -255,13 +255,18 @@
 - RFCT: Redefine structure of configs, config source & tags included;
 - RFCT: Merge `filer.py` into `utils.py`. & Move mandatory initialzations into `__init__.py`;
 
-###### 2017-04-17
+###### [2017-04-17](84bb00b7b0103b18f6658517c8e0d4f53c0c1ed0)
 
 - ADD: Log predictions to `prediction.log`;
 
+###### 2017-04-17
+
+- ADD: Enable to change learning rate if training failure has occured. & Validate the finite of loss;
+- RFCT: Remove useless config 'log_slot';
+- RFCT: For asking & asserting methods;
+
 
 - [ ] ADD: Enable timer to pause & continue;
-- [ ] ADD: Enable to change learning rate if training failure has occured;
 - [ ] TRY: Momentum-RMS;
 - [ ] TRY: Decrease rho in rmsprop;
 - [ ] RFCT: Enable non-shared LSTM;

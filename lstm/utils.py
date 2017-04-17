@@ -22,12 +22,15 @@ __all__ = [
     "xprint",
     "warn",
     "handle",
+    "assert_not_none",
     "assert_type",
     "assert_finite",
     "assert_unreachable",
-    "confirm",
-    "ask_int",
-    "ask_path",
+    "ask",
+    "interpret_confirm",
+    "interpret_positive_int",
+    "interpret_positive_float",
+    "interpret_file_path",
     "mean_min_max",
     "format_var",
     "get_timestamp",
@@ -168,7 +171,6 @@ class Logger:
 
     def _update_log_path_(self, identifier, tag):
         try:
-            # todo test
             if identifier != self.identifier \
                     or tag != self.tag:
                 new_log_path = Logger._format_log_path_(self.root_path, identifier if identifier is not None else '', tag)
@@ -251,22 +253,25 @@ class Logger:
         except:
             raise
 
-    def register(self, name, tags=None):
+    def has_log(self, name):
+        return name in self.logs
+
+    def register(self, name, columns=None):
         try:
             self._validate_log_path_()
 
-            if name not in self.logs:
+            if not self.has_log(name):
                 content = []
-                if tags is None:
-                    tags = ['']
-                for tag in tags:
+                if columns is None:
+                    columns = ['']
+                for tag in columns:
                     content += [(tag, [])]
                 self.logs[name] = content
 
                 filepath = '%s%s.log' % (self.log_path, name)
                 pfile = open(filepath, 'a')
                 hastag = False
-                for tag in tags:
+                for tag in columns:
                     if tag != '':
                         hastag = True
                         pfile.write('%s\t' % tag)
@@ -345,6 +350,16 @@ class Logger:
         except:
             raise
 
+    def log_console(self, content):
+        try:
+            if not self.has_log(self.filename_console):
+                self.register_console()
+
+            self.log(content, name=self.filename_console)
+
+        except:
+            raise
+
     def complete(self):
         try:
             self._validate_log_path_()
@@ -417,23 +432,27 @@ def xprint(what, newline=False, logger=None):
     if logger is None:
         logger = get_sublogger()
     if logger is not None:
-        logger.log("%s\n" % what if newline else "%s" % what)
+        logger.log_console("%s\n" % what if newline else "%s" % what)
 
     print "%s\n" % what if newline else "%s" % what,
 
 
 def warn(info):
-    # if config.get_config(key='show_warning'):
-    # xprint("[Warning] %s" % info)
-    # if not config.get_config(key='show_warning'):
-    #     warnings.filterwarnings("ignore")
-    # warnings.warn("[Warning] %s" % info)
     try:
-        pfile = sys.stderr
-        if pfile is None:
+        # flush before writing
+        p_out = sys.stdout
+        if p_out is not None:
+            p_out.flush()
+        p_in = sys.stdin
+        if p_in is not None:
+            p_in.flush()
+
+        p_err = sys.stderr
+        if p_err is None:
             # sys.stderr is None - warnings get lost
             return
-        pfile.write("[Warning] %s\n" % info)
+        p_err.write("[Warning] %s\n" % info)
+        p_err.flush()
 
     except (IOError, UnicodeError):
         raise
@@ -451,6 +470,21 @@ def handle(exception, logger=None):
         logger.log('%s\n' % traceback.format_exc(), name="exception")
 
     exit(exception.message)
+
+
+def assert_not_none(var, message, raising=True):
+    """
+
+    :param var:
+    :param message: Message to form exception if assertion is not True.
+    :param raising:
+    :return:
+    """
+    fine = True if var is not None else False
+    if raising \
+            and not fine:
+        raise AssertionError(message)
+    return fine
 
 
 def assert_type(var, assertion, raising=True):
@@ -478,46 +512,90 @@ def assert_unreachable():
     raise RuntimeError("Unexpected access of this block.")
 
 
-def confirm(info):
+def ask(message, code_quit='q', interpretor=None):
+    if not callable(interpretor):
+        raise ValueError("Argument `interpret` is not callable.")
+
     try:
-        ans = raw_input("%s (y/n): " % info)
-        if ans in ('y', 'Y'):
-            return True
-        elif ans in ('n', 'N'):
-            return False
+        question = "%s\n$ " % message
+        answer = raw_input(question)
+
+        # log question & answer
+        get_sublogger().log_console("%s%s\n" % (question, answer))
+
+        if code_quit is not None \
+                and answer == code_quit:
+            return None
+
+        try:
+            if interpretor is None:
+                return answer
+            else:
+                answer = interpretor(answer)
+                return answer
+
+        except AssertionError, e:
+            return ask(e.message, code_quit=code_quit, interpretor=interpretor)
     except:
         pass
-    return confirm("Pardon?")
+    return ask("Pardon?", code_quit=code_quit, interpretor=interpretor)
 
 
-def ask_int(info, code_quit='q'):
+def _interpret_confirm_(answer):
     try:
-        answer = raw_input("%s (positive integer): " % info)
-        if answer == code_quit:
-            return None
+        if answer in ('y', 'Y', 'yes'):
+            return True
+        elif answer in ('n', 'N', 'no'):
+            return False
+        else:
+            raise AssertionError("Invalid Syntax. Only take 'y' / 'n' for an answer.")
+    except:
+        raise
+
+
+interpret_confirm = _interpret_confirm_
+
+
+def _interpret_positive_int_(answer):
+    try:
         n = int(answer)
         if n >= 0:
             return n
-    except:
-        pass
-    return ask_int("Pardon?", code_quit=code_quit)
-
-
-def ask_path(info, code_quit='q', assert_exist=False):
-    try:
-        answer = raw_input("%s " % info)
-        if answer == code_quit:
-            return None
-
-        path = validate_path_format(answer)
-        if assert_exist \
-                and not if_exists(path):
-            info = 'Path not found. Pardon?'
         else:
-            return validate_path_format(path)
-    except Exception, e:
-        info = '%s Pardon?' % e.message
-    return ask_path(info, code_quit=code_quit, assert_exist=assert_exist)
+            raise AssertionError("Only take positive integer for an answer.")
+    except ValueError, e:
+        raise AssertionError(e.message)
+
+
+interpret_positive_int = _interpret_positive_int_
+
+
+def _interpret_positive_float_(answer):
+    try:
+        f = float(answer)
+        if f >= 0:
+            return f
+        else:
+            raise AssertionError("Only take positive float for an answer.")
+    except ValueError, e:
+        raise AssertionError(e.message)
+
+
+interpret_positive_float = _interpret_positive_float_
+
+
+def _interpret_file_path_(answer):
+    try:
+        path = validate_path_format(answer)
+        if is_file(path):
+            return path
+        else:
+            raise AssertionError("Cannot find file '%s'." % path)
+    except:
+        raise
+
+
+interpret_file_path = _interpret_file_path_
 
 
 def mean_min_max(mat):
@@ -778,7 +856,6 @@ def get_sublogger():
 
 
 def _validate_config_():
-    # todo
     try:
         # 'nodes' will override 'num_node'
         if config.has_config('nodes') \
@@ -847,7 +924,6 @@ def process_command_line_args(args=None):
                     key = 'path_import'
                     update_config(key, path_import, 'command-line')
 
-                    # todo import only network building config
                     path_config = format_subpath(path_import, subpath='config.log')
                     config_imported = read(path_config)
                     try:
@@ -982,9 +1058,14 @@ def test():
             path = validate_path_format(path)
 
         def test_ask():
-            # yes = confirm("Confirm")
-            # n = ask_int("How many?")
-            path = ask_path('Enter Path:', assert_exist=True)
+            yes = ask('Enter yes or no:', interpretor=interpret_confirm)
+            n = ask('Enter positive integer:', interpretor=interpret_positive_int)
+            f = ask('Enter positive float:', interpretor=interpret_positive_float)
+            path = ask('Enter path:', interpretor=interpret_file_path)
+            try:
+                ans = ask('Test wrong interpretor.', interpretor='test')
+            except Exception, e:
+                pass
 
         def test_pickling():
             temp_logger = Logger(identifier='pickle')
@@ -994,13 +1075,15 @@ def test():
             dump_to_file(temp_logger, filename)
             logger_loaded = load_from_file(filename)
 
-            # test_hiding()
-            # test_formatting()
-            # test_ask()
-            test_pickling()
+        # test_hiding()
+        # test_formatting()
+        # test_ask()
+        # test_pickling()
 
         # test_warn()
         # test_args()
-        test_exception()
+        # test_exception()
+        test_ask()
+
     except:
         raise
