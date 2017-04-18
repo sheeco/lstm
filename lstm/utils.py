@@ -84,12 +84,30 @@ def __init__():
 
 
 class Timer:
-    def __init__(self, formatted=True):
+    def __init__(self, formatted=True, start=True):
         self.sec_start = None
         self.sec_stop = None
         self.sec_elapse = None
+        self.timer_pause = None
+        self.duration_pause = 0
         self.formatted = formatted
-        self.start()
+
+        if start:
+            self.start()
+
+    def is_on(self):
+        """
+        Considered to be on if timer has not been started, or has been stopped.
+        :return:
+        """
+        return self.sec_start is not None and self.sec_stop is None
+
+    def is_off(self):
+        return not self.is_on()
+
+    def is_pausing(self):
+        return self.timer_pause is not None \
+               and self.timer_pause.is_on()
 
     def start(self):
         """
@@ -99,35 +117,99 @@ class Timer:
             self.sec_start = time.clock()
             self.sec_stop = None
             self.sec_elapse = None
+            self.duration_pause = 0
+
+            # Will stop pausing if it's still pausing
+            if self.timer_pause is not None \
+                    and self.is_on():
+                self.timer_pause.stop()
+
         except:
             raise
 
     def stop(self):
         try:
-            if self.sec_start is None:
-                return None
+            if self.is_off():
+                raise RuntimeError("The timer must be started first.")
+
+            # Will stop pausing if it's still pausing
+            if self.timer_pause is not None \
+                    and self.timer_pause.is_on():
+                self.duration_pause += self.timer_pause.stop()
 
             if self.sec_stop is None:
                 self.sec_stop = time.clock()
-                self.sec_elapse = self.sec_stop - self.sec_start
             return self.get_elapse()
         except:
             raise
 
+    def pause(self):
+        try:
+            if self.timer_pause is None:
+                self.timer_pause = Timer(formatted=False, start=False)
+            elif self.timer_pause.is_on():
+                raise RuntimeError("The timer is already pausing.")
+
+            self.timer_pause.start()
+        except:
+            raise
+
+    def resume(self):
+        try:
+            if self.timer_pause is None or self.timer_pause.is_off():
+                raise RuntimeError("The timer is not pausing.")
+
+            this_pause = self.timer_pause.stop()
+            self.duration_pause += this_pause
+            return this_pause
+        except:
+            raise
+
     def get_elapse(self, formatted=None):
+        if self.sec_start is None \
+                or self.sec_stop is None:
+            return None
+
+        self.sec_elapse = self.sec_stop - self.sec_start - self.duration_pause
         if formatted is None:
             formatted = self.formatted
         return format_time_string(self.sec_elapse) if formatted else self.sec_elapse
 
     @staticmethod
     def test():
-        timer = Timer()
-        xprint(timer.stop(), newline=True)
-        timer.start()
-        xprint(timer.stop(), newline=True)
-        xprint(timer.stop(), newline=True)
-        timer = Timer(formatted=False)
-        xprint(timer.stop(), newline=True)
+        try:
+            print "Testing timer ...",
+            timer = Timer(start=False)
+            elapse = timer.get_elapse()
+            timer.start()
+            elapse = timer.stop()
+            try:
+                # duplicate stop
+                elapse = timer.stop()
+            except Exception, e:
+                pass
+            timer.start()
+            # duplicate start, meaning restart
+            timer.start()
+            timer.pause()
+            try:
+                # duplicate pause
+                timer.pause()
+            except Exception, e:
+                pass
+            pause = timer.resume()
+            try:
+                # duplicate resume
+                timer.resume()
+            except Exception, e:
+                pass
+            timer.pause()
+            pause = timer.resume()
+            elapse = timer.stop()
+            timer.get_elapse()
+            print "Fine"
+        except:
+            raise
 
 
 class Logger:
@@ -1089,7 +1171,8 @@ def test():
         # test_warn()
         # test_args()
         # test_exception()
-        test_ask()
+        # test_ask()
+        Timer.test()
 
     except:
         raise

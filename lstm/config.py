@@ -301,7 +301,7 @@ def remove_config(key):
 
 def test():
     try:
-        print 'Testing config ...'
+        print 'Testing config ...',
 
         debug = _get_config_from_pool_(group='debug')
         try:

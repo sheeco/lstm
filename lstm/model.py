@@ -727,11 +727,15 @@ class SharedLSTM:
                         try:
                             self.set_params(params)
                             utils.xprint("done.", newline=True)
+
+                            # Ask to change learning rate
+                            timer.pause()
                             new_learning_rate = utils.ask("Change learning rate from %f to ?"
                                                           % self.learning_rate_rmsprop,
                                                           interpretor=utils.interpret_positive_float)
+                            timer.resume()
 
-                            # ask to stop & exit if quit
+                            # Jump to stop & exit if the answer is quit
                             if new_learning_rate is None:
                                 raise KeyboardInterrupt
 
@@ -754,7 +758,9 @@ class SharedLSTM:
 
                 except KeyboardInterrupt, e:
                     utils.xprint('', newline=True)
+                    timer.pause()
                     stop = utils.ask("Stop and exit?", code_quit=None, interpretor=utils.interpret_confirm)
+                    timer.resume()
                     if stop:
                         # means n complete epochs
                         utils.update_config('num_epoch', self.num_epoch, 'runtime')
@@ -812,9 +818,17 @@ class SharedLSTM:
                 break
 
             elif iepoch >= self.num_epoch:
+
+                timer.pause()
                 more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
+                timer.resume()
+
                 if more:
+
+                    timer.pause()
                     num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
+                    timer.resume()
+
                     # quit means no more epochs
                     if num_more is not None \
                             and num_more > 0:

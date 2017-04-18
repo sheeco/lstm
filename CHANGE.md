@@ -265,12 +265,16 @@
 - RFCT: Remove useless config 'log_slot';
 - RFCT: For asking & asserting methods;
 
-###### 2017-04-17
+###### [2017-04-17](5552ebbe8832b45e47191d6212ab979c59ea6764)
 
 - ADD: Log command line args to file `args.log`;
 
+###### 2017-04-18
 
-- [ ] ADD: Enable timer to pause & continue;
+- ADD: Enable timer to pause & resume;
+- OPT: Pause the timer while waiting for answers from console, to improve the accuracy of timing;
+
+
 - [ ] TRY: Momentum-RMS;
 - [ ] TRY: Decrease rho in rmsprop;
 - [ ] RFCT: Enable non-shared LSTM;
