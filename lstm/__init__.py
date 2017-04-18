@@ -53,11 +53,11 @@ def _init_logger_():
         utils.sub_logger.register_console()
         utils.update_config('identifier', identifier, 'runtime')
 
-        utils.process_command_line_args()
-
     except:
         raise
 
 
 _init_config_()
 _init_logger_()
+
+utils.process_command_line_args()

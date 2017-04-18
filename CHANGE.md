@@ -259,11 +259,15 @@
 
 - ADD: Log predictions to `prediction.log`;
 
-###### 2017-04-17
+###### [2017-04-17](170b26350e7159597916afe4e850bc7190ce60a3)
 
 - ADD: Enable to change learning rate if training failure has occured. & Validate the finite of loss;
 - RFCT: Remove useless config 'log_slot';
 - RFCT: For asking & asserting methods;
+
+###### 2017-04-17
+
+- ADD: Log command line args to file `args.log`;
 
 
 - [ ] ADD: Enable timer to pause & continue;

@@ -459,17 +459,17 @@ def warn(info):
 
 
 def handle(exception, logger=None):
-    xprint('\n\n')
-    xprint('%s\n' % exception.message, newline=True)
-    xprint(traceback.format_exc(), newline=True)
+    xprint('\n')
+    xprint(traceback.format_exc(), newline=True, logger=logger)
+    xprint('%s\n' % exception.message, newline=True, logger=logger)
     if logger is None:
         logger = get_sublogger()
     if logger is not None:
         logger.register("exception")
-        logger.log('%s\n\n' % exception.message, name="exception")
         logger.log('%s\n' % traceback.format_exc(), name="exception")
+        logger.log('%s\n\n' % exception.message, name="exception")
 
-    exit(exception.message)
+    exit()
 
 
 def assert_not_none(var, message, raising=True):
@@ -910,6 +910,12 @@ def process_command_line_args(args=None):
     """
     try:
         args = sys.argv[1:] if args is None else args
+
+        # log command line args to file args.log
+        if args != '' \
+                and get_sublogger() is not None:
+            get_sublogger().register('args')
+            get_sublogger().log("%s\n" % args, name='args')
 
         # shortopts: "ha:i" means opt '-h' & '-i' don't take arg, '-a' does take arg
         # longopts: ["--help", "--add="] means opt '--add' does take arg
