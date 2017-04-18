@@ -300,7 +300,6 @@ def _import_config_(config, tag=None):
 
         # change pickle path to unpickle path if exists
         if 'path_pickle' in config:
-            # raise RuntimeError("No pickle path is found under the importing path.")
             _update_config_('path_unpickle', config['path_pickle']['value'], 'imported')
             remove_config('path_pickle')
 

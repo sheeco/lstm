@@ -25,7 +25,7 @@ class Sampler:
 
         try:
             self.path = path if path is not None else utils.get_config('path_trace')
-            self.path = utils.validate_path_format(self.path)
+            self.path = utils.filer.validate_path_format(self.path)
 
             self.dict_all_traces = {}
             self.node_identifiers = []
@@ -70,7 +70,7 @@ class Sampler:
         """
 
         try:
-            lines = utils.read_lines(filename)
+            lines = utils.filer.read_lines(filename)
             triples = []  # (time, x, y) 的三元组列表
 
             # 从每一行读入三个数值并存入列表中的一行
@@ -95,15 +95,15 @@ class Sampler:
 
         dict_traces = {}
 
-        if not utils.if_exists(self.path):
+        if not utils.filer.if_exists(self.path):
             raise IOError("Invalid path '%s'" % self.path)
         else:
             try:
-                list_subdir = utils.list_directory(self.path)
-                list_files = [subdir for subdir in list_subdir if utils.is_file(utils.format_subpath(self.path, subdir))]
+                list_subdir = utils.filer.list_directory(self.path)
+                list_files = [subdir for subdir in list_subdir if utils.filer.is_file(utils.filer.format_subpath(self.path, subdir))]
 
                 for filename in list_files:
-                    node_identifier, _ = utils.split_extension(filename)
+                    node_identifier, _ = utils.filer.split_extension(filename)
                     temp_trace = Sampler._read_triples_from_file_(self.path + filename)
                     # if node_name.isdigit():
                     #     traces[int(node_name)] = temp_trace
@@ -183,7 +183,7 @@ class Sampler:
         :return: A clipped Sampler copied from `a`
         """
         try:
-            utils.assert_type(a, Sampler)
+            utils.assertor.assert_type(a, Sampler)
             out = copy.deepcopy(a)
             if indices is None:
                 return None
@@ -194,7 +194,7 @@ class Sampler:
             elif isinstance(indices, int):
                 ifrom, ito = 0, indices
             else:
-                utils.assert_type(indices, [list, tuple, int])
+                utils.assertor.assert_type(indices, [list, tuple, int])
                 return None
             if ifrom < 0 \
                     or ito >= a.length:
@@ -353,7 +353,7 @@ class Sampler:
                                % batch_input.shape[1])
                     break
                 else:
-                    utils.assert_unreachable()
+                    utils.assertor.assert_unreachable()
             if not with_target:
                 batch_target = None
             return batch_instants, batch_input, batch_target

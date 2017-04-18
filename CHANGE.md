@@ -279,9 +279,13 @@
 - OPT: Log deviations, predictions & targets together to `prediction.log`;
 - FIX: Bug with root logger;
 
-###### 2017-04-18
+###### [2017-04-18](5112f7b3ce183e49e1138cc4caeef234bbd57497)
 
 - ADD: Enable to choose training scheme among RMSProp, AdaGrad, Momentum SGD & Nesterov Momentum SGD;
+
+###### 2017-04-18
+
+- RFCT: For assertion & file related methods in `utils`;
 
 
 - [ ] TRY: Decrease rho in rmsprop;

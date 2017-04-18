@@ -15,9 +15,6 @@ __all__ = [
 ]
 
 
-# todo add debug info & assertion
-
-
 class SharedLSTM:
 
     train_schemes = ['rmsprop',
@@ -53,8 +50,8 @@ class SharedLSTM:
                 if dimension_embed_layer is not None else utils.get_config('dimension_embed_layer')
             dimension_hidden_layer = dimension_hidden_layer \
                 if dimension_hidden_layer is not None else utils.get_config('dimension_hidden_layer')
-            utils.assert_type(dimension_hidden_layer, tuple)
-            all(utils.assert_type(x, int) for x in dimension_hidden_layer)
+            utils.assertor.assert_type(dimension_hidden_layer, tuple)
+            all(utils.assertor.assert_type(x, int) for x in dimension_hidden_layer)
 
             if len(dimension_hidden_layer) == 1:
                 dimension_hidden_layer = (1,) + dimension_hidden_layer
@@ -395,10 +392,10 @@ class SharedLSTM:
             self.params_trainable = L.layers.get_all_params(layer_out, trainable=True)
 
             def get_names_for_params(list_params):
-                utils.assert_type(list_params, list)
+                utils.assertor.assert_type(list_params, list)
                 param_keys = []
                 for param in list_params:
-                    # utils.assert_type(param, TensorSharedVariable)
+                    # utils.assertor.assert_type(param, TensorSharedVariable)
                     name = param.name
                     param_keys += [name]
                 return param_keys
@@ -422,7 +419,7 @@ class SharedLSTM:
         :return: `predictions`
         """
         try:
-            utils.assert_not_none(self.outputs, "Must build the network first.")
+            utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
 
             timer = utils.Timer()
             utils.xprint('Decoding ...')
@@ -444,8 +441,8 @@ class SharedLSTM:
         :return: `loss`
         """
         try:
-            utils.assert_not_none(self.outputs, "Must build the network first.")
-            utils.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
+            utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
 
             timer = utils.Timer()
             utils.xprint('Computing loss ...')
@@ -530,8 +527,8 @@ class SharedLSTM:
         :return: `deviations`
         """
         try:
-            utils.assert_not_none(self.outputs, "Must build the network first.")
-            utils.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
+            utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
 
             timer = utils.Timer()
             utils.xprint('Building observer ...')
@@ -561,9 +558,9 @@ class SharedLSTM:
         :return: `updates`
         """
         try:
-            utils.assert_not_none(self.outputs, "Must build the network first.")
-            utils.assert_not_none(self.predictions, "Must build the decoder first.")
-            utils.assert_not_none(self.deviations, "Must compute the deviation first.")
+            utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
+            utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
 
             timer = utils.Timer()
             utils.xprint('Computing updates ...')
@@ -585,7 +582,7 @@ class SharedLSTM:
             else:
                 raise ValueError("No udpates defined for training scheme '%s'." % self.train_scheme)
 
-            utils.assert_not_none(updates, "Computation of updates has failed.")
+            utils.assertor.assert_not_none(updates, "Computation of updates has failed.")
             self.updates = updates
             utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.updates
@@ -598,11 +595,11 @@ class SharedLSTM:
         :return: `func_predict`, `func_compare`, `func_train`
         """
         try:
-            utils.assert_not_none(self.outputs, "Must build the network first.")
-            utils.assert_not_none(self.predictions, "Must build the decoder first.")
-            utils.assert_not_none(self.loss, "Must compute the loss first.")
-            utils.assert_not_none(self.deviations, "Must compute the deviation first.")
-            utils.assert_not_none(self.updates, "Must compute the updates first.")
+            utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
+            utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assertor.assert_not_none(self.loss, "Must compute the loss first.")
+            utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
+            utils.assertor.assert_not_none(self.updates, "Must compute the updates first.")
 
             timer = utils.Timer()
             utils.xprint('Compiling functions ...')
@@ -648,10 +645,10 @@ class SharedLSTM:
 
         :return: Two <ndarray> containing average loss & deviation of each epoch.
         """
-        utils.assert_not_none(self.outputs, "Must build the network first.")
-        utils.assert_not_none(self.predictions, "Must build the decoder first.")
-        utils.assert_not_none(self.loss, "Must compute the loss first.")
-        utils.assert_not_none(self.deviations, "Must compute the deviation first.")
+        utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
+        utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
+        utils.assertor.assert_not_none(self.loss, "Must compute the loss first.")
+        utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
         if any(func is None for func in [self.func_predict, self.func_compare, self.func_train]):
             raise RuntimeError("Must compile the functions first.")
 
@@ -723,7 +720,7 @@ class SharedLSTM:
 
                     loss = self.func_train(inputs, targets)
                     try:
-                        utils.assert_finite(loss, 'loss')
+                        utils.assertor.assert_finite(loss, 'loss')
 
                     except AssertionError, e:
                         raise AssertionError("Get loss of 'inf'. Cannot proceed training.")
@@ -732,7 +729,7 @@ class SharedLSTM:
 
                     new_params = self.check_params()
                     try:
-                        utils.assert_finite(new_params, 'params')
+                        utils.assertor.assert_finite(new_params, 'params')
 
                         # consider successful if training is done and successful
                         completed = True
@@ -871,10 +868,10 @@ class SharedLSTM:
             FILENAME_EXPORT = 'params.pkl'
 
             timer = utils.Timer()
-            utils.assert_not_none(self.params_all, "Must build the network first.")
+            utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
             if path is None:
-                path = utils.format_subpath(self.sub_logger.log_path, FILENAME_EXPORT)
+                path = utils.filer.format_subpath(self.sub_logger.log_path, FILENAME_EXPORT)
 
             utils.xprint("Exporting parameters to '%s' ... " % path)
             utils.update_config('path_pickle', path, 'runtime', tags=['path'])
@@ -884,7 +881,7 @@ class SharedLSTM:
 
             params_all = self.check_params()
 
-            utils.dump_to_file(params_all, path)
+            utils.filer.dump_to_file(params_all, path)
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
             return path
@@ -894,14 +891,14 @@ class SharedLSTM:
 
     def import_params(self, path=None):
         try:
-            utils.assert_not_none(self.params_all, "Must build the network first.")
+            utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
             if path is None:
                 path = utils.ask('Import from file path?', interpretor=utils.interpret_file_path)
                 if path is None:
                     return
             utils.xprint('Importing given parameters ...')
-            params_all = utils.load_from_file(path)
+            params_all = utils.filer.load_from_file(path)
             self.set_params(params_all)
             utils.xprint('done.', newline=True)
 
@@ -938,7 +935,7 @@ class SharedLSTM:
             try:
                 # Import previously pickled parameters if requested
                 path_unpickle = utils.get_config('path_unpickle') if utils.has_config('path_unpickle') else None
-                params_unpickled = utils.load_from_file(path_unpickle) if path_unpickle is not None else None
+                params_unpickled = utils.filer.load_from_file(path_unpickle) if path_unpickle is not None else None
                 if params_unpickled is not None:
                     utils.get_sublogger().log_file(path_unpickle, rename='params-imported.pkl')
 
@@ -960,7 +957,7 @@ class SharedLSTM:
 
                 def test_importing():
                     model2 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
-                    params = utils.load_from_file(path_params)
+                    params = utils.filer.load_from_file(path_params)
                     model2.build_network(params=params)
                     model2.build_decoder()
                     model2.compute_loss()

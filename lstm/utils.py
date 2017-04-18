@@ -18,14 +18,12 @@ import config
 __all__ = [
     "Timer",
     "Logger",
+    "assertor",
+    "filer",
     "match",
     "xprint",
     "warn",
     "handle",
-    "assert_not_none",
-    "assert_type",
-    "assert_finite",
-    "assert_unreachable",
     "ask",
     "interpret_confirm",
     "interpret_positive_int",
@@ -35,25 +33,6 @@ __all__ = [
     "format_var",
     "get_timestamp",
     "format_time_string",
-    "if_exists",
-    "assert_exists",
-    "is_file",
-    "is_directory",
-    "is_hidden",
-    "hide_path",
-    "unhide_path",
-    "list_directory",
-    "split_path",
-    "split_extension",
-    "validate_path_format",
-    "format_subpath",
-    "create_path",
-    "rename_path",
-    "copy_file",
-    "read",
-    "read_lines",
-    "dump_to_file",
-    "load_from_file",
     "get_rootlogger",
     "get_sublogger",
     "has_config",
@@ -69,18 +48,6 @@ __all__ = [
 
 root_logger = None
 sub_logger = None
-
-
-def __init__():
-    global root_logger
-    global sub_logger
-
-    root_logger = Logger()
-
-    timestamp = get_timestamp()
-    temp_identifier = '[%s]%s' % (config.get_config('tag'), timestamp) if config.has_config('tag') else timestamp
-    sub_logger = Logger(identifier=temp_identifier)
-    sub_logger.register_console()
 
 
 class Timer:
@@ -222,8 +189,8 @@ class Logger:
         :param bound: <bool> Whether to bound to config.
         """
         self.root_path = path if path is not None else config.get_config('path_log')
-        if not if_exists(self.root_path):
-            create_path(self.root_path)
+        if not Filer.if_exists(self.root_path):
+            Filer.create_path(self.root_path)
         if not (self.root_path[-1] == '/'
                 or self.root_path[-1] == '\\'):
             self.root_path += '/'
@@ -249,7 +216,7 @@ class Logger:
     def _format_log_path_(root_path, identifier, tag):
         subfolder = '[%s]%s' % (tag, identifier) if tag is not None \
             else '%s' % identifier
-        return format_subpath(root_path, subpath=subfolder, isfile=False)
+        return Filer.format_subpath(root_path, subpath=subfolder, isfile=False)
 
     def _update_log_path_(self, identifier, tag):
         try:
@@ -260,13 +227,13 @@ class Logger:
 
                 # Initialize log path
                 if self.log_path is None:
-                    create_path(new_log_path)
+                    Filer.create_path(new_log_path)
                     if identifier is not None:
-                        hide_path(new_log_path)
+                        Filer.hide_path(new_log_path)
 
                 # Update log path
                 else:
-                    rename_path(self.log_path, new_log_path)
+                    Filer.rename_path(self.log_path, new_log_path)
                 self.identifier = identifier
                 self.tag = tag
                 self.log_path = new_log_path
@@ -326,12 +293,12 @@ class Logger:
         try:
             self._validate_log_path_()
 
-            assert_exists(path)
-            directory, filename = split_path(path)
+            Assertor.assert_exists(path)
+            directory, filename = Filer.split_path(path)
             topath = self.log_path + filename if rename is None else self.log_path + rename
-            assert_exists(topath, assertion=False)
+            Assertor.assert_exists(topath, assertion=False)
 
-            copy_file(path, topath)
+            Filer.copy_file(path, topath)
 
         except:
             raise
@@ -425,7 +392,7 @@ class Logger:
                 pfile.write(content)
 
             else:
-                assert_unreachable()
+                Assertor.assert_unreachable()
 
             pfile.flush()
             pfile.close()
@@ -449,13 +416,13 @@ class Logger:
 
             if self.identifier is None:
                 return
-            directory, filename = split_path(self.log_path)
+            directory, filename = Filer.split_path(self.log_path)
             if filename[0] == '.':
                 filename = filename[1:]
                 complete_path = directory + filename
-                rename_path(self.log_path, complete_path)
+                Filer.rename_path(self.log_path, complete_path)
                 self.log_path = complete_path
-            unhide_path(self.log_path)
+            Filer.unhide_path(self.log_path)
 
         except:
             raise
@@ -500,6 +467,259 @@ class Logger:
 
         except:
             raise
+
+
+class Assertor:
+    def __init__(self):
+        raise TypeError("Mustn't instantiate interface.")
+
+    @staticmethod
+    def assert_not_none(var, message, raising=True):
+        """
+
+        :param var:
+        :param message: Message to form exception if assertion is not True.
+        :param raising:
+        :return:
+        """
+        fine = True if var is not None else False
+        if raising \
+                and not fine:
+            raise AssertionError(message)
+        return fine
+
+    @staticmethod
+    def assert_type(var, assertion, raising=True):
+        if isinstance(assertion, list) \
+                or isinstance(assertion, tuple):
+            fine = any(Assertor.assert_type(var, iassertion, raising=False) for iassertion in assertion)
+        else:
+            fine = isinstance(var, assertion)
+        if raising \
+                and not fine:
+            raise ValueError("Expect %s while getting %s instead." % (assertion, type(var)))
+        return fine
+
+    @staticmethod
+    def assert_finite(var, name):
+        if not isinstance(var, list):
+            var = [var]
+        if any((not numpy.isfinite(ivar).all()) for ivar in var):
+            raise AssertionError("`%s` contains 'nan' or 'inf'." % name)
+        else:
+            return True
+
+    @staticmethod
+    def assert_unreachable():
+        raise RuntimeError("Unexpected access of this block.")
+
+    @staticmethod
+    def assert_exists(path, assertion=True, raising=True):
+        if not Filer.if_exists(path) is assertion:
+            if raising:
+                if assertion is True:
+                    raise IOError("'%s' does not exists." % path)
+                else:
+                    raise IOError("'%s' already exists." % path)
+            # else:
+                # if assertion is True:
+                #     warn("assert_exists @ file: "
+                #          "'%s' does not exists." % path)
+                # else:
+                #     warn("assert_exists @ file: "
+                #          "'%s' already exists." % path)
+            return False
+        else:
+            return True
+
+
+assertor = Assertor
+
+
+class Filer:
+    def __init__(self):
+        raise TypeError("Mustn't instantiate interface.")
+
+    @staticmethod
+    def if_exists(path):
+        return os.path.exists(path)
+
+    @staticmethod
+    def is_file(path):
+        return os.path.isfile(path)
+
+    @staticmethod
+    def is_directory(path):
+        return os.path.isdir(path)
+
+    @staticmethod
+    def is_hidden(path):
+        try:
+            file_flag = win32file.GetFileAttributesW(path)
+            is_hiden = file_flag & win32con.FILE_ATTRIBUTE_HIDDEN
+            return is_hiden
+        except:
+            raise
+
+    @staticmethod
+    def hide_path(path):
+        try:
+            file_flag = win32file.GetFileAttributesW(path)
+            win32file.SetFileAttributesW(path, file_flag | win32con.FILE_ATTRIBUTE_HIDDEN)
+        except:
+            raise
+
+    @staticmethod
+    def unhide_path(path):
+        try:
+            if not Filer.is_hidden(path):
+                return
+            file_flag = win32file.GetFileAttributesW(path)
+            win32file.SetFileAttributesW(path, file_flag & ~win32con.FILE_ATTRIBUTE_HIDDEN)
+        except:
+            raise
+
+    @staticmethod
+    def list_directory(path):
+        Assertor.assert_exists(path)
+        try:
+            return os.listdir(path)
+        except:
+            raise
+
+    @staticmethod
+    def split_path(path):
+        try:
+            if path[-1] == '/' \
+                    or path[-1] == '\\':
+                tail = '/'
+                path = path[:-1]
+            else:
+                tail = ''
+            directory, filename = os.path.split(path)
+            return '%s/' % directory, '%s%s' % (filename, tail)
+        except:
+            raise
+
+    @staticmethod
+    def split_extension(filename):
+        try:
+            body, extension = os.path.splitext(filename)
+            return body, extension
+        except:
+            raise
+
+    @staticmethod
+    def validate_path_format(path):
+        try:
+            body, extension = Filer.split_extension(path)
+            if extension == '' \
+                    and path[-1] not in ('/', '\\'):
+                path += '/'
+            path = path.replace('\\', '/')
+            return path
+        except:
+            raise
+
+    @staticmethod
+    def format_subpath(path, subpath='', isfile=True):
+        try:
+            ret = '%s/' % path if path[-1] != '/' else path
+            ret += subpath
+            ret = '%s/' % ret if ret[-1] != '/' \
+                                 and not isfile else ret
+            return ret
+        except:
+            raise
+
+    @staticmethod
+    def create_path(path):
+        try:
+            if not Assertor.assert_exists(path, assertion=False, raising=False):
+                return
+            os.makedirs(path)
+            return True
+        except:
+            raise
+
+    @staticmethod
+    def rename_path(old, new):
+        try:
+            Assertor.assert_exists(old)
+            Assertor.assert_exists(new, assertion=False)
+            os.rename(old, new)
+            return True
+        except:
+            raise
+
+    @staticmethod
+    def copy_file(frompath, topath):
+        try:
+            shutil.copy(frompath, topath)
+        except:
+            raise
+
+    @staticmethod
+    def read(path):
+        Assertor.assert_exists(path)
+        try:
+            pfile = open(path, 'r')
+            all_ = pfile.read()
+            pfile.close()
+            return all_
+        except:
+            raise
+
+    @staticmethod
+    def read_lines(path):
+        Assertor.assert_exists(path)
+        try:
+            pfile = open(path, 'r')
+            lines = pfile.readlines()
+            pfile.close()
+            return lines
+        except:
+            raise
+
+    @staticmethod
+    def dump_to_file(what, path):
+        try:
+            PROTOCOL_ASCII = 0
+            PROTOCOL_BINARY = 2
+            PROTOCOL_HIGHEST = -1
+
+            pfile = open(path, 'wb')
+            cPickle.dump(what, pfile, protocol=PROTOCOL_HIGHEST)
+            pfile.close()
+        except:
+            raise
+
+    @staticmethod
+    def load_from_file(path):
+        try:
+            Assertor.assert_exists(path)
+            pfile = open(path, 'rb')
+
+            # To fix wrongly pickled files,
+            # which were written thru mode 'w' instead of 'wb', or closed improperly.
+            original = pfile.read()
+            pfile.close()
+            converted = original.replace('\r\n', '\n')
+            pfile = open(path, 'wb')
+            pfile.write(converted)
+            pfile.close()
+            pfile = open(path, 'rb')
+
+            what = cPickle.load(pfile)
+            pfile.close()
+
+            return what
+
+        except:
+            raise
+
+
+filer = Filer
 
 
 def match(shape1, shape2):
@@ -553,46 +773,6 @@ def handle(exception, logger=None):
         logger.log('%s\n\n' % exception.message, name="exception")
 
     exit()
-
-
-def assert_not_none(var, message, raising=True):
-    """
-
-    :param var:
-    :param message: Message to form exception if assertion is not True.
-    :param raising:
-    :return:
-    """
-    fine = True if var is not None else False
-    if raising \
-            and not fine:
-        raise AssertionError(message)
-    return fine
-
-
-def assert_type(var, assertion, raising=True):
-    if isinstance(assertion, list) \
-            or isinstance(assertion, tuple):
-        fine = any(assert_type(var, iassertion, raising=False) for iassertion in assertion)
-    else:
-        fine = isinstance(var, assertion)
-    if raising \
-            and not fine:
-        raise ValueError("Expect %s while getting %s instead." % (assertion, type(var)))
-    return fine
-
-
-def assert_finite(var, name):
-    if not isinstance(var, list):
-        var = [var]
-    if any((not numpy.isfinite(ivar).all()) for ivar in var):
-        raise AssertionError("`%s` contains 'nan' or 'inf'." % name)
-    else:
-        return True
-
-
-def assert_unreachable():
-    raise RuntimeError("Unexpected access of this block.")
 
 
 def ask(message, code_quit='q', interpretor=None):
@@ -669,8 +849,8 @@ interpret_positive_float = _interpret_positive_float_
 
 def _interpret_file_path_(answer):
     try:
-        path = validate_path_format(answer)
-        if is_file(path):
+        path = Filer.validate_path_format(answer)
+        if Filer.is_file(path):
             return path
         else:
             raise AssertionError("Cannot find file '%s'." % path)
@@ -731,203 +911,6 @@ def format_time_string(seconds):
         return "%dh %dm %ds" % (h, min, sec)
 
 
-def if_exists(path):
-    return os.path.exists(path)
-
-
-def assert_exists(path, assertion=True, raising=True):
-    if not if_exists(path) is assertion:
-        if raising:
-            if assertion is True:
-                raise IOError("'%s' does not exists." % path)
-            else:
-                raise IOError("'%s' already exists." % path)
-        # else:
-            # if assertion is True:
-            #     warn("assert_exists @ file: "
-            #          "'%s' does not exists." % path)
-            # else:
-            #     warn("assert_exists @ file: "
-            #          "'%s' already exists." % path)
-        return False
-    else:
-        return True
-
-
-def is_file(path):
-    return os.path.isfile(path)
-
-
-def is_directory(path):
-    return os.path.isdir(path)
-
-
-def is_hidden(path):
-    try:
-        file_flag = win32file.GetFileAttributesW(path)
-        is_hiden = file_flag & win32con.FILE_ATTRIBUTE_HIDDEN
-        return is_hiden
-    except:
-        raise
-
-
-def hide_path(path):
-    try:
-        file_flag = win32file.GetFileAttributesW(path)
-        win32file.SetFileAttributesW(path, file_flag | win32con.FILE_ATTRIBUTE_HIDDEN)
-    except:
-        raise
-
-
-def unhide_path(path):
-    try:
-        if not is_hidden(path):
-            return
-        file_flag = win32file.GetFileAttributesW(path)
-        win32file.SetFileAttributesW(path, file_flag & ~win32con.FILE_ATTRIBUTE_HIDDEN)
-    except:
-        raise
-
-
-def list_directory(path):
-    assert_exists(path)
-    try:
-        return os.listdir(path)
-    except:
-        raise
-
-
-def split_path(path):
-    try:
-        if path[-1] == '/' \
-                or path[-1] == '\\':
-            tail = '/'
-            path = path[:-1]
-        else:
-            tail = ''
-        directory, filename = os.path.split(path)
-        return '%s/' % directory, '%s%s' % (filename, tail)
-    except:
-        raise
-
-
-def split_extension(filename):
-    try:
-        body, extension = os.path.splitext(filename)
-        return body, extension
-    except:
-        raise
-
-
-def validate_path_format(path):
-    try:
-        body, extension = split_extension(path)
-        if extension == '' \
-                and path[-1] not in ('/', '\\'):
-            path += '/'
-        path = path.replace('\\', '/')
-        return path
-    except:
-        raise
-
-
-def format_subpath(path, subpath='', isfile=True):
-    try:
-        ret = '%s/' % path if path[-1] != '/' else path
-        ret += subpath
-        ret = '%s/' % ret if ret[-1] != '/' \
-                             and not isfile else ret
-        return ret
-    except:
-        raise
-
-
-def create_path(path):
-    try:
-        if not assert_exists(path, assertion=False, raising=False):
-            return
-        os.makedirs(path)
-        return True
-    except:
-        raise
-
-
-def rename_path(old, new):
-    try:
-        assert_exists(old)
-        assert_exists(new, assertion=False)
-        os.rename(old, new)
-        return True
-    except:
-        raise
-
-
-def copy_file(frompath, topath):
-    try:
-        shutil.copy(frompath, topath)
-    except:
-        raise
-
-
-def read(path):
-    assert_exists(path)
-    try:
-        pfile = open(path, 'r')
-        all_ = pfile.read()
-        pfile.close()
-        return all_
-    except:
-        raise
-
-
-def read_lines(path):
-    assert_exists(path)
-    try:
-        pfile = open(path, 'r')
-        lines = pfile.readlines()
-        pfile.close()
-        return lines
-    except:
-        raise
-
-
-def dump_to_file(what, path):
-    try:
-        PROTOCOL_ASCII = 0
-        PROTOCOL_BINARY = 2
-        PROTOCOL_HIGHEST = -1
-
-        pfile = open(path, 'wb')
-        cPickle.dump(what, pfile, protocol=PROTOCOL_HIGHEST)
-        pfile.close()
-    except:
-        raise
-
-
-def load_from_file(path):
-    try:
-        assert_exists(path)
-        pfile = open(path, 'rb')
-
-        # To fix wrongly pickled files,
-        # which were written thru mode 'w' instead of 'wb', or closed improperly.
-        original = pfile.read()
-        pfile.close()
-        converted = original.replace('\r\n', '\n')
-        pfile = open(path, 'wb')
-        pfile.write(converted)
-        pfile.close()
-        pfile = open(path, 'rb')
-
-        what = cPickle.load(pfile)
-        pfile.close()
-
-        return what
-
-    except:
-        raise
-
-
 def get_rootlogger():
     global root_logger
     return root_logger
@@ -952,7 +935,7 @@ def _validate_config_():
         # Validate path formats
         for key, content in config._filter_config_('path').iteritems():
             original = content['value']
-            validated = validate_path_format(original)
+            validated = Filer.validate_path_format(original)
             if validated != original:
                 config._update_config_(key, validated, source=content['source'])
 
@@ -1008,13 +991,13 @@ def process_command_line_args(args=None):
         for opt, argv in opts:
             if opt in ("-i", "--import"):
                 # Import config.log & params.pkl if exists
-                if is_directory(argv):
-                    path_import = validate_path_format(argv)
+                if Filer.is_directory(argv):
+                    path_import = Filer.validate_path_format(argv)
                     key = 'path_import'
                     update_config(key, path_import, 'command-line')
 
-                    path_config = format_subpath(path_import, subpath='config.log')
-                    config_imported = read(path_config)
+                    path_config = Filer.format_subpath(path_import, subpath='config.log')
+                    config_imported = Filer.read(path_config)
                     try:
                         config_imported = ast.literal_eval(config_imported)
                     except:
@@ -1025,7 +1008,7 @@ def process_command_line_args(args=None):
                     opts.remove((opt, argv))
 
                 # Import params.pkl
-                elif is_file(argv):
+                elif Filer.is_file(argv):
                     update_config('path_unpickle', argv, 'command-line', tags=['path'])
 
                 else:
@@ -1078,7 +1061,7 @@ def test():
             warn("test warning")
 
         def test_assert():
-            assert_type("test", str)
+            Assertor.assert_type("test", str)
 
         def test_timestamp():
             timestamp = get_timestamp()
@@ -1132,19 +1115,19 @@ def test():
 
         def test_hiding():
             path = config.get_config('path_log')
-            _hidden = is_hidden(path)
-            hide_path(path)
-            unhide_path(path)
+            _hidden = Filer.is_hidden(path)
+            Filer.hide_path(path)
+            Filer.unhide_path(path)
 
         def test_formatting():
             path = "\log/test"
-            path = validate_path_format(path)
-            path = format_subpath(path, '', isfile=False)
-            path = format_subpath(path, 'file.txt')
-            path = format_subpath(path, 'subfolder', isfile=False)
+            path = Filer.validate_path_format(path)
+            path = Filer.format_subpath(path, '', isfile=False)
+            path = Filer.format_subpath(path, 'file.txt')
+            path = Filer.format_subpath(path, 'subfolder', isfile=False)
 
             path = "\\log/test"
-            path = validate_path_format(path)
+            path = Filer.validate_path_format(path)
 
         def test_ask():
             yes = ask('Enter yes or no:', interpretor=interpret_confirm)
@@ -1160,9 +1143,15 @@ def test():
             temp_logger = Logger(identifier='pickle')
             temp_logger.register('pickle')
             temp_logger.log('content used for pickling test', name='pickle')
-            filename = format_subpath(temp_logger.log_path, 'logger.pkl')
-            dump_to_file(temp_logger, filename)
-            logger_loaded = load_from_file(filename)
+            filename = Filer.format_subpath(temp_logger.log_path, 'logger.pkl')
+            Filer.dump_to_file(temp_logger, filename)
+            logger_loaded = Filer.load_from_file(filename)
+
+        def test_abstract():
+            try:
+                temp = Assertor()
+            except Exception, e:
+                pass
 
         # test_hiding()
         # test_formatting()
@@ -1173,7 +1162,8 @@ def test():
         # test_args()
         # test_exception()
         # test_ask()
-        Timer.test()
+        # Timer.test()
+        test_abstract()
 
     except:
         raise

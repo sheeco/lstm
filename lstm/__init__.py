@@ -48,7 +48,7 @@ def _init_logger_():
         utils.root_logger = utils.Logger()
 
         timestamp = utils.get_timestamp()
-        identifier = '[%s]%s' % (config.get_config('tag'), timestamp) if config.has_config('tag') else timestamp
+        identifier = '[%s]%s' % (utils.get_config('tag'), timestamp) if utils.has_config('tag') else timestamp
         utils.sub_logger = utils.Logger(identifier=identifier, bound=True)
         utils.sub_logger.register_console()
         utils.update_config('identifier', identifier, 'runtime')
