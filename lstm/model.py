@@ -774,23 +774,31 @@ class SharedLSTM:
                 finally:
                     if completed:
 
-                        # Log predictions
+                        # Log predictions, targets & deviations
 
-                        size_this_batch = len(instants)
-                        for isample in xrange(0, size_this_batch):
+                        def log_predictions():
+                            size_this_batch = len(instants)
+                            for isample in xrange(0, size_this_batch):
 
-                            log_predictions = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
+                                dict_content = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
 
-                            for iseq in xrange(0, self.length_sequence_output):
-                                # index in [-n, -1]
-                                log_predictions['instant'] = instants[isample, iseq - self.length_sequence_output]
-                                for inode in xrange(0, self.num_node):
-                                    # [x, y]
-                                    log_predictions[self.nodes[inode]] = "%s" % predictions[inode, isample, iseq]
+                                for iseq in xrange(0, self.length_sequence_output):
+                                    # index in [-n, -1]
+                                    dict_content['instant'] = instants[isample, iseq - self.length_sequence_output]
+                                    for inode in xrange(0, self.num_node):
+                                        # [x, y]
+                                        deviation_ = deviations[inode, isample, iseq]
+                                        prediction_ = predictions[inode, isample, iseq]
+                                        target_ = targets[inode, isample, iseq]
+                                        dict_content[self.nodes[inode]] = "(%.1f, [%.1f, %.1f], [%.1f, %.1f])" \
+                                                                          % (deviation_, prediction_[0], prediction_[1],
+                                                                             target_[-2], target_[-1])
 
-                                self.sub_logger.log(log_predictions, name="prediction")
+                                    self.sub_logger.log(dict_content, name="prediction")
 
-                        # Log loss & deviations
+                        log_predictions()
+
+                        # Log loss together with brief deviation info
 
                         loss_batch = numpy.append(loss_batch, loss)
                         deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))

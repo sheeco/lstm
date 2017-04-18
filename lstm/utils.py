@@ -31,7 +31,7 @@ __all__ = [
     "interpret_positive_int",
     "interpret_positive_float",
     "interpret_file_path",
-    "mean_min_max",
+    "peek_matrix",
     "format_var",
     "get_timestamp",
     "format_time_string",
@@ -253,7 +253,8 @@ class Logger:
 
     def _update_log_path_(self, identifier, tag):
         try:
-            if identifier != self.identifier \
+            if self.log_path is None \
+                    or identifier != self.identifier \
                     or tag != self.tag:
                 new_log_path = Logger._format_log_path_(self.root_path, identifier if identifier is not None else '', tag)
 
@@ -680,7 +681,7 @@ def _interpret_file_path_(answer):
 interpret_file_path = _interpret_file_path_
 
 
-def mean_min_max(mat):
+def peek_matrix(mat):
     return [numpy.mean(mat), numpy.min(mat), numpy.max(mat)]
 
 
@@ -700,7 +701,7 @@ def format_var(var, name=None, detail=False):
             elif var.size == 1:
                 string += '%.1f' % var[0]
             elif numpy.isfinite(var).all():
-                string += '(mean: %.1f, min: %.1f, max: %.1f)' % tuple(mean_min_max(var))
+                string += '(mean: %.1f, min: %.1f, max: %.1f)' % tuple(peek_matrix(var))
             elif numpy.isnan(var).all():
                 string += 'nan'
             elif numpy.isinf(var).all():

@@ -269,10 +269,15 @@
 
 - ADD: Log command line args to file `args.log`;
 
-###### 2017-04-18
+###### [2017-04-18](b5cf6deff0e1fa045236548680bc888ef0a64e35)
 
 - ADD: Enable timer to pause & resume;
 - OPT: Pause the timer while waiting for answers from console, to improve the accuracy of timing;
+
+###### 2017-04-18
+
+- OPT: Log deviations, predictions & targets together to `prediction.log`;
+- FIX: Bug with root logger;
 
 
 - [ ] TRY: Momentum-RMS;
