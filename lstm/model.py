@@ -19,10 +19,20 @@ __all__ = [
 
 
 class SharedLSTM:
+
+    train_schemes = ['rmsprop',
+                     'adagrad',
+                     'momentum',
+                     'nesterov']
+
     def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=None,
-                 dimension_hidden_layer=None, grad_clip=None, num_epoch=None, learning_rate_rmsprop=None,
-                 rho_rmsprop=None, epsilon_rmsprop=None):
+                 dimension_hidden_layer=None, grad_clip=None, num_epoch=None, train_scheme=None, learning_rate=None,
+                 rho=None, epsilon=None, momentum=None):
         try:
+            if __debug__:
+                theano.config.exception_verbosity = 'high'
+                theano.config.optimizer = 'fast_compile'
+
             if sampler is None:
                 sampler = Sampler()
                 sampler.pan_to_positive()
@@ -40,9 +50,9 @@ class SharedLSTM:
             self.length_sequence_output = self.sampler.length_sequence_output
             self.size_batch = self.sampler.size_batch
             self.dimension_embed_layer = dimension_embed_layer \
-                if dimension_embed_layer is not None else utils.get_config(key='dimension_embed_layer')
+                if dimension_embed_layer is not None else utils.get_config('dimension_embed_layer')
             dimension_hidden_layer = dimension_hidden_layer \
-                if dimension_hidden_layer is not None else utils.get_config(key='dimension_hidden_layer')
+                if dimension_hidden_layer is not None else utils.get_config('dimension_hidden_layer')
             utils.assert_type(dimension_hidden_layer, tuple)
             all(utils.assert_type(x, int) for x in dimension_hidden_layer)
 
@@ -54,14 +64,22 @@ class SharedLSTM:
                 raise ValueError("Expect len: 1~2 while getting %d instead.",
                                  len(dimension_hidden_layer))
             self.dimension_hidden_layers = dimension_hidden_layer
-            self.grad_clip = grad_clip if grad_clip is not None else utils.get_config(key='grad_clip')
-            self.num_epoch = num_epoch if num_epoch is not None else utils.get_config(key='num_epoch')
+            self.grad_clip = grad_clip if grad_clip is not None else utils.get_config('grad_clip')
+            self.num_epoch = num_epoch if num_epoch is not None else utils.get_config('num_epoch')
 
-            self.learning_rate_rmsprop = learning_rate_rmsprop \
-                if learning_rate_rmsprop is not None else utils.get_config(key='learning_rate_rmsprop')
-            self.rho_rmsprop = rho_rmsprop if rho_rmsprop is not None else utils.get_config(key='rho_rmsprop')
-            self.epsilon_rmsprop = epsilon_rmsprop if epsilon_rmsprop is not None else utils.get_config(
-                key='epsilon_rmsprop')
+            self.train_scheme = train_scheme if train_scheme is not None else utils.get_config('train_scheme')
+            if self.train_scheme not in SharedLSTM.train_schemes:
+                raise ValueError("Unknown training scheme '%s'." % self.train_scheme)
+
+            self.learning_rate = learning_rate \
+                if learning_rate is not None else utils.get_config('learning_rate')
+
+            if self.train_scheme in ('rmsprop', 'adagrad'):
+                self.epsilon = epsilon if epsilon is not None else utils.get_config('epsilon')
+            if self.train_scheme == 'rmsprop':
+                self.rho = rho if rho is not None else utils.get_config('rho')
+            if self.train_scheme in ('momentum', 'nesterov'):
+                self.momentum = momentum if momentum is not None else utils.get_config('momentum')
 
             if inputs is None:
                 inputs = T.tensor4("input_var", dtype='float32')
@@ -161,21 +179,6 @@ class SharedLSTM:
             cof = 1. / (2. * numpy.pi * sigma1 * sigma2 * T.sqrt(1 - rho ** 2))
             return cof * T.exp(-z / (2. * (1 - rho ** 2)))
 
-        except:
-            raise
-
-    @staticmethod
-    def _check_bivar_norm(fact, distribution):
-        """
-        :param fact: [x1, x2]
-        :param distribution: [mu1, mu2, sigma1, sigma2, rho]
-        """
-        try:
-            _prob = SharedLSTM.bivar_norm(fact[0], fact[1], distribution[0], distribution[1], distribution[2],
-                                          distribution[3],
-                                          distribution[4])
-            _val = _prob.eval()
-            return _val
         except:
             raise
 
@@ -565,11 +568,24 @@ class SharedLSTM:
             timer = utils.Timer()
             utils.xprint('Computing updates ...')
 
-            # Compute RMSProp updates for training
-            RMSPROP = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate_rmsprop,
-                                        rho=self.rho_rmsprop, epsilon=self.epsilon_rmsprop)
-            updates = RMSPROP
+            # Compute updates according to given training scheme
+            updates = None
+            if self.train_scheme == 'rmsprop':
+                updates = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate,
+                                            rho=self.rho, epsilon=self.epsilon)
+            elif self.train_scheme == 'adagrad':
+                updates = L.updates.adagrad(self.loss, self.params_trainable, learning_rate=self.learning_rate,
+                                            epsilon=self.epsilon)
+            elif self.train_scheme == 'momentum':
+                updates = L.updates.momentum(self.loss, self.params_trainable, learning_rate=self.learning_rate,
+                                             momentum=self.momentum)
+            elif self.train_scheme == 'nesterov':
+                updates = L.updates.nesterov_momentum(self.loss, self.params_trainable, learning_rate=self.learning_rate,
+                                                      momentum=self.momentum)
+            else:
+                raise ValueError("No udpates defined for training scheme '%s'." % self.train_scheme)
 
+            utils.assert_not_none(updates, "Computation of updates has failed.")
             self.updates = updates
             utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.updates
@@ -731,7 +747,7 @@ class SharedLSTM:
                             # Ask to change learning rate
                             timer.pause()
                             new_learning_rate = utils.ask("Change learning rate from %f to ?"
-                                                          % self.learning_rate_rmsprop,
+                                                          % self.learning_rate,
                                                           interpretor=utils.interpret_positive_float)
                             timer.resume()
 
@@ -739,10 +755,10 @@ class SharedLSTM:
                             if new_learning_rate is None:
                                 raise KeyboardInterrupt
 
-                            utils.xprint("Update config 'learning_rate_rmsprop' from %f to %f."
-                                         % (self.learning_rate_rmsprop, new_learning_rate), newline=True)
-                            self.learning_rate_rmsprop = new_learning_rate
-                            utils.update_config('learning_rate_rmsprop', new_learning_rate, source='runtime')
+                            utils.xprint("Update config 'learning_rate' from %f to %f."
+                                         % (self.learning_rate, new_learning_rate), newline=True)
+                            self.learning_rate = new_learning_rate
+                            utils.update_config('learning_rate', new_learning_rate, source='runtime')
 
                             self.compute_update()
                             self.compile()
@@ -906,22 +922,11 @@ class SharedLSTM:
     def test():
 
         try:
-
-            def test_bivar_norm():
-                _prob = SharedLSTM._check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 0])
-                _prob = SharedLSTM._check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 0.1])
-                _prob = SharedLSTM._check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, -0.1])
-                _prob = SharedLSTM._check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 1.e-8])
-                _prob = SharedLSTM._check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, 0.9])
-                _prob = SharedLSTM._check_bivar_norm([2000, -2000], [100, -100, 10000, 15000, -0.9])
-
-            if __debug__:
-                theano.config.exception_verbosity = 'high'
-                theano.config.optimizer = 'fast_compile'
+            utils.get_rootlogger().register("loss", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
             # Select certain nodes if requested
-            nodes = utils.get_config(key='nodes') if utils.has_config('nodes') else None
-            nodes = utils.get_config(key='num_node') if nodes is None and utils.has_config('num_node') else nodes
+            nodes = utils.get_config('nodes') if utils.has_config('nodes') else None
+            nodes = utils.get_config('num_node') if nodes is None and utils.has_config('num_node') else nodes
 
             # Build sampler
             sampler = Sampler(nodes=nodes, keep_positive=True)
@@ -932,7 +937,7 @@ class SharedLSTM:
 
             try:
                 # Import previously pickled parameters if requested
-                path_unpickle = utils.get_config(key='path_unpickle') if utils.has_config('path_unpickle') else None
+                path_unpickle = utils.get_config('path_unpickle') if utils.has_config('path_unpickle') else None
                 params_unpickled = utils.load_from_file(path_unpickle) if path_unpickle is not None else None
                 if params_unpickled is not None:
                     utils.get_sublogger().log_file(path_unpickle, rename='params-imported.pkl')

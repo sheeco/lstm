@@ -29,7 +29,7 @@ config_pool = {
             # Selected nodes
             # This will override 'num_node'
             'nodes': {
-                'value': ['31', '32'],
+                'value': ['31'],
                 'tags': []
             },
             # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
@@ -48,24 +48,41 @@ config_pool = {
                 'tags': []
             },
 
-            # Optimization learning rate
-            'learning_rate_rmsprop': {
-                'value': .03,
+            # Training scheme
+            'train_scheme': {
+                # Among ['rmsprop', 'adagrad', 'momentum', 'nesterov']
+                'value': 'rmsprop',
                 'tags': ['train']
             },
-            'rho_rmsprop': {
-                'value': .9,
+            # Learning rate for training
+            # Used for any training scheme
+            'learning_rate': {
+                'value': .005,
                 'tags': ['train']
             },
-            'epsilon_rmsprop': {
-                'value': 1e-8,
-                'tags': ['train']
-            },
-            # All gradients above this will be clipped
+            # All gradients above this will be clipped during training
             'grad_clip': {
                 'value': 0,
                 'tags': ['train']
             },
+
+            # Parameters for RMSProp
+            'rho': {
+                'value': .9,
+                'tags': ['train', 'rmsprop']
+            },
+            # Parameters for RMSProp / AdaGrad
+            'epsilon': {
+                'value': 1e-8,
+                'tags': ['train', 'rmsprop', 'adagrad']
+            },
+
+            # Parameters for SGD with Momentum / Nesterov Momentum
+            'momentum': {
+                'value': .9,
+                'tags': ['train', 'momentum', 'nesterov']
+            },
+
         },
 
     'debug':
@@ -322,16 +339,16 @@ def test():
 
         # test getter
         _has = has_config('num_epoch')
-        _value = get_config(key='num_epoch')
+        _value = get_config('num_epoch')
         _has = has_config('new-key')
         try:
-            _value = get_config(key='new-key')
+            _value = get_config('new-key')
         except Exception, e:
             pass
 
         # test new key
         _update_config_('new-key', None, 'test')
-        _value = get_config(key='new-key')
+        _value = get_config('new-key')
         print 'Fine'
 
     except:

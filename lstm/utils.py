@@ -78,7 +78,7 @@ def __init__():
     root_logger = Logger()
 
     timestamp = get_timestamp()
-    temp_identifier = '[%s]%s' % (config.get_config(key='tag'), timestamp) if config.has_config('tag') else timestamp
+    temp_identifier = '[%s]%s' % (config.get_config('tag'), timestamp) if config.has_config('tag') else timestamp
     sub_logger = Logger(identifier=temp_identifier)
     sub_logger.register_console()
 
@@ -221,7 +221,7 @@ class Logger:
         :param tag:
         :param bound: <bool> Whether to bound to config.
         """
-        self.root_path = path if path is not None else config.get_config(key='path_log')
+        self.root_path = path if path is not None else config.get_config('path_log')
         if not if_exists(self.root_path):
             create_path(self.root_path)
         if not (self.root_path[-1] == '/'
@@ -1131,7 +1131,7 @@ def test():
             print "return %d" % _test()
 
         def test_hiding():
-            path = config.get_config(key='path_log')
+            path = config.get_config('path_log')
             _hidden = is_hidden(path)
             hide_path(path)
             unhide_path(path)

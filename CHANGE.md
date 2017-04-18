@@ -274,13 +274,16 @@
 - ADD: Enable timer to pause & resume;
 - OPT: Pause the timer while waiting for answers from console, to improve the accuracy of timing;
 
-###### 2017-04-18
+###### [2017-04-18](bd93f761e1d2f6e22fee5897031670d2f0a5cdc0)
 
 - OPT: Log deviations, predictions & targets together to `prediction.log`;
 - FIX: Bug with root logger;
 
+###### 2017-04-18
 
-- [ ] TRY: Momentum-RMS;
+- ADD: Enable to choose training scheme among RMSProp, AdaGrad, Momentum SGD & Nesterov Momentum SGD;
+
+
 - [ ] TRY: Decrease rho in rmsprop;
 - [ ] RFCT: Enable non-shared LSTM;
 - [ ] RFCT: Extract weight & bias initializers;

@@ -24,7 +24,7 @@ class Sampler:
                  length_sequence_output=None, size_batch=None, strict_batch_size=None, keep_positive=True):
 
         try:
-            self.path = path if path is not None else utils.get_config(key='path_trace')
+            self.path = path if path is not None else utils.get_config('path_trace')
             self.path = utils.validate_path_format(self.path)
 
             self.dict_all_traces = {}
@@ -41,15 +41,15 @@ class Sampler:
             self.grid_system = None
             self.entry = 0
 
-            self.dimension_sample = dimension_sample if dimension_sample is not None else utils.get_config(key='dimension_sample')
+            self.dimension_sample = dimension_sample if dimension_sample is not None else utils.get_config('dimension_sample')
             self.length_sequence_input = length_sequence_input \
-                if length_sequence_input is not None else utils.get_config(key='length_sequence_input')
+                if length_sequence_input is not None else utils.get_config('length_sequence_input')
             self.length_sequence_output = length_sequence_output \
-                if length_sequence_output is not None else utils.get_config(key='length_sequence_output')
+                if length_sequence_output is not None else utils.get_config('length_sequence_output')
             # inputs without targets will de discarded
             self.length = int(self.traces.shape[1]) - self.length_sequence_output
-            self.size_batch = size_batch if size_batch is not None else utils.get_config(key='size_batch')
-            self.strict_batch_size = strict_batch_size if strict_batch_size is not None else utils.get_config(key='strict_batch_size')
+            self.size_batch = size_batch if size_batch is not None else utils.get_config('size_batch')
+            self.strict_batch_size = strict_batch_size if strict_batch_size is not None else utils.get_config('strict_batch_size')
             if keep_positive:
                 self.pan_to_positive()
 
@@ -252,7 +252,7 @@ class Sampler:
 
         traces = self.traces
         if grid_system is None:
-            grid_system = GridSystem(utils.get_config(key='grain_grid'))
+            grid_system = GridSystem(utils.get_config('grain_grid'))
         if grid_system.base_xy is None:
             grid_system.base_xy = numpy.floor_divide(self.motion_range[0, :], grid_system.grain) * grid_system.grain
         for trace in traces:
@@ -369,11 +369,11 @@ class Sampler:
 
             demo_list_triples = Sampler._read_triples_from_file_('res/trace/2.trace')
 
-            sampler = Sampler(utils.get_config(key='path_trace'), nodes=1)
-            sampler = Sampler(utils.get_config(key='path_trace'), length=18)
-            sampler = Sampler(utils.get_config(key='path_trace'), nodes=['2'])
+            sampler = Sampler(utils.get_config('path_trace'), nodes=1)
+            sampler = Sampler(utils.get_config('path_trace'), length=18)
+            sampler = Sampler(utils.get_config('path_trace'), nodes=['2'])
 
-            sampler = Sampler(utils.get_config(key='path_trace'))
+            sampler = Sampler(utils.get_config('path_trace'))
 
             def test_panning():
                 sampler.pan_to_positive()
