@@ -291,9 +291,13 @@
 
 - ADD: Enable to choose loss scheme from mean or sum;
 
-###### 2017-04-19
+###### [2017-04-19](5271c0ff1ac7161d1db4b1c173b82da0949742d0)
 
 - OPT: For numpy array & error printing;
+
+###### 2017-04-19
+
+- ADD: Enable to decay the learning rate by a constant ratio automatically after training failure;
 
 
 - [ ] TRY: Decrease rho in rmsprop;

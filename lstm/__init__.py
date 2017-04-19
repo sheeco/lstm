@@ -75,7 +75,8 @@ def _init_logger_():
         identifier = '[%s]%s' % (utils.get_config('tag'), timestamp) if utils.has_config('tag') else timestamp
         utils.sub_logger = utils.Logger(identifier=identifier, bound=True)
         utils.sub_logger.register_console()
-        utils.update_config('identifier', identifier, 'runtime')
+        utils.xprint("Set config 'identifier' to be %s." % identifier)
+        utils.update_config('identifier', identifier, 'runtime', silence=False)
 
     except:
         raise

@@ -20,6 +20,7 @@ __all__ = [
     "Logger",
     "assertor",
     "filer",
+    "InvalidTrainError",
     "match",
     "xprint",
     "warn",
@@ -722,6 +723,13 @@ class Filer:
 filer = Filer
 
 
+class InvalidTrainError(AssertionError):
+    def __init__(self, message, details=None):
+        super(InvalidTrainError, self).__init__(message)
+        self.message = message
+        self.details = details
+
+
 def match(shape1, shape2):
     return (len(shape1) == len(shape2)
             and all(s1 is None
@@ -732,30 +740,32 @@ def match(shape1, shape2):
 
 def xprint(what, newline=False, logger=None, error=False):
     try:
+        # Mandatory newline for errors
+        if error:
+            newline = True
+
         # no level limit for logger
         if logger is None:
             logger = get_sublogger()
         if logger is not None:
             logger.log_console("%s\n" % what if newline else "%s" % what)
 
-        if error:
-            # flush stdin & stdout before writing
-            p_out = sys.stdout
-            if p_out is not None:
-                p_out.flush()
-            p_in = sys.stdin
-            if p_in is not None:
-                p_in.flush()
+        # flush stdin before writing
+        p_in = sys.stdin
+        if p_in is not None:
+            p_in.flush()
 
-            p_err = sys.stderr
-            if p_err is not None:
-                # Mandatory newline for errors
-                p_err.write("%s\n" % what)
-                p_err.flush()
-            else:
-                print "%s\n" % what if newline else "%s" % what,
+        pstream = None
+        if error:
+            pstream = sys.stderr
+            pstream.flush()
+            pstream.write("%s\n" % what)
+            pstream.flush()
         else:
-            print "%s\n" % what if newline else "%s" % what,
+            pstream = sys.stdout
+            pstream.flush()
+            pstream.write("%s\n" % what if newline else "%s" % what)
+            pstream.flush()
 
     except:
         raise
@@ -763,7 +773,7 @@ def xprint(what, newline=False, logger=None, error=False):
 
 def warn(info):
     try:
-        xprint("[Warning] %s" % info, error=True)
+        xprint("\n[Warning] %s" % info, error=True)
     except:
         raise
 
@@ -786,6 +796,11 @@ def ask(message, code_quit='q', interpretor=None):
         raise ValueError("Argument `interpret` is not callable.")
 
     try:
+        # flush stdin before writing
+        p_in = sys.stdin
+        if p_in is not None:
+            p_in.flush()
+
         question = "%s\n$ " % message
         answer = raw_input(question)
 
@@ -959,8 +974,14 @@ get_config = config.get_config
 remove_config = config.remove_config
 
 
-def update_config(key, value, source, tags=None):
+def update_config(key, value, source, tags=None, silence=True):
     try:
+        if not silence:
+            if config.has_config(key):
+                xprint("Update '%s' from %s to %s (by %s)." % (key, config.get_config(key), value, source), newline=True)
+            else:
+                xprint("Add '%s' to be %s (by %s)." % (key, value, source), newline=True)
+
         config._update_config_(key, value, source, tags)
         _validate_config_()
     except:
@@ -1033,22 +1054,13 @@ def process_command_line_args(args=None):
             if opt in ("-c", "--config"):
                 if isinstance(argv, dict):
                     for key, value in argv.items():
-                        if config.has_config(key):
-                            xprint("Update configuration '%s' from %s to %s (from command line)." % (
-                            key, config.get_config(key), value), newline=True)
-                        else:
-                            xprint("Add configuration '%s' to be %s." % (key, value), newline=True)
-                        update_config(key, value, 'command-line')
+                        update_config(key, value, 'command-line', silence=False)
                 else:
                     raise ValueError("The configuration must be a dictionary.")
 
             elif opt in ("-t", "--tag"):
                 key = 'tag'
-                if config.has_config(key):
-                    xprint("Update tag from '%s' to '%s' (from command line)." % (config.get_config(key), argv), newline=True)
-                else:
-                    xprint("Set tag to be '%s' (from command line)." % argv, newline=True)
-                update_config(key, argv, 'command-line')
+                update_config(key, argv, 'command-line', silence=False)
 
             else:
                 raise ValueError("Unknown option '%s'." % opt)

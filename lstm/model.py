@@ -16,7 +16,6 @@ __all__ = [
 
 
 class SharedLSTM:
-
     train_schemes = ['rmsprop',
                      'adagrad',
                      'momentum',
@@ -27,11 +26,13 @@ class SharedLSTM:
 
     def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=None,
                  dimension_hidden_layer=None, grad_clip=None, num_epoch=None, loss_scheme=None, train_scheme=None,
-                 learning_rate=None, rho=None, epsilon=None, momentum=None):
+                 adaptive_learning_rate=None, learning_rate=None, rho=None, epsilon=None, momentum=None):
         try:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
                 theano.config.optimizer = 'fast_compile'
+
+            # Sampler related variables
 
             if sampler is None:
                 sampler = Sampler()
@@ -45,6 +46,7 @@ class SharedLSTM:
             else:
                 self.motion_range = motion_range
 
+            # Variables defining the network
             self.dimension_sample = self.sampler.dimension_sample
             self.length_sequence_input = self.sampler.length_sequence_input
             self.length_sequence_output = self.sampler.length_sequence_output
@@ -65,15 +67,14 @@ class SharedLSTM:
                                  len(dimension_hidden_layer))
             self.dimension_hidden_layers = dimension_hidden_layer
             self.grad_clip = grad_clip if grad_clip is not None else utils.get_config('grad_clip')
-            self.num_epoch = num_epoch if num_epoch is not None else utils.get_config('num_epoch')
-
             self.loss_scheme = loss_scheme if loss_scheme is not None else utils.get_config('loss_scheme')
             if self.loss_scheme not in SharedLSTM.loss_schemes:
                 raise ValueError("Unknown loss scheme '%s'. Must be among %s." % (self.loss_scheme, self.loss_schemes))
 
             self.train_scheme = train_scheme if train_scheme is not None else utils.get_config('train_scheme')
             if self.train_scheme not in SharedLSTM.train_schemes:
-                raise ValueError("Unknown training scheme '%s'. Must be among %s." % (self.train_scheme, self.train_schemes))
+                raise ValueError(
+                    "Unknown training scheme '%s'. Must be among %s." % (self.train_scheme, self.train_schemes))
 
             self.learning_rate = learning_rate \
                 if learning_rate is not None else utils.get_config('learning_rate')
@@ -85,28 +86,44 @@ class SharedLSTM:
             if self.train_scheme in ('momentum', 'nesterov'):
                 self.momentum = momentum if momentum is not None else utils.get_config('momentum')
 
+            # Training related variables
+
+            self.num_epoch = num_epoch if num_epoch is not None else utils.get_config('num_epoch')
+
+            self.adaptive_learning_rate = adaptive_learning_rate if adaptive_learning_rate is not None \
+                else utils.get_config('adaptive_learning_rate')
+
+            # Theano tensor variables (symbolic)
+
             if inputs is None:
                 inputs = T.tensor4("input_var", dtype='float32')
             if targets is None:
                 targets = T.tensor4("target_var", dtype='float32')
 
+            # tensors, should take single batch of samples as real value
             self.inputs = inputs
             self.targets = targets
 
-            self.embed = None
-            self.hids = []
-            self.outputs = None
-            self.network = None
-            self.params_all = None
-            self.params_trainable = None
-            self.param_names = []
-            self.updates = None
-            self.predictions = None
-            self.probabilities = None
-            self.loss = None
-            self.deviations = None
+            self.embed = None  # tensor, output of embedding layer
+            self.hids = []  # 2d list of tensors, output of all the hidden layers of all the nodes
+            self.outputs = None  # tensor, output of the entire network
+            self.network = None  # Lasagne layer object, containing the network structure
+            self.params_all = None  # dict of tensors, all the parameters
+            self.params_trainable = None  # dict of tensors, trainable parameters
+            self.updates = None  # dict of tensors, returned from predefined training functions in Lasagne.updates
 
-            self.network_history = {}
+            # Real values stored for printing / debugging
+
+            self.loss = None  # numpy float, loss computed for single batch
+            self.predictions = None  # numpy ndarray, predictions of single batch
+            self.deviations = None  # numpy ndarray, euclidean distances between predictions & targets
+            self.probabilities = None  # numpy ndarray, binorm probabilities before computing into NNL
+
+            self.param_names = []  # list of str, names of all the parameters
+            self.initial_param_values = None  # list of ndarrays, stored for possible parameter restoration
+            self.network_history = []  # 2d list (iepoch, ibatch) of dict, data flow though the network
+
+            # Theano function objects
 
             self.func_predict = None
             self.func_compare = None
@@ -157,6 +174,8 @@ class SharedLSTM:
                 self.f_correlation = SharedLSTM.scaled_tanh
             else:
                 self.f_correlation = SharedLSTM.safe_tanh
+
+            # Prepare for logging
 
             self.root_logger = utils.get_rootlogger()
             self.sub_logger = utils.get_sublogger()
@@ -592,7 +611,8 @@ class SharedLSTM:
                 updates = L.updates.momentum(self.loss, self.params_trainable, learning_rate=self.learning_rate,
                                              momentum=self.momentum)
             elif self.train_scheme == 'nesterov':
-                updates = L.updates.nesterov_momentum(self.loss, self.params_trainable, learning_rate=self.learning_rate,
+                updates = L.updates.nesterov_momentum(self.loss, self.params_trainable,
+                                                      learning_rate=self.learning_rate,
                                                       momentum=self.momentum)
             else:
                 raise ValueError("No definition found  for training scheme '%s'." % self.train_scheme)
@@ -667,219 +687,228 @@ class SharedLSTM:
         if any(func is None for func in [self.func_predict, self.func_compare, self.func_train]):
             raise RuntimeError("Must compile the functions first.")
 
-        utils.xprint('Training ...', newline=True)
-        timer = utils.Timer()
+        invalid = True
+        while invalid:
+            # start of single training try
+            try:
+                utils.xprint('Training ...', newline=True)
+                timer = utils.Timer()
 
-        loss_epoch = numpy.zeros((0,))
-        deviation_epoch = numpy.zeros((0,))
-        params = None
-        str_params = None
-        stop = False  # Whether to stop and exit
-        completed = None  # Whether a batch has got proceeded completely
+                loss_epoch = numpy.zeros((0,))
+                deviation_epoch = numpy.zeros((0,))
+                params = None
+                str_params = None
+                stop = False  # Whether to stop and exit
+                completed = None  # Whether a batch has got proceeded completely
 
-        # for iepoch in range(self.num_epoch):
-        iepoch = 0
-        while True:
-            # start of single epoch
-            utils.xprint('  Epoch %d ...' % iepoch, newline=True)
-            loss = None
-            deviations = None
-            loss_batch = numpy.zeros((0,))
-            deviation_batch = numpy.zeros((0,))
-            ibatch = 0
-            while True:
-                # start of single batch
-                try:
-
-                    # retrieve the next batch for nodes
-                    # only if the previous batch is completed
-                    # else, redo the previous batch
-                    if completed is None \
-                            or completed:
-                        completed = False
-                        instants, inputs, targets = self.sampler.load_batch(with_target=True)
-                    if inputs is None:
-                        if ibatch == 0:
-                            raise RuntimeError("Only %d sample pairs are found, "
-                                               "not enough for one single batch of size %d."
-                                               % (self.sampler.length, self.size_batch))
-
-                        self.sampler.reset_entry()
-                        completed = None
-                        break
-
-                    def check_netflow():
-                        embed = self.check_embed(inputs)
-                        hids = []
-                        for ihid in xrange(self.dimension_hidden_layers[0]):
-                            check_hid = self.checks_hid[ihid]
-                            hids += [check_hid(inputs)]
-                        netout = self.check_outputs(inputs)
-
-                        dict_netflow = {'embed': embed, 'hiddens': hids, 'netout': netout}
-                        return dict_netflow
-
-                    utils.xprint('    Batch %d ...' % ibatch)
-
-                    # record params, flow of data & probabilities to network history BEFORE training
-                    params = self.check_params()
-                    netflow = check_netflow()
-                    probs = self.check_probs(inputs, targets)
-                    # note that record [i, j] contains variable values BEFORE this training
-                    self.network_history[iepoch, ibatch] = {'params': params, 'netflow': netflow, 'probs': probs}
-
-                    predictions = self.func_predict(inputs)
-                    deviations = self.func_compare(inputs, targets)
-
-                    # Validate loss
-
-                    loss = self.func_train(inputs, targets)
-                    try:
-                        utils.assertor.assert_finite(loss, 'loss')
-
-                    except AssertionError, e:
-                        netout = self.check_outputs(inputs)
-                        raise AssertionError("Get loss of 'inf'. Cannot proceed training.\n"
-                                             "Network output:\n"
-                                             "%s" % netflow['netout'])
-
-                    # Validate params after training
-
-                    new_params = self.check_params()
-                    try:
-                        utils.assertor.assert_finite(new_params, 'params')
-
-                        # consider successful if training is done and successful
-                        completed = True
-
-                    except AssertionError, e:
-                        utils.xprint("Get parameters containing 'nan' or 'inf' after training.\n"
-                                     "Restore parameters from last training ...")
+                # for iepoch in range(self.num_epoch):
+                iepoch = 0
+                while True:
+                    # start of single epoch
+                    utils.xprint('  Epoch %d ...' % iepoch, newline=True)
+                    self.network_history.append([])
+                    loss = None
+                    deviations = None
+                    loss_batch = numpy.zeros((0,))
+                    deviation_batch = numpy.zeros((0,))
+                    ibatch = 0
+                    while True:
+                        # start of single batch
                         try:
-                            self.set_params(params)
-                            utils.xprint("done.", newline=True)
 
-                            # Ask to change learning rate
+                            # retrieve the next batch for nodes
+                            # only if the previous batch is completed
+                            # else, redo the previous batch
+                            if completed is None \
+                                    or completed:
+                                completed = False
+                                instants, inputs, targets = self.sampler.load_batch(with_target=True)
+                            if inputs is None:
+                                if ibatch == 0:
+                                    raise RuntimeError("Only %d sample pairs are found, "
+                                                       "not enough for one single batch of size %d."
+                                                       % (self.sampler.length, self.size_batch))
+
+                                self.sampler.reset_entry()
+                                completed = None
+                                break
+
+                            def check_netflow():
+                                embed = self.check_embed(inputs)
+                                hids = []
+                                for ihid in xrange(self.dimension_hidden_layers[0]):
+                                    check_hid = self.checks_hid[ihid]
+                                    hids += [check_hid(inputs)]
+                                netout = self.check_outputs(inputs)
+
+                                dict_netflow = {'embed': embed, 'hiddens': hids, 'netout': netout}
+                                return dict_netflow
+
+                            utils.xprint('    Batch %d ...' % ibatch)
+
+                            # record params, flow of data & probabilities to network history BEFORE training
+                            params = self.check_params()
+
+                            # Save initial values of params for possible future restoration
+                            if self.initial_param_values is None:
+                                self.initial_param_values = params
+
+                            netflow = check_netflow()
+                            probs = self.check_probs(inputs, targets)
+                            # note that record [i, j] contains variable values BEFORE this training
+                            self.network_history[iepoch].append({'params': params, 'netflow': netflow, 'probs': probs})
+
+                            predictions = self.func_predict(inputs)
+                            deviations = self.func_compare(inputs, targets)
+
+                            # Validate loss
+
+                            loss = self.func_train(inputs, targets)
+                            try:
+                                utils.assertor.assert_finite(loss, 'loss')
+
+                            except AssertionError, e:
+                                netout = self.check_outputs(inputs)
+                                raise utils.InvalidTrainError("Get loss of 'inf'.",
+                                                              details="Network output:\n"
+                                                                      "%s" % netflow['netout'])
+
+                            # Validate params after training
+
+                            new_params = self.check_params()
+                            try:
+                                utils.assertor.assert_finite(new_params, 'params')
+
+                            except AssertionError, e:
+                                raise utils.InvalidTrainError(
+                                    "Get parameters containing 'nan' or 'inf' after training.",
+                                    details="Parameters:\n"
+                                            "%s" % new_params)
+                            except:
+                                raise
+
+                            else:
+                                # consider successful if training is done and successful
+                                completed = True
+
+                        except KeyboardInterrupt, e:
+                            utils.xprint('', newline=True)
                             timer.pause()
-                            new_learning_rate = utils.ask("Change learning rate from %f to ?"
-                                                          % self.learning_rate,
-                                                          interpretor=utils.interpret_positive_float)
+                            stop = utils.ask("Stop and exit?", code_quit=None, interpretor=utils.interpret_confirm)
                             timer.resume()
-
-                            # Jump to stop & exit if the answer is quit
-                            if new_learning_rate is None:
-                                raise KeyboardInterrupt
-
-                            utils.xprint("Update config 'learning_rate' from %f to %f."
-                                         % (self.learning_rate, new_learning_rate), newline=True)
-                            self.learning_rate = new_learning_rate
-                            utils.update_config('learning_rate', new_learning_rate, source='runtime')
-
-                            self.compute_update()
-                            self.compile()
-
-                            # Reprocess current batch
-                            completed = False
-                            continue
+                            if stop:
+                                # means n complete epochs
+                                utils.update_config('num_epoch', self.num_epoch, 'runtime', silence=False)
+                                break
+                            else:
+                                continue
 
                         except:
                             raise
-                    else:
-                        pass
 
-                except KeyboardInterrupt, e:
-                    utils.xprint('', newline=True)
-                    timer.pause()
-                    stop = utils.ask("Stop and exit?", code_quit=None, interpretor=utils.interpret_confirm)
-                    timer.resume()
+                        finally:
+                            if completed:
+
+                                # Log predictions, targets & deviations
+
+                                def log_predictions():
+                                    size_this_batch = len(instants)
+                                    for isample in xrange(0, size_this_batch):
+
+                                        dict_content = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
+
+                                        for iseq in xrange(0, self.length_sequence_output):
+                                            # index in [-n, -1]
+                                            dict_content['instant'] = instants[
+                                                isample, iseq - self.length_sequence_output]
+                                            for inode in xrange(0, self.num_node):
+                                                # [x, y]
+                                                deviation_ = deviations[inode, isample, iseq]
+                                                prediction_ = predictions[inode, isample, iseq]
+                                                target_ = targets[inode, isample, iseq]
+                                                dict_content[self.nodes[inode]] = "(%.1f, [%.1f, %.1f], [%.1f, %.1f])" \
+                                                                                  % (deviation_, prediction_[0],
+                                                                                     prediction_[1],
+                                                                                     target_[-2], target_[-1])
+
+                                            self.sub_logger.log(dict_content, name="prediction")
+
+                                log_predictions()
+
+                                # Log loss together with brief deviation info
+
+                                loss_batch = numpy.append(loss_batch, loss)
+                                deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
+
+                                self.sub_logger.log({'epoch': iepoch, 'batch': ibatch,
+                                                     'loss': utils.format_var(float(loss)),
+                                                     'deviations': utils.format_var(deviations)},
+                                                    name="training")
+
+                                utils.xprint('%s; %s'
+                                             % (utils.format_var(float(loss), name='loss'),
+                                                utils.format_var(deviations, name='deviations')),
+                                             newline=True)
+
+                                ibatch += 1
+                        # end of single batch
+                    # end of single epoch
+
+                    loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
+                    deviation_epoch = numpy.append(deviation_epoch, numpy.mean(deviation_batch))
+
+                    iepoch += 1
+
                     if stop:
-                        # means n complete epochs
-                        utils.update_config('num_epoch', self.num_epoch, 'runtime')
                         break
-                    else:
-                        continue
 
-                except:
-                    raise
+                    elif iepoch >= self.num_epoch:
 
-                finally:
-                    if completed:
+                        timer.pause()
+                        more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
+                        timer.resume()
 
-                        # Log predictions, targets & deviations
+                        if more:
 
-                        def log_predictions():
-                            size_this_batch = len(instants)
-                            for isample in xrange(0, size_this_batch):
+                            timer.pause()
+                            num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
+                            timer.resume()
 
-                                dict_content = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
+                            # quit means no more epochs
+                            if num_more is not None \
+                                    and num_more > 0:
+                                self.num_epoch += num_more
+                                utils.update_config('num_epoch', self.num_epoch, 'runtime', silence=False)
+                            else:
+                                break
+                        else:
+                            break
 
-                                for iseq in xrange(0, self.length_sequence_output):
-                                    # index in [-n, -1]
-                                    dict_content['instant'] = instants[isample, iseq - self.length_sequence_output]
-                                    for inode in xrange(0, self.num_node):
-                                        # [x, y]
-                                        deviation_ = deviations[inode, isample, iseq]
-                                        prediction_ = predictions[inode, isample, iseq]
-                                        target_ = targets[inode, isample, iseq]
-                                        dict_content[self.nodes[inode]] = "(%.1f, [%.1f, %.1f], [%.1f, %.1f])" \
-                                                                          % (deviation_, prediction_[0], prediction_[1],
-                                                                             target_[-2], target_[-1])
+                # end of all epochs
+                invalid = False
 
-                                    self.sub_logger.log(dict_content, name="prediction")
+            # end of single training try
+            except utils.InvalidTrainError, e:
+                # Update learning rate & Retrain
 
-                        log_predictions()
+                if self.adaptive_learning_rate is not None:
+                    utils.warn(e.message)
+                    new_learning_rate = self.learning_rate * self.adaptive_learning_rate
+                    self.update_learning_rate(new_learning_rate)
 
-                        # Log loss together with brief deviation info
+                    # Reinitialize related variables
+                    self.network_history = []
+                    self.sampler.reset_entry()
+                    continue
 
-                        loss_batch = numpy.append(loss_batch, loss)
-                        deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
-
-                        self.sub_logger.log({'epoch': iepoch, 'batch': ibatch,
-                                             'loss': utils.format_var(float(loss)),
-                                             'deviations': utils.format_var(deviations)},
-                                            name="training")
-
-                        utils.xprint('%s; %s'
-                                     % (utils.format_var(float(loss), name='loss'),
-                                        utils.format_var(deviations, name='deviations')),
-                                     newline=True)
-
-                        ibatch += 1
-                        # end of ingle batch
-            # end of single epoch
-
-            loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
-            deviation_epoch = numpy.append(deviation_epoch, numpy.mean(deviation_batch))
-
-            iepoch += 1
-
-            if stop:
-                break
-
-            elif iepoch >= self.num_epoch:
-
-                timer.pause()
-                more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
-                timer.resume()
-
-                if more:
-
-                    timer.pause()
-                    num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
-                    timer.resume()
-
-                    # quit means no more epochs
-                    if num_more is not None \
-                            and num_more > 0:
-                        self.num_epoch += num_more
-                        utils.update_config('num_epoch', self.num_epoch, 'runtime')
-                    else:
-                        break
                 else:
-                    break
+                    raise
+            except:
+                raise
 
-        utils.xprint('Done in %s.' % timer.stop(), newline=True)
-        return loss_epoch, deviation_epoch
+            else:
+                utils.xprint('Done in %s.' % timer.stop(), newline=True)
+                return loss_epoch, deviation_epoch
 
     def export_params(self, path=None):
         try:
@@ -926,6 +955,27 @@ class SharedLSTM:
     def set_params(self, params):
         try:
             L.layers.set_all_param_values(self.network, params)
+
+        except:
+            raise
+
+    def update_learning_rate(self, new_learning_rate):
+        try:
+            self.learning_rate = new_learning_rate
+            utils.update_config('learning_rate', new_learning_rate, source='runtime', silence=False)
+
+            utils.xprint("Re")
+            self.compute_update()
+
+            utils.xprint("Re")
+            self.compile()
+
+            utils.assertor.assert_not_none(self.initial_param_values,
+                                           "No initial values are found for parameter restoration.")
+
+            utils.xprint("Restore parameters from initial values ...")
+            self.set_params(self.initial_param_values)
+            utils.xprint("done.", newline=True)
 
         except:
             raise

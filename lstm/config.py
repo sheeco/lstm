@@ -60,10 +60,15 @@ config_pool = {
                 'value': 'rmsprop',
                 'tags': ['train']
             },
+            # Decay learning rate by this ratio if training has failed
+            'adaptive_learning_rate': {
+                'value': .5,
+                'tags': ['train']
+            },
             # Learning rate for training
             # Used for any training scheme
             'learning_rate': {
-                'value': .005,
+                'value': .001,
                 'tags': ['train']
             },
             # All gradients above this will be clipped during training
