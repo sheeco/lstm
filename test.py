@@ -13,6 +13,8 @@ if __name__ == '__main__':
 
         lstm.model.SharedLSTM.test()
 
+        exit("Exit Successfully.")
+
     except KeyboardInterrupt, e:
         lstm.utils.xprint("\nStopped manually.", newline=True)
         lstm.utils.handle(e)

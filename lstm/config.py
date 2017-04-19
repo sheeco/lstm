@@ -48,6 +48,12 @@ config_pool = {
                 'tags': []
             },
 
+            # Loss definition
+            'loss_scheme': {
+                # Among ['sum', 'mean']
+                'value': 'sum',
+                'tags': ['train']
+            },
             # Training scheme
             'train_scheme': {
                 # Among ['rmsprop', 'adagrad', 'momentum', 'nesterov']

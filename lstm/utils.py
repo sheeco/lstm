@@ -762,7 +762,7 @@ def warn(info):
 
 
 def handle(exception, logger=None):
-    xprint('\n')
+    xprint('\n\n')
     xprint(traceback.format_exc(), newline=True, logger=logger)
     xprint('%s\n' % exception.message, newline=True, logger=logger)
     if logger is None:
@@ -772,7 +772,7 @@ def handle(exception, logger=None):
         logger.log('%s\n' % traceback.format_exc(), name="exception")
         logger.log('%s\n\n' % exception.message, name="exception")
 
-    exit()
+    exit("Exit Due to Failure.")
 
 
 def ask(message, code_quit='q', interpretor=None):

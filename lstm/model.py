@@ -22,9 +22,12 @@ class SharedLSTM:
                      'momentum',
                      'nesterov']
 
+    loss_schemes = ['sum',
+                    'mean']
+
     def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=None,
-                 dimension_hidden_layer=None, grad_clip=None, num_epoch=None, train_scheme=None, learning_rate=None,
-                 rho=None, epsilon=None, momentum=None):
+                 dimension_hidden_layer=None, grad_clip=None, num_epoch=None, loss_scheme=None, train_scheme=None,
+                 learning_rate=None, rho=None, epsilon=None, momentum=None):
         try:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
@@ -64,9 +67,13 @@ class SharedLSTM:
             self.grad_clip = grad_clip if grad_clip is not None else utils.get_config('grad_clip')
             self.num_epoch = num_epoch if num_epoch is not None else utils.get_config('num_epoch')
 
+            self.loss_scheme = loss_scheme if loss_scheme is not None else utils.get_config('loss_scheme')
+            if self.loss_scheme not in SharedLSTM.loss_schemes:
+                raise ValueError("Unknown loss scheme '%s'. Must be among %s." % (self.loss_scheme, self.loss_schemes))
+
             self.train_scheme = train_scheme if train_scheme is not None else utils.get_config('train_scheme')
             if self.train_scheme not in SharedLSTM.train_schemes:
-                raise ValueError("Unknown training scheme '%s'." % self.train_scheme)
+                raise ValueError("Unknown training scheme '%s'. Must be among %s." % (self.train_scheme, self.train_schemes))
 
             self.learning_rate = learning_rate \
                 if learning_rate is not None else utils.get_config('learning_rate')
@@ -509,9 +516,17 @@ class SharedLSTM:
 
             # Normal Negative Log-likelihood
             nnls = T.neg(T.log(probs))
-            loss = T.sum(nnls)
-            # loss = T.mean(nnls)
 
+            # Use either sum or mean for loss
+            loss = None
+            if self.loss_scheme == 'sum':
+                loss = T.sum(nnls)
+            elif self.loss_scheme == 'mean':
+                loss = T.mean(nnls)
+            else:
+                raise ValueError("No definition found for loss scheme '%s'." % self.loss_scheme)
+
+            utils.assertor.assert_not_none(loss, "Computation of loss has failed.")
             self.probabilities = probs
             self.loss = loss
             utils.xprint('done in %s.' % timer.stop(), newline=True)
@@ -580,7 +595,7 @@ class SharedLSTM:
                 updates = L.updates.nesterov_momentum(self.loss, self.params_trainable, learning_rate=self.learning_rate,
                                                       momentum=self.momentum)
             else:
-                raise ValueError("No udpates defined for training scheme '%s'." % self.train_scheme)
+                raise ValueError("No definition found  for training scheme '%s'." % self.train_scheme)
 
             utils.assertor.assert_not_none(updates, "Computation of updates has failed.")
             self.updates = updates
@@ -723,7 +738,10 @@ class SharedLSTM:
                         utils.assertor.assert_finite(loss, 'loss')
 
                     except AssertionError, e:
-                        raise AssertionError("Get loss of 'inf'. Cannot proceed training.")
+                        netout = self.check_outputs(inputs)
+                        raise AssertionError("Get loss of 'inf'. Cannot proceed training.\n"
+                                             "Network output:\n"
+                                             "%s" % netflow['netout'])
 
                     # Validate params after training
 

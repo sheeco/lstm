@@ -283,9 +283,13 @@
 
 - ADD: Enable to choose training scheme among RMSProp, AdaGrad, Momentum SGD & Nesterov Momentum SGD;
 
-###### 2017-04-18
+###### [2017-04-18](450e0895b9d5a239714e919c98851afdc5b10681)
 
 - RFCT: For assertion & file related methods in `utils`;
+
+###### 2017-04-19
+
+- ADD: Enable to choose loss scheme from mean or sum;
 
 
 - [ ] TRY: Decrease rho in rmsprop;
