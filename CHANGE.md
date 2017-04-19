@@ -287,9 +287,13 @@
 
 - RFCT: For assertion & file related methods in `utils`;
 
-###### 2017-04-19
+###### [2017-04-19](1e573fcf01948aea09ffabb29fd1bd107debf4f9)
 
 - ADD: Enable to choose loss scheme from mean or sum;
+
+###### 2017-04-19
+
+- OPT: For numpy array & error printing;
 
 
 - [ ] TRY: Decrease rho in rmsprop;

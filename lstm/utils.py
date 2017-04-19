@@ -730,41 +730,47 @@ def match(shape1, shape2):
                     for s1, s2 in zip(shape1, shape2)))
 
 
-def xprint(what, newline=False, logger=None):
-    # no level limit for logger
-    if logger is None:
-        logger = get_sublogger()
-    if logger is not None:
-        logger.log_console("%s\n" % what if newline else "%s" % what)
+def xprint(what, newline=False, logger=None, error=False):
+    try:
+        # no level limit for logger
+        if logger is None:
+            logger = get_sublogger()
+        if logger is not None:
+            logger.log_console("%s\n" % what if newline else "%s" % what)
 
-    print "%s\n" % what if newline else "%s" % what,
+        if error:
+            # flush stdin & stdout before writing
+            p_out = sys.stdout
+            if p_out is not None:
+                p_out.flush()
+            p_in = sys.stdin
+            if p_in is not None:
+                p_in.flush()
+
+            p_err = sys.stderr
+            if p_err is not None:
+                # Mandatory newline for errors
+                p_err.write("%s\n" % what)
+                p_err.flush()
+            else:
+                print "%s\n" % what if newline else "%s" % what,
+        else:
+            print "%s\n" % what if newline else "%s" % what,
+
+    except:
+        raise
 
 
 def warn(info):
     try:
-        # flush before writing
-        p_out = sys.stdout
-        if p_out is not None:
-            p_out.flush()
-        p_in = sys.stdin
-        if p_in is not None:
-            p_in.flush()
-
-        p_err = sys.stderr
-        if p_err is None:
-            # sys.stderr is None - warnings get lost
-            return
-        p_err.write("[Warning] %s\n" % info)
-        p_err.flush()
-
-    except (IOError, UnicodeError):
+        xprint("[Warning] %s" % info, error=True)
+    except:
         raise
 
 
 def handle(exception, logger=None):
-    xprint('\n\n')
-    xprint(traceback.format_exc(), newline=True, logger=logger)
-    xprint('%s\n' % exception.message, newline=True, logger=logger)
+    xprint('\n\n%s' % traceback.format_exc(), newline=True, logger=logger, error=True)
+    # xprint('%s\n' % exception.message, newline=True, logger=logger)
     if logger is None:
         logger = get_sublogger()
     if logger is not None:
