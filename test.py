@@ -16,7 +16,6 @@ if __name__ == '__main__':
         exit("Exit Successfully.")
 
     except KeyboardInterrupt, e:
-        lstm.utils.xprint("\nStopped manually.", newline=True)
         lstm.utils.handle(e)
     except Exception, e:
         lstm.utils.handle(e)

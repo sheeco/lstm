@@ -146,7 +146,7 @@ class Timer:
     @staticmethod
     def test():
         try:
-            print "Testing timer ...",
+            print "Testing timer ... ",
             timer = Timer(start=False)
             elapse = timer.get_elapse()
             timer.start()
@@ -205,8 +205,8 @@ class Logger:
         self.bound = bound
 
         # {'name':
-        #   content=[(tag1, [...]),
-        #            (tag2, [...])
+        #   content=[(tag1, [... ]),
+        #            (tag2, [... ])
         #           ]
         # }
         self.logs = {}
@@ -253,9 +253,9 @@ class Logger:
             if not self.bound:
                 return
 
-            if (config.has_config('identifier')
+            if (has_config('identifier')
                 and config.get_config('identifier') != self.identifier) \
-                    or (config.has_config('tag')
+                    or (has_config('tag')
                         and config.get_config('tag') != self.tag):
                 self._update_log_path_(config.get_config('identifier'), config.get_config('tag'))
 
@@ -278,7 +278,7 @@ class Logger:
                     string += ", 'tags': %s" % content['tags']
 
                 for inkey, invalue in content.iteritems():
-                    if inkey in ('value', 'source'):
+                    if inkey in ('value', 'source', 'tags'):
                         continue
                     else:
                         string += ", '%s': " % inkey
@@ -447,7 +447,7 @@ class Logger:
             logger.log(_dict, name='test')
 
             try:
-                logger.log('test wrong content type ...', name='test')
+                logger.log('test wrong content type ... ', name='test')
             except Exception, e:
                 pass
 
@@ -463,7 +463,7 @@ class Logger:
                 pass
 
             logger.register_console()
-            logger.log('test console output ...')
+            logger.log('test console output ... ')
             logger.complete()
 
         except:
@@ -773,7 +773,7 @@ def xprint(what, newline=False, logger=None, error=False):
 
 def warn(info):
     try:
-        xprint("\n[Warning] %s" % info, error=True)
+        xprint("[Warning] %s" % info, error=True)
     except:
         raise
 
@@ -788,7 +788,10 @@ def handle(exception, logger=None):
         logger.log('%s\n' % traceback.format_exc(), name="exception")
         logger.log('%s\n\n' % exception.message, name="exception")
 
-    exit("Exit Due to Failure.")
+    if isinstance(exception, KeyboardInterrupt):
+        exit("Stop munually.")
+    else:
+        exit("Exit Due to Failure.")
 
 
 def ask(message, code_quit='q', interpretor=None):
@@ -945,9 +948,9 @@ def get_sublogger():
 def _validate_config_():
     try:
         # 'nodes' will override 'num_node'
-        if config.has_config('nodes') \
+        if has_config('nodes') \
                 and config.get_config('nodes') is not None \
-                and config.has_config('num_node') \
+                and has_config('num_node') \
                 and config.get_config('num_node') is not None:
             warn("Configuration 'nodes' (%s) will override 'num_node' (%s)."
                  % (config.get_config('nodes'), config.get_config('num_node')))
@@ -956,9 +959,10 @@ def _validate_config_():
         # Validate path formats
         for key, content in config._filter_config_('path').iteritems():
             original = content['value']
-            validated = Filer.validate_path_format(original)
-            if validated != original:
-                config._update_config_(key, validated, source=content['source'])
+            if original is not None:
+                validated = Filer.validate_path_format(original)
+                if validated != original:
+                    config._update_config_(key, validated, source=content['source'])
 
     except:
         raise
@@ -969,18 +973,35 @@ def _validate_config_():
 Wrap methods in config.py to apply validation
 """
 
-has_config = config.has_config
+
+def has_config(key, ignore_none=True):
+    has = config.has_config(key)
+    if ignore_none:
+        return has and config.get_config(key) is not None
+    else:
+        return has
+
+
 get_config = config.get_config
 remove_config = config.remove_config
 
 
-def update_config(key, value, source, tags=None, silence=True):
+def update_config(key, value, source, tags=None, silence=True, strict=True):
+    """
+
+    :param key:
+    :param value:
+    :param source:
+    :param tags:
+    :param silence: Print configuraiton update info only if not `silence`.
+    :param strict: Only allow to add new configuration if not `strict`.
+    :return:
+    """
     try:
+        if strict and not has_config(key, ignore_none=False):
+            raise ValueError("Unknown configuration key '%s'." % key)
         if not silence:
-            if config.has_config(key):
-                xprint("Update '%s' from %s to %s (by %s)." % (key, config.get_config(key), value, source), newline=True)
-            else:
-                xprint("Add '%s' to be %s (by %s)." % (key, value, source), newline=True)
+            xprint("Update '%s' from %s to %s (by %s)." % (key, config.get_config(key), value, source), newline=True)
 
         config._update_config_(key, value, source, tags)
         _validate_config_()
@@ -1120,7 +1141,7 @@ def test():
                 i = 0
                 while True:
                     try:
-                        print "%d ..." % i
+                        print "%d ... " % i
                         i += 1
                         time.sleep(1)
                     except KeyboardInterrupt, e:
@@ -1171,6 +1192,12 @@ def test():
             except Exception, e:
                 pass
 
+        def test_unknown_config():
+            try:
+                process_command_line_args(args=["-c", "{'unknown-key': None, 'tag': 'x'}", "-t", "xxx"])
+            except Exception, e:
+                pass
+
         # test_hiding()
         # test_formatting()
         # test_ask()
@@ -1181,7 +1208,8 @@ def test():
         # test_exception()
         # test_ask()
         # Timer.test()
-        test_abstract()
+        # test_abstract()
+        test_unknown_config()
 
     except:
         raise

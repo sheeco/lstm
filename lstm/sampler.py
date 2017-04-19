@@ -365,7 +365,7 @@ class Sampler:
     def test():
 
         try:
-            utils.xprint('Testing Sampler...')
+            utils.xprint('Testing Sampler... ')
 
             demo_list_triples = Sampler._read_triples_from_file_('res/trace/2.trace')
 

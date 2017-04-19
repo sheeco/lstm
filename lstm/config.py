@@ -21,6 +21,33 @@ config_pool = {
                 'value': 'log/',
                 'tags': ['path']
             },
+            # Logging identifier
+            # for naming of the log folder
+            'identifier': {
+                'value': None,
+                'tags': []
+            },
+            # Tag for logging identifier
+            'tag': {
+                'value': None,
+                'tags': []
+            },
+            # Directory path that configs & parameters get imported from
+            'path_import': {
+                'value': None,
+                'tags': ['path']
+            },
+            # File path that parameters get pickled to
+            'path_pickle': {
+                'value': None,
+                'tags': ['path']
+            },
+            # File path that which parameters get unpickled & imported from
+            'path_unpickle': {
+                'value': None,
+                'tags': ['path']
+            },
+
             # How many nodes to learn on
             'num_node': {
                 'value': 2,
@@ -321,14 +348,15 @@ def _import_config_(config, tag=None):
 def remove_config(key):
     try:
         global global_configuration
-        global_configuration.pop(key)
+        if key in global_configuration:
+            global_configuration[key]['value'] = None
     except:
         raise
 
 
 def test():
     try:
-        print 'Testing config ...',
+        print 'Testing config ... ',
 
         debug = _get_config_from_pool_(group='debug')
         try:

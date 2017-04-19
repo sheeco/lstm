@@ -295,9 +295,13 @@
 
 - OPT: For numpy array & error printing;
 
-###### 2017-04-19
+###### [2017-04-19](9ee8f48baa98da990466089c42fb6e1fabad6f2c)
 
 - ADD: Enable to decay the learning rate by a constant ratio automatically after training failure;
+
+###### 2017-04-19
+
+- OPT: Raise exception for unknown configuration key;
 
 
 - [ ] TRY: Decrease rho in rmsprop;
