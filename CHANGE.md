@@ -299,14 +299,16 @@
 
 - ADD: Enable to decay the learning rate by a constant ratio automatically after training failure;
 
-###### 2017-04-19
+###### [2017-04-19](87d88866d2527cb91fc0a3fa61d7ea02929623d8)
 
 - OPT: Raise exception for unknown configuration key;
 
+###### 2017-04-19
 
-- [ ] TRY: Decrease rho in rmsprop;
+- FIX: Bug with importing;
+
+
 - [ ] RFCT: Enable non-shared LSTM;
 - [ ] RFCT: Extract weight & bias initializers;
 - [ ] ADD: Pre-training;
 - [ ] ADD: Use `pprint` to improve printing;
-- [ ] TRY: Tuning `GRAD_CLIP`;

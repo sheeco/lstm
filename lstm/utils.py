@@ -1057,7 +1057,8 @@ def process_command_line_args(args=None):
 
                 # Import params.pkl
                 elif Filer.is_file(argv):
-                    update_config('path_unpickle', argv, 'command-line', tags=['path'])
+                    update_config('path_unpickle', argv, 'command-line', tags=['path'], silence=False)
+                    opts.remove((opt, argv))
 
                 else:
                     raise ValueError("Invalid path '%s' to import." % argv)

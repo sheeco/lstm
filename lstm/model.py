@@ -427,6 +427,8 @@ class SharedLSTM:
                 return param_keys
 
             self.param_names = get_names_for_params(self.params_all)
+            # Save initial values of params for possible future restoration
+            self.initial_param_values = L.layers.get_all_param_values(layer_out)
 
             # Assign saved parameter values to the built network
             if params is not None:
@@ -697,8 +699,6 @@ class SharedLSTM:
 
                     loss_epoch = numpy.zeros((0,))
                     deviation_epoch = numpy.zeros((0,))
-                    params = None
-                    str_params = None
                     stop = False  # Whether to stop and exit
                     completed = None  # Whether a batch has got proceeded completely
 
@@ -750,10 +750,6 @@ class SharedLSTM:
                                 # record params, flow of data & probabilities to network history BEFORE training
                                 params = self.check_params()
 
-                                # Save initial values of params for possible future restoration
-                                if self.initial_param_values is None:
-                                    self.initial_param_values = params
-
                                 netflow = check_netflow()
                                 probs = self.check_probs(inputs, targets)
                                 # note that record [i, j] contains variable values BEFORE this training
@@ -769,7 +765,6 @@ class SharedLSTM:
                                     utils.assertor.assert_finite(loss, 'loss')
 
                                 except AssertionError, e:
-                                    netout = self.check_outputs(inputs)
                                     raise utils.InvalidTrainError("Get loss of 'inf'.",
                                                                   details="Network output:\n"
                                                                           "%s" % netflow['netout'])
@@ -956,6 +951,8 @@ class SharedLSTM:
     def set_params(self, params):
         try:
             L.layers.set_all_param_values(self.network, params)
+            # update initial param values to restore from
+            self.initial_param_values = params
 
         except:
             raise
@@ -1024,15 +1021,6 @@ class SharedLSTM:
                 loss, deviations = model.train()
 
                 def test_importing():
-                    model2 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
-                    params = utils.filer.load_from_file(path_params)
-                    model2.build_network(params=params)
-                    model2.build_decoder()
-                    model2.compute_loss()
-                    model2.compute_deviation()
-                    model2.compute_update()
-                    model2.compile()
-
                     model3 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
                     model3.build_network()
                     model3.import_params()
