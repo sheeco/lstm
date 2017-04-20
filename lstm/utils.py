@@ -665,9 +665,9 @@ class Filer:
         Assertor.assert_exists(path)
         try:
             pfile = open(path, 'r')
-            all_ = pfile.read()
+            ret = pfile.read()
             pfile.close()
-            return all_
+            return ret
         except:
             raise
 

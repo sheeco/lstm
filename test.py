@@ -11,7 +11,7 @@ if __name__ == '__main__':
         # lstm.utils.test()
         # lstm.sampler.Sampler.test()
 
-        lstm.model.SharedLSTM.test()
+        lstm.model.SocialLSTM.test()
 
         exit("Exit Successfully.")
 

@@ -11,22 +11,27 @@ import utils
 from sampler import Sampler
 
 __all__ = [
-    'SharedLSTM'
+    'SocialLSTM'
 ]
 
 
-class SharedLSTM:
-    train_schemes = ['rmsprop',
+class SocialLSTM:
+
+    SHARE_SCHEMES = ['parameter',
+                     'input']
+
+    TRAIN_SCHEMES = ['rmsprop',
                      'adagrad',
                      'momentum',
                      'nesterov']
 
-    loss_schemes = ['sum',
+    LOSS_SCHEMES = ['sum',
                     'mean']
 
-    def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, dimension_embed_layer=None,
-                 dimension_hidden_layer=None, grad_clip=None, num_epoch=None, loss_scheme=None, train_scheme=None,
-                 adaptive_learning_rate=None, learning_rate=None, rho=None, epsilon=None, momentum=None):
+    def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, adaptive_learning_rate=None,
+                 share_scheme=None, loss_scheme=None, train_scheme=None,
+                 dimension_embed_layer=None, dimension_hidden_layer=None,
+                 learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None):
         try:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
@@ -47,6 +52,11 @@ class SharedLSTM:
                 self.motion_range = motion_range
 
             # Variables defining the network
+            self.share_scheme = share_scheme if share_scheme is not None else utils.get_config('share_scheme')
+            if self.share_scheme not in SocialLSTM.SHARE_SCHEMES:
+                raise ValueError(
+                    "Unknown sharing scheme '%s'. Must be among %s." % (self.share_scheme, SocialLSTM.SHARE_SCHEMES))
+
             self.dimension_sample = self.sampler.dimension_sample
             self.length_sequence_input = self.sampler.length_sequence_input
             self.length_sequence_output = self.sampler.length_sequence_output
@@ -68,13 +78,13 @@ class SharedLSTM:
             self.dimension_hidden_layers = dimension_hidden_layer
             self.grad_clip = grad_clip if grad_clip is not None else utils.get_config('grad_clip')
             self.loss_scheme = loss_scheme if loss_scheme is not None else utils.get_config('loss_scheme')
-            if self.loss_scheme not in SharedLSTM.loss_schemes:
-                raise ValueError("Unknown loss scheme '%s'. Must be among %s." % (self.loss_scheme, self.loss_schemes))
+            if self.loss_scheme not in SocialLSTM.LOSS_SCHEMES:
+                raise ValueError("Unknown loss scheme '%s'. Must be among %s." % (self.loss_scheme, SocialLSTM.LOSS_SCHEMES))
 
             self.train_scheme = train_scheme if train_scheme is not None else utils.get_config('train_scheme')
-            if self.train_scheme not in SharedLSTM.train_schemes:
+            if self.train_scheme not in SocialLSTM.TRAIN_SCHEMES:
                 raise ValueError(
-                    "Unknown training scheme '%s'. Must be among %s." % (self.train_scheme, self.train_schemes))
+                    "Unknown training scheme '%s'. Must be among %s." % (self.train_scheme, SocialLSTM.TRAIN_SCHEMES))
 
             self.learning_rate = learning_rate \
                 if learning_rate is not None else utils.get_config('learning_rate')
@@ -171,9 +181,9 @@ class SharedLSTM:
             self.w_correlation = L.init.Uniform(std=0., mean=0.)
             self.b_correlation = L.init.Constant(0.)
             if self.scaled_correlation:
-                self.f_correlation = SharedLSTM.scaled_tanh
+                self.f_correlation = SocialLSTM.scaled_tanh
             else:
-                self.f_correlation = SharedLSTM.safe_tanh
+                self.f_correlation = SocialLSTM.safe_tanh
 
             # Prepare for logging
 
@@ -228,7 +238,7 @@ class SharedLSTM:
 
         try:
             y = T.tanh(x)
-            return SharedLSTM.scale(y, beta)
+            return SocialLSTM.scale(y, beta)
             # return T.clip(y, -beta, beta)
         except:
             raise
@@ -238,7 +248,7 @@ class SharedLSTM:
 
         try:
             y = T.tanh(x)
-            return SharedLSTM.scale(y, beta)
+            return SocialLSTM.scale(y, beta)
             # return T.clip(y, -beta, beta)
         except:
             raise
@@ -256,179 +266,241 @@ class SharedLSTM:
             utils.xprint('Building shared LSTM network ... ')
 
             # IN = [(sec, x, y)]
-            layer_in = L.layers.InputLayer(name="input-layer", input_var=self.inputs,
+            layer_in = L.layers.InputLayer(input_var=self.inputs,
                                            shape=(self.num_node, self.size_batch, self.length_sequence_input,
-                                                  self.dimension_sample))
+                                                  self.dimension_sample),
+                                           name='input-layer')
+
+            """
+            Build embedding layer
+            """
+
             # e = f_e(IN; W_e, b_e)
-            layer_e = L.layers.DenseLayer(layer_in, name="e-layer", num_units=self.dimension_embed_layer, W=self.w_e,
+            layer_e = L.layers.DenseLayer(layer_in,
+                                          num_units=self.dimension_embed_layer,
+                                          W=self.w_e,
                                           b=self.b_e,
-                                          nonlinearity=self.f_e, num_leading_axes=3)
+                                          nonlinearity=self.f_e,
+                                          num_leading_axes=3,
+                                          name='embed-layer')
             assert utils.match(layer_e.output_shape,
                                (self.num_node, self.size_batch, self.length_sequence_input, self.dimension_embed_layer))
 
-            layers_in_lstms = []
-            for inode in xrange(0, self.num_node):
-                layers_in_lstms += [L.layers.SliceLayer(layer_e, indices=inode, axis=0)]
-            assert all(utils.match(ilayer_in_lstm.output_shape,
-                                   (self.size_batch, self.length_sequence_input, self.dimension_embed_layer))
-                       for ilayer_in_lstm in layers_in_lstms)
+            """
+            Build LSTM hidden layers
+            """
 
+            # Prepare the input for hidden layers
+
+            list_inputs_hidden = []
+
+            # Share reshaped embedded inputs of all the nodes
+            if self.share_scheme == 'input':
+                _reshaped_embed = L.layers.ReshapeLayer(layer_e,
+                                                        shape=([1], [2], -1),
+                                                        name='reshaped-embed-layer')
+                for inode in xrange(0, self.num_node):
+                    list_inputs_hidden += [_reshaped_embed]
+
+            # Slice its own embedded input for each node
+            else:
+                for inode in xrange(0, self.num_node):
+                    list_inputs_hidden += [L.layers.SliceLayer(layer_e,
+                                                               name='sliced-embed-layer[%d]' % inode,
+                                                               indices=inode,
+                                                               axis=0)]
+            # todo add the sharing of social tensor H maybe
+
+            assert all(utils.match(_each_input_hidden.output_shape,
+                                   (self.size_batch, self.length_sequence_input, None))
+                       for _each_input_hidden in list_inputs_hidden)
+
+            # number of hidden layers
             n_hid = self.dimension_hidden_layers[0]
+            # dimension of lstm for each node in each hidden layer
             dim_hid = self.dimension_hidden_layers[1]
 
-            # Create the 1st LSTM layer for the 1st node
-            layer_lstm_0 = L.layers.LSTMLayer(layers_in_lstms[0], dim_hid, name="LSTM-%d-%d" % (1, 1),
-                                              nonlinearity=self.f_lstm_hid,
-                                              ingate=L.layers.Gate(W_in=self.w_lstm_in,
-                                                                   W_hid=self.w_lstm_hid,
-                                                                   W_cell=self.w_lstm_hid,
-                                                                   b=self.b_lstm),
-                                              forgetgate=L.layers.Gate(W_in=self.w_lstm_in,
-                                                                       W_hid=self.w_lstm_hid,
-                                                                       W_cell=self.w_lstm_hid,
-                                                                       b=self.b_lstm),
-                                              cell=L.layers.Gate(W_cell=None, nonlinearity=self.f_lstm_cell),
-                                              outgate=L.layers.Gate(W_in=self.w_lstm_in,
+            if self.share_scheme == 'parameter':
+                n_unique_lstm = 1
+                n_shared_lstm = self.num_node - 1
+            else:
+                n_unique_lstm = self.num_node
+                n_shared_lstm = 0
+
+            # list of layer objects for all hidden layer
+            # each one concated from layer objects for all nodes in single hidden layer
+            list2d_layers_hidden = []
+
+            for ihid in xrange(0, n_hid):
+                # list of layer objects for all nodes, in single hidden layer
+                list_this_layer = []
+
+                # Create a LSTMLayer object for each unique node
+
+                for inode in xrange(0, n_unique_lstm):
+                    # todo layers_hid[-1] or layers_lstm[inode]?
+                    _layer_input = list_inputs_hidden[inode] if ihid == 0 else list2d_layers_hidden[-1][inode]
+
+                    _lstm = L.layers.LSTMLayer(_layer_input,
+                                               num_units=dim_hid,
+                                               nonlinearity=self.f_lstm_hid,
+                                               hid_init=self.init_lstm_hid,
+                                               cell_init=self.init_lstm_cell,
+                                               grad_clipping=self.grad_clip,
+                                               only_return_final=False,
+                                               ingate=L.layers.Gate(W_in=self.w_lstm_in,
                                                                     W_hid=self.w_lstm_hid,
                                                                     W_cell=self.w_lstm_hid,
                                                                     b=self.b_lstm),
-                                              hid_init=self.init_lstm_hid, cell_init=self.init_lstm_cell,
-                                              only_return_final=False)
-            assert utils.match(layer_lstm_0.output_shape, (self.size_batch, self.length_sequence_input, dim_hid))
+                                               forgetgate=L.layers.Gate(W_in=self.w_lstm_in,
+                                                                        W_hid=self.w_lstm_hid,
+                                                                        W_cell=self.w_lstm_hid,
+                                                                        b=self.b_lstm),
+                                               cell=L.layers.Gate(W_cell=None,
+                                                                  nonlinearity=self.f_lstm_cell),
+                                               outgate=L.layers.Gate(W_in=self.w_lstm_in,
+                                                                     W_hid=self.w_lstm_hid,
+                                                                     W_cell=self.w_lstm_hid,
+                                                                     b=self.b_lstm),
+                                               name="LSTM[%d,%d]" % (ihid + 1, inode + 1))
 
-            layers_lstm = [layer_lstm_0]
+                    assert utils.match(_lstm.output_shape, (self.size_batch, self.length_sequence_input, dim_hid))
+                    list_this_layer += [_lstm]
 
-            # Create params sharing LSTMs for the rest (n - 1) nodes,
-            # which have params exactly the same as LSTM-1-1
-            for inode in xrange(1, self.num_node):
-                layers_lstm += [
-                    L.layers.LSTMLayer(layers_in_lstms[inode], dim_hid,
-                                       name="LSTM-%d-%d" % (1, inode + 1),
-                                       grad_clipping=self.grad_clip,
-                                       nonlinearity=self.f_lstm_hid, hid_init=self.init_lstm_hid,
-                                       cell_init=self.init_lstm_cell, only_return_final=False,
-                                       ingate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_ingate,
-                                                            W_hid=layer_lstm_0.W_hid_to_ingate,
-                                                            W_cell=layer_lstm_0.W_cell_to_ingate,
-                                                            b=layer_lstm_0.b_ingate),
-                                       outgate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_outgate,
-                                                             W_hid=layer_lstm_0.W_hid_to_outgate,
-                                                             W_cell=layer_lstm_0.W_cell_to_outgate,
-                                                             b=layer_lstm_0.b_outgate),
-                                       forgetgate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_forgetgate,
-                                                                W_hid=layer_lstm_0.W_hid_to_forgetgate,
-                                                                W_cell=layer_lstm_0.W_cell_to_forgetgate,
-                                                                b=layer_lstm_0.b_forgetgate),
-                                       cell=L.layers.Gate(W_in=layer_lstm_0.W_in_to_cell,
-                                                          W_hid=layer_lstm_0.W_hid_to_cell,
-                                                          W_cell=None,
-                                                          b=layer_lstm_0.b_cell,
-                                                          nonlinearity=self.f_lstm_cell
-                                                          ))]
+                # the last unique LSTMLayer object to share from
+                lstm_shared = list_this_layer[-1]
 
-            layers_shuffled = []
+                # Create a LSTMLayer object for each shared node
+
+                for inode in xrange(n_unique_lstm, n_unique_lstm + n_shared_lstm):
+                    # todo layers_hid[-1] or layers_lstm[inode]?
+                    _layer_input = list_inputs_hidden[inode] if ihid == 0 else list2d_layers_hidden[-1][inode]
+
+                    _lstm = L.layers.LSTMLayer(_layer_input,
+                                               num_units=dim_hid,
+                                               nonlinearity=self.f_lstm_hid,
+                                               hid_init=self.init_lstm_hid,
+                                               cell_init=self.init_lstm_cell,
+                                               grad_clipping=self.grad_clip,
+                                               only_return_final=False,
+                                               ingate=L.layers.Gate(W_in=lstm_shared.W_in_to_ingate,
+                                                                    W_hid=lstm_shared.W_hid_to_ingate,
+                                                                    W_cell=lstm_shared.W_cell_to_ingate,
+                                                                    b=lstm_shared.b_ingate),
+                                               outgate=L.layers.Gate(W_in=lstm_shared.W_in_to_outgate,
+                                                                     W_hid=lstm_shared.W_hid_to_outgate,
+                                                                     W_cell=lstm_shared.W_cell_to_outgate,
+                                                                     b=lstm_shared.b_outgate),
+                                               forgetgate=L.layers.Gate(
+                                                   W_in=lstm_shared.W_in_to_forgetgate,
+                                                   W_hid=lstm_shared.W_hid_to_forgetgate,
+                                                   W_cell=lstm_shared.W_cell_to_forgetgate,
+                                                   b=lstm_shared.b_forgetgate),
+                                               cell=L.layers.Gate(W_in=lstm_shared.W_in_to_cell,
+                                                                  W_hid=lstm_shared.W_hid_to_cell,
+                                                                  W_cell=None,
+                                                                  b=lstm_shared.b_cell,
+                                                                  nonlinearity=self.f_lstm_cell),
+                                               name="LSTM[%d,%d]" % (ihid + 1, inode + 1))
+
+                    assert utils.match(_lstm.output_shape, (self.size_batch, self.length_sequence_input, dim_hid))
+                    list_this_layer += [_lstm]
+
+                pass  # end of building of single hidden layer for all nodes
+                list2d_layers_hidden += [list_this_layer]
+
+            pass  # end of building of multiple hidden layers
+
+            # Dimshuffle & concate lstms in the last hidden layer into single layer object
+
+            _list_last_hidden = list2d_layers_hidden[-1]
+            list_shuffled_lstms = []
             for inode in xrange(self.num_node):
-                layers_shuffled += [L.layers.DimshuffleLayer(layers_lstm[inode], pattern=('x', 0, 1, 2))]
-            layer_concated_lstms = L.layers.ConcatLayer(layers_shuffled, axis=0)
-            layers_hid = [layer_concated_lstms]
+                # add an extra dim of 1 for concatation
+                list_shuffled_lstms += [
+                    L.layers.DimshuffleLayer(_list_last_hidden[inode],
+                                             pattern=('x', 0, 1, 2))]
 
-            # Create more layers
-            for i_hid in xrange(1, n_hid):
-                layers_lstm[0] = L.layers.LSTMLayer(layers_lstm[0], dim_hid, name="LSTM-%d-%d" % (i_hid + 1, 1),
-                                                    nonlinearity=self.f_lstm_hid,
-                                                    ingate=L.layers.Gate(W_in=self.w_lstm_in,
-                                                                         W_hid=self.w_lstm_hid,
-                                                                         W_cell=self.w_lstm_hid,
-                                                                         b=self.b_lstm),
-                                                    forgetgate=L.layers.Gate(W_in=self.w_lstm_in,
-                                                                             W_hid=self.w_lstm_hid,
-                                                                             W_cell=self.w_lstm_hid,
-                                                                             b=self.b_lstm),
-                                                    cell=L.layers.Gate(W_cell=None, nonlinearity=self.f_lstm_cell),
-                                                    outgate=L.layers.Gate(W_in=self.w_lstm_in,
-                                                                          W_hid=self.w_lstm_hid,
-                                                                          W_cell=self.w_lstm_hid,
-                                                                          b=self.b_lstm),
-                                                    hid_init=self.init_lstm_hid, cell_init=self.init_lstm_cell,
-                                                    only_return_final=False)
-                layer_lstm_0 = layers_lstm[0]
-                assert utils.match(layer_lstm_0.output_shape, (self.size_batch, self.length_sequence_input, dim_hid))
+            layer_last_hid = L.layers.ConcatLayer(list_shuffled_lstms,
+                                                  axis=0)
+            assert utils.match(layer_last_hid.output_shape,
+                               (self.num_node, self.size_batch, self.length_sequence_input, dim_hid))
 
-                for inode in xrange(1, self.num_node):
-                    layers_lstm[inode] = L.layers.LSTMLayer(layers_lstm[inode], dim_hid,
-                                                            name="LSTM-%d-%d" % (i_hid + 1, inode + 1),
-                                                            grad_clipping=self.grad_clip,
-                                                            nonlinearity=self.f_lstm_hid, hid_init=self.init_lstm_hid,
-                                                            cell_init=self.init_lstm_cell, only_return_final=False,
-                                                            ingate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_ingate,
-                                                                                 W_hid=layer_lstm_0.W_hid_to_ingate,
-                                                                                 W_cell=layer_lstm_0.W_cell_to_ingate,
-                                                                                 b=layer_lstm_0.b_ingate),
-                                                            outgate=L.layers.Gate(W_in=layer_lstm_0.W_in_to_outgate,
-                                                                                  W_hid=layer_lstm_0.W_hid_to_outgate,
-                                                                                  W_cell=layer_lstm_0.W_cell_to_outgate,
-                                                                                  b=layer_lstm_0.b_outgate),
-                                                            forgetgate=L.layers.Gate(
-                                                                W_in=layer_lstm_0.W_in_to_forgetgate,
-                                                                W_hid=layer_lstm_0.W_hid_to_forgetgate,
-                                                                W_cell=layer_lstm_0.W_cell_to_forgetgate,
-                                                                b=layer_lstm_0.b_forgetgate),
-                                                            cell=L.layers.Gate(W_in=layer_lstm_0.W_in_to_cell,
-                                                                               W_hid=layer_lstm_0.W_hid_to_cell,
-                                                                               W_cell=None,
-                                                                               b=layer_lstm_0.b_cell,
-                                                                               nonlinearity=self.f_lstm_cell
-                                                                               ))
+            """
+            Build the distribution layer
+            """
 
-                layers_shuffled = []
-                for inode in xrange(self.num_node):
-                    layers_shuffled += [L.layers.DimshuffleLayer(layers_lstm[inode], pattern=('x', 0, 1, 2))]
-                layer_concated_lstms = L.layers.ConcatLayer(layers_shuffled, axis=0)
-                assert utils.match(layer_concated_lstms.output_shape,
-                                   (self.num_node, self.size_batch, self.length_sequence_input, dim_hid))
-                layers_hid += [layer_concated_lstms]
-
-            layer_last_hid = layers_hid[-1]
-            layer_means = L.layers.DenseLayer(layer_last_hid, name="means-layer", num_units=2, W=self.w_means,
-                                              b=self.b_means, nonlinearity=self.f_means, num_leading_axes=3)
-            layer_deviations = L.layers.DenseLayer(layer_last_hid, name="deviations-layer", num_units=2,
-                                                   W=self.w_deviations, b=self.b_deviations,
-                                                   nonlinearity=self.f_deviations, num_leading_axes=3)
-            layer_correlation = L.layers.DenseLayer(layer_last_hid, name="correlation-layer", num_units=1,
-                                                    W=self.w_correlation, b=self.b_correlation,
-                                                    nonlinearity=self.f_correlation, num_leading_axes=3)
-            layer_distribution = L.layers.ConcatLayer([layer_means, layer_deviations, layer_correlation], axis=-1)
+            layer_means = L.layers.DenseLayer(layer_last_hid,
+                                              num_units=2,
+                                              W=self.w_means,
+                                              b=self.b_means,
+                                              nonlinearity=self.f_means,
+                                              num_leading_axes=3,
+                                              name="mean-layer")
+            layer_deviations = L.layers.DenseLayer(layer_last_hid,
+                                                   num_units=2,
+                                                   W=self.w_deviations,
+                                                   b=self.b_deviations,
+                                                   nonlinearity=self.f_deviations,
+                                                   num_leading_axes=3,
+                                                   name="deviation-layer")
+            layer_correlation = L.layers.DenseLayer(layer_last_hid,
+                                                    num_units=1,
+                                                    W=self.w_correlation,
+                                                    b=self.b_correlation,
+                                                    nonlinearity=self.f_correlation,
+                                                    num_leading_axes=3,
+                                                    name="correlation-layer")
+            layer_distribution = L.layers.ConcatLayer([layer_means, layer_deviations, layer_correlation],
+                                                      axis=-1,
+                                                      name="distribution-layer")
 
             assert utils.match(layer_distribution.output_shape,
                                (self.num_node, self.size_batch, self.length_sequence_input, 5))
 
+            """
+            Build final output layer
+            """
+
             # Slice x-length sequence from the last, according to <length_sequence_output>
-            layer_out = L.layers.SliceLayer(layer_distribution, indices=slice(-self.length_sequence_output, None),
+            layer_out = L.layers.SliceLayer(layer_distribution,
+                                            name='output-layer',
+                                            indices=slice(-self.length_sequence_output, None),
                                             axis=2)
             assert utils.match(layer_out.output_shape,
                                (self.num_node, self.size_batch, self.length_sequence_output, 5))
 
+            """
+            Save some useful variables
+            """
+
             self.embed = L.layers.get_output(layer_e)
-            for ilayer in layers_hid:
-                self.hids += [L.layers.get_output(ilayer)]
+            for ilayer in xrange(len(list2d_layers_hidden)):
+                self.hids += [[]]
+                for _lstm in list2d_layers_hidden[ilayer]:
+                    self.hids[ilayer] += [L.layers.get_output(_lstm)]
 
             self.network = layer_out
             self.outputs = L.layers.get_output(layer_out)
             self.params_all = L.layers.get_all_params(layer_out)
             self.params_trainable = L.layers.get_all_params(layer_out, trainable=True)
 
-            def get_names_for_params(list_params):
-                utils.assertor.assert_type(list_params, list)
+            def get_names_for_params(_list_params):
+                utils.assertor.assert_type(_list_params, list)
                 param_keys = []
-                for param in list_params:
+                for _param in _list_params:
                     # utils.assertor.assert_type(param, TensorSharedVariable)
-                    name = param.name
-                    param_keys += [name]
+                    _name = _param.name
+                    param_keys += [_name]
                 return param_keys
 
             self.param_names = get_names_for_params(self.params_all)
             # Save initial values of params for possible future restoration
             self.initial_param_values = L.layers.get_all_param_values(layer_out)
+
+            """
+            Import external paratemers if given
+            """
 
             # Assign saved parameter values to the built network
             if params is not None:
@@ -499,7 +571,7 @@ class SharedLSTM:
                 deviations = distribution[2:4]
                 correlation = distribution[5]
                 target = fact_mat[idx, :]
-                prob = SharedLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
+                prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
                                              correlation)
 
                 # Do something with the slice here.
@@ -517,7 +589,7 @@ class SharedLSTM:
                 deviations = T.mul(distribution[2:4], motion_range_v)
                 correlation = distribution[4]
                 target = fact_mat[idx, :]
-                prob = SharedLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
+                prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
                                              correlation)
 
                 # Do something with the slice here.
@@ -660,6 +732,7 @@ class SharedLSTM:
             """
 
             self.check_embed = theano.function([self.inputs], self.embed, allow_input_downcast=True)
+            self.checks_hid = []
             for ihid in self.hids:
                 self.checks_hid += [theano.function([self.inputs], ihid, allow_input_downcast=True)]
             self.check_outputs = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
@@ -737,9 +810,9 @@ class SharedLSTM:
                                 def check_netflow():
                                     embed = self.check_embed(inputs)
                                     hids = []
-                                    for ihid in xrange(self.dimension_hidden_layers[0]):
-                                        check_hid = self.checks_hid[ihid]
-                                        hids += [check_hid(inputs)]
+                                    for ihid in xrange(len(self.checks_hid)):
+                                        _check_hid = self.checks_hid[ihid]
+                                        hids += [_check_hid(inputs)]
                                     netout = self.check_outputs(inputs)
 
                                     dict_netflow = {'embed': embed, 'hiddens': hids, 'netout': netout}
@@ -813,13 +886,13 @@ class SharedLSTM:
                                                     isample, iseq - self.length_sequence_output]
                                                 for inode in xrange(0, self.num_node):
                                                     # [x, y]
-                                                    deviation_ = deviations[inode, isample, iseq]
-                                                    prediction_ = predictions[inode, isample, iseq]
-                                                    target_ = targets[inode, isample, iseq]
+                                                    _deviation = deviations[inode, isample, iseq]
+                                                    _prediction = predictions[inode, isample, iseq]
+                                                    _target = targets[inode, isample, iseq]
                                                     dict_content[self.nodes[inode]] = "(%.1f, [%.1f, %.1f], [%.1f, %.1f])" \
-                                                                                      % (deviation_, prediction_[0],
-                                                                                         prediction_[1],
-                                                                                         target_[-2], target_[-1])
+                                                                                      % (_deviation, _prediction[0],
+                                                                                         _prediction[1],
+                                                                                         _target[-2], _target[-1])
 
                                                 self.sub_logger.log(dict_content, name="prediction")
 
@@ -842,8 +915,8 @@ class SharedLSTM:
 
                                     ibatch += 1
 
-                            # end of single batch
-                        # end of single epoch
+                            pass  # end of single batch
+                        pass  # end of single epoch
 
                         loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
                         deviation_epoch = numpy.append(deviation_epoch, numpy.mean(deviation_batch))
@@ -876,10 +949,9 @@ class SharedLSTM:
                             else:
                                 break
 
-                    # end of all epochs
+                    pass  # end of all epochs
                     invalid = False
 
-                # end of single training try
                 except utils.InvalidTrainError, e:
                     # Update learning rate & Retrain
 
@@ -895,16 +967,15 @@ class SharedLSTM:
 
                     else:
                         raise
+
+                pass  # end of single training try
+
         except:
             raise
 
         else:
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
             return loss_epoch, deviation_epoch
-
-        finally:
-            self.export_params()
-            self.sub_logger.log_config()
 
     def export_params(self, path=None):
         try:
@@ -996,7 +1067,7 @@ class SharedLSTM:
             half = Sampler.clip(sampler, indices=(sampler.length / 2))
 
             # Define the model
-            model = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
+            model = SocialLSTM(sampler=half, motion_range=sampler.motion_range)
 
             try:
                 # Import previously pickled parameters if requested
@@ -1018,28 +1089,37 @@ class SharedLSTM:
                 utils.get_rootlogger().register("loss", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
                 # Do training
-                loss, deviations = model.train()
+                try:
+                    loss, deviations = model.train()
+                except:
+                    raise
+                else:
+                    utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
+                                                "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
+                                                "deviation-by-epoch": '%s\n' % utils.format_var(deviations,
+                                                                                                detail=True)},
+                                               name="loss")
 
-                def test_importing():
-                    model3 = SharedLSTM(sampler=half, motion_range=sampler.motion_range)
-                    model3.build_network()
-                    model3.import_params()
-                    model3.build_decoder()
-                    model3.compute_loss()
-                    model3.compute_deviation()
-                    model3.compute_update()
-                    model3.compile()
+                finally:
+                    model.export_params()
 
-                # test_importing()
-
-                utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
-                                            "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
-                                            "deviation-by-epoch": '%s\n' % utils.format_var(deviations, detail=True)},
-                                           name="loss")
             except:
                 raise
             finally:
                 model.complete()
+                utils.get_sublogger().log_config()
+
+            def test_importing():
+                _model = SocialLSTM(sampler=half, motion_range=sampler.motion_range)
+                _model.build_network()
+                _model.import_params()
+                _model.build_decoder()
+                _model.compute_loss()
+                _model.compute_deviation()
+                _model.compute_update()
+                _model.compile()
+
+            # test_importing()
 
         except Exception, e:
-            raise
+                raise

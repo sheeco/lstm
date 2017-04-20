@@ -48,6 +48,15 @@ config_pool = {
                 'tags': ['path']
             },
 
+            # Sharing scheme for LSTMS of multiple nodes
+            'share_scheme': {
+                # Among ['parameter', 'input', None]
+                # 'parameter' means all the nodes share the same set of parameters
+                # 'input' means all the nodes share the embedded sample input with each other
+                # None means neither
+                'value': 'input',
+                'tags': ['build']
+            },
             # How many nodes to learn on
             'num_node': {
                 'value': 2,

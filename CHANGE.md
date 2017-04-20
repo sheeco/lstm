@@ -303,12 +303,17 @@
 
 - OPT: Raise exception for unknown configuration key;
 
-###### 2017-04-19
+###### [2017-04-20](db5b84bb710ad0208b976efb31f25074b4cf15af)
 
 - FIX: Bug with importing;
 
+###### 2017-04-20
 
-- [ ] RFCT: Enable non-shared LSTM;
+- FIX: Major bug with hidden layer structure;
+- ADD: Enable to choose from parameter-shared / input-shared LSTM;
+
+
+- [ ] OPT: Change use of dict into OrderedDict or so;
 - [ ] RFCT: Extract weight & bias initializers;
 - [ ] ADD: Pre-training;
 - [ ] ADD: Use `pprint` to improve printing;
