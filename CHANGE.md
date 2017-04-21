@@ -312,7 +312,7 @@
 - FIX: Major bug with hidden layer structure;
 - ADD: Enable to choose from parameter-shared / input-shared LSTM;
 
-###### 2017-04-20
+###### [2017-04-21](070705a70ba94db2936c8a84fa177fa176a79e97)
 
 - FIX: Remove repeated computation in `SocialLSTM.train()` & `SocialLSTM.export_params()` to avoid unknown exception:
 
@@ -337,6 +337,10 @@
 > Inputs strides: [(32, 1)]
 > Inputs values: ['not shown']
 > Outputs clients: [['output']]
+
+###### 2017-04-21
+
+- OPT: Set max length for network history to decrease RAM usage. & Log network history for future analysis;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

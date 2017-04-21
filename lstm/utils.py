@@ -954,7 +954,8 @@ def _validate_config_():
                 and config.get_config('nodes') is not None \
                 and has_config('num_node') \
                 and config.get_config('num_node') is not None:
-            warn("Configuration 'nodes' (%s) will override 'num_node' (%s)."
+            warn("_validate_config_ @ utils: "
+                 "Configuration 'nodes' (%s) will override 'num_node' (%s)."
                  % (config.get_config('nodes'), config.get_config('num_node')))
             remove_config('num_node')
 

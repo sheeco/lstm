@@ -28,6 +28,9 @@ class SocialLSTM:
     LOSS_SCHEMES = ['sum',
                     'mean']
 
+    # how many epochs of latest network history to keep
+    LENGTH_NETWORK_HISTORY = 10
+
     def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, adaptive_learning_rate=None,
                  share_scheme=None, loss_scheme=None, train_scheme=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
@@ -339,7 +342,7 @@ class SocialLSTM:
                 # Create a LSTMLayer object for each unique node
 
                 for inode in xrange(0, n_unique_lstm):
-                    # todo layers_hid[-1] or layers_lstm[inode]?
+
                     _layer_input = list_inputs_hidden[inode] if ihid == 0 else list2d_layers_hidden[-1][inode]
 
                     _lstm = L.layers.LSTMLayer(_layer_input,
@@ -374,7 +377,7 @@ class SocialLSTM:
                 # Create a LSTMLayer object for each shared node
 
                 for inode in xrange(n_unique_lstm, n_unique_lstm + n_shared_lstm):
-                    # todo layers_hid[-1] or layers_lstm[inode]?
+
                     _layer_input = list_inputs_hidden[inode] if ihid == 0 else list2d_layers_hidden[-1][inode]
 
                     _lstm = L.layers.LSTMLayer(_layer_input,
@@ -830,7 +833,11 @@ class SocialLSTM:
                                 netflow = check_netflow()
                                 probs = self.check_probs(inputs, targets)
                                 # note that record [i, j] contains variable values BEFORE this training
-                                self.network_history[iepoch].append({'params': params, 'netflow': netflow, 'probs': probs})
+                                self.network_history[-1].append({'params': params, 'netflow': netflow, 'probs': probs})
+
+                                # throw away overdue history
+                                if len(self.network_history) > SocialLSTM.LENGTH_NETWORK_HISTORY:
+                                    self.network_history = self.network_history[-SocialLSTM.LENGTH_NETWORK_HISTORY:-1]
 
                                 predictions = self.func_predict(inputs)
                                 deviations = self.func_compare(inputs, targets)
@@ -982,11 +989,30 @@ class SocialLSTM:
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
             return loss_epoch, deviation_epoch
 
+    def export_history(self, path=None):
+        try:
+            if len(self.network_history) == 0:
+                return
+
+            FILENAME_EXPORT = 'history.pkl'
+
+            if path is None:
+                path = utils.filer.format_subpath(self.sub_logger.log_path, FILENAME_EXPORT)
+
+            utils.xprint("\nExporting recent network history to '%s' ...  " % path)
+
+            utils.filer.dump_to_file(self.network_history, path)
+
+            utils.xprint('done.', newline=True)
+            return path
+
+        except:
+            raise
+
     def export_params(self, path=None):
         try:
             FILENAME_EXPORT = 'params.pkl'
 
-            timer = utils.Timer()
             utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
             if path is None:
@@ -1003,7 +1029,7 @@ class SocialLSTM:
 
             utils.filer.dump_to_file(params_all, path)
 
-            utils.xprint('done in %s.' % timer.stop(), newline=True)
+            utils.xprint('done.', newline=True)
             return path
 
         except:
@@ -1107,6 +1133,7 @@ class SocialLSTM:
                                                name="loss")
 
                 finally:
+                    model.export_history()
                     model.export_params()
 
             except:
