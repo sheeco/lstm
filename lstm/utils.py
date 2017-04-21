@@ -1041,9 +1041,15 @@ def process_command_line_args(args=None):
         # handle importing first
         for opt, argv in opts:
             if opt in ("-i", "--import"):
+                _path = argv
+                try:
+                    _path = ast.literal_eval(argv)
+                except:
+                    pass
+
                 # Import config.log & params.pkl if exists
-                if Filer.is_directory(argv):
-                    path_import = Filer.validate_path_format(argv)
+                if Filer.is_directory(_path):
+                    path_import = Filer.validate_path_format(_path)
                     key = 'path_import'
                     update_config(key, path_import, 'command-line')
 
@@ -1056,15 +1062,15 @@ def process_command_line_args(args=None):
                     import_config(config_imported, tag='build')
                     xprint("Import configurations from '%s'." % path_config, newline=True)
 
-                    opts.remove((opt, argv))
-
                 # Import params.pkl
-                elif Filer.is_file(argv):
-                    update_config('path_unpickle', argv, 'command-line', tags=['path'], silence=False)
-                    opts.remove((opt, argv))
+                elif Filer.is_file(_path):
+                    update_config('path_unpickle', _path, 'command-line', tags=['path'], silence=False)
 
                 else:
                     raise ValueError("Invalid path '%s' to import." % argv)
+
+                opts.remove((opt, argv))
+
             else:
                 pass
 

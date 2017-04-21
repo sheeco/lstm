@@ -338,9 +338,13 @@
 > Inputs values: ['not shown']
 > Outputs clients: [['output']]
 
-###### 2017-04-21
+###### [2017-04-21](2fd44ba7232051186d9f0b6dc5881818aa7719df)
 
 - OPT: Set max length for network history to decrease RAM usage. & Log network history for future analysis;
+
+###### 2017-04-21
+
+- FIX: Bug with command line importing argument;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
