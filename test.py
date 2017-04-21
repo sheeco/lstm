@@ -15,7 +15,5 @@ if __name__ == '__main__':
 
         exit("Exit Successfully.")
 
-    except KeyboardInterrupt, e:
-        lstm.utils.handle(e)
     except Exception, e:
-        lstm.utils.handle(e)
+        lstm.utils.handle(e, exiting=True)

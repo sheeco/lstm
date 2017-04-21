@@ -307,10 +307,36 @@
 
 - FIX: Bug with importing;
 
-###### 2017-04-20
+###### [2017-04-20](a4ed8875f6e0221925604d9b934000b9c554266d)
 
 - FIX: Major bug with hidden layer structure;
 - ADD: Enable to choose from parameter-shared / input-shared LSTM;
+
+###### 2017-04-20
+
+- FIX: Remove repeated computation in `SocialLSTM.train()` & `SocialLSTM.export_params()` to avoid unknown exception:
+
+> Traceback (most recent call last):
+>   File "test.py", line 14, in <module>
+>     lstm.model.SocialLSTM.test()
+>   File "D:\theano\lstm\lstm\model.py", line 1104, in test
+>     model.export_params()
+>   File "D:\theano\lstm\lstm\model.py", line 996, in export_params
+>     params_all = self.check_params()
+>   File "C:\Anaconda2\lib\site-packages\theano\compile\function_module.py", line 898, in __call__
+>     storage_map=getattr(self.fn, 'storage_map', None))
+>   File "C:\Anaconda2\lib\site-packages\theano\gof\link.py", line 325, in raise_with_op
+>     reraise(exc_type, exc_value, exc_trace)
+>   File "C:\Anaconda2\lib\site-packages\theano\compile\function_module.py", line 884, in __call__
+>     self.fn() if output_subset is None else\
+> ValueError: DeepCopyOp: the copy failed!
+> Apply node that caused the error: DeepCopyOp(LSTM[10,1].W_hid_to_ingate)
+> Toposort index: 191
+> Inputs types: [CudaNdarrayType(float32, matrix)]
+> Inputs shapes: [(32, 32)]
+> Inputs strides: [(32, 1)]
+> Inputs values: ['not shown']
+> Outputs clients: [['output']]
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

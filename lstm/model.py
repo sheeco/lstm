@@ -130,6 +130,7 @@ class SocialLSTM:
             self.probabilities = None  # numpy ndarray, binorm probabilities before computing into NNL
 
             self.param_names = []  # list of str, names of all the parameters
+            self.param_values = None  # list of ndarrays, stored for debugging or exporting
             self.initial_param_values = None  # list of ndarrays, stored for possible parameter restoration
             self.network_history = []  # 2d list (iepoch, ibatch) of dict, data flow though the network
 
@@ -772,6 +773,7 @@ class SocialLSTM:
 
                     loss_epoch = numpy.zeros((0,))
                     deviation_epoch = numpy.zeros((0,))
+                    params = None
                     stop = False  # Whether to stop and exit
                     completed = None  # Whether a batch has got proceeded completely
 
@@ -821,7 +823,9 @@ class SocialLSTM:
                                 utils.xprint('    Batch %d ... ' % ibatch)
 
                                 # record params, flow of data & probabilities to network history BEFORE training
-                                params = self.check_params()
+                                if params is None:
+                                    params = self.check_params()
+                                self.param_values = params
 
                                 netflow = check_netflow()
                                 probs = self.check_probs(inputs, targets)
@@ -854,6 +858,7 @@ class SocialLSTM:
                                         details="Parameters:\n"
                                                 "%s" % new_params)
                                 else:
+                                    params = new_params
                                     # consider successful if training is done and successful
                                     completed = True
 
@@ -989,11 +994,12 @@ class SocialLSTM:
 
             utils.xprint("\nExporting parameters to '%s' ...  " % path)
             utils.update_config('path_pickle', path, 'runtime', tags=['path'])
-
-            if self.check_params is None:
-                self.check_params = theano.function([], self.params_all, allow_input_downcast=True)
-
-            params_all = self.check_params()
+            # last validated values during training
+            if self.param_values is not None:
+                params_all = self.param_values
+            # initial values
+            else:
+                params_all = self.initial_param_values
 
             utils.filer.dump_to_file(params_all, path)
 
@@ -1091,8 +1097,8 @@ class SocialLSTM:
                 # Do training
                 try:
                     loss, deviations = model.train()
-                except:
-                    raise
+                except Exception, e:
+                    utils.handle(e)
                 else:
                     utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
                                                 "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),

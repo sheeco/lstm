@@ -778,7 +778,7 @@ def warn(info):
         raise
 
 
-def handle(exception, logger=None):
+def handle(exception, logger=None, exiting=False):
     xprint('\n\n%s' % traceback.format_exc(), newline=True, logger=logger, error=True)
     # xprint('%s\n' % exception.message, newline=True, logger=logger)
     if logger is None:
@@ -788,6 +788,8 @@ def handle(exception, logger=None):
         logger.log('%s\n' % traceback.format_exc(), name="exception")
         logger.log('%s\n\n' % exception.message, name="exception")
 
+    if not exiting:
+        return
     if isinstance(exception, KeyboardInterrupt):
         exit("Stop munually.")
     else:
