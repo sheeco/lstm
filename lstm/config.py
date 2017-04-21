@@ -32,6 +32,13 @@ config_pool = {
                 'value': None,
                 'tags': []
             },
+            # How many epochs of latest network history to keep
+            # None means no limit
+            # 0 means don't save network history
+            'limit_network_history': {
+                'value': 0,
+                'tags': []
+            },
             # Directory path that configs & parameters get imported from
             'path_import': {
                 'value': None,

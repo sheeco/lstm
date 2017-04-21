@@ -346,9 +346,13 @@
 
 - FIX: Bug with command line importing argument;
 
-###### 2017-04-21
+###### [2017-04-21](eac766032385052be4c93a44efac604796d70faf)
 
 - FIX: Bug with param pickling. No long compatible with old pickled files;
+
+###### 2017-04-21
+
+- OPT: Disable the recording of network history to speed up;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

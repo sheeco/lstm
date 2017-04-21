@@ -28,13 +28,11 @@ class SocialLSTM:
     LOSS_SCHEMES = ['sum',
                     'mean']
 
-    # how many epochs of latest network history to keep
-    LENGTH_NETWORK_HISTORY = 10
-
     def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, adaptive_learning_rate=None,
                  share_scheme=None, loss_scheme=None, train_scheme=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
-                 learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None):
+                 learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
+                 limit_network_history=None):
         try:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
@@ -135,7 +133,14 @@ class SocialLSTM:
             self.param_names = []  # list of str, names of all the parameters
             self.param_values = None  # list of ndarrays, stored for debugging or exporting
             self.initial_param_values = None  # list of ndarrays, stored for possible parameter restoration
-            self.network_history = []  # 2d list (iepoch, ibatch) of dict, data flow though the network
+
+            self.limit_network_history = limit_network_history if limit_network_history is not None \
+                else utils.get_config('limit_network_history')
+            # 2d list (iepoch, ibatch) of dict, data flow though the network
+            if self.limit_network_history == 0:
+                self.network_history = None
+            else:
+                self.network_history = []
 
             # Theano function objects
 
@@ -785,7 +790,8 @@ class SocialLSTM:
                     while True:
                         # start of single epoch
                         utils.xprint('  Epoch %d ... ' % iepoch, newline=True)
-                        self.network_history.append([])
+                        if self.network_history is not None:
+                            self.network_history.append([])
                         loss = None
                         deviations = None
                         loss_batch = numpy.zeros((0,))
@@ -812,32 +818,39 @@ class SocialLSTM:
                                     completed = None
                                     break
 
-                                def check_netflow():
-                                    embed = self.check_embed(inputs)
-                                    hids = []
-                                    for ihid in xrange(len(self.checks_hid)):
-                                        _check_hid = self.checks_hid[ihid]
-                                        hids += [_check_hid(inputs)]
-                                    netout = self.check_outputs(inputs)
-
-                                    dict_netflow = {'embed': embed, 'hiddens': hids, 'netout': netout}
-                                    return dict_netflow
-
                                 utils.xprint('    Batch %d ... ' % ibatch)
 
-                                # record params, flow of data & probabilities to network history BEFORE training
                                 if params is None:
                                     params = self.check_params()
                                 self.param_values = params
 
-                                netflow = check_netflow()
-                                probs = self.check_probs(inputs, targets)
-                                # note that record [i, j] contains variable values BEFORE this training
-                                self.network_history[-1].append({'params': params, 'netflow': netflow, 'probs': probs})
+                                # Record params, flow of data & probabilities to network history BEFORE training
 
-                                # throw away overdue history
-                                if len(self.network_history) > SocialLSTM.LENGTH_NETWORK_HISTORY:
-                                    self.network_history = self.network_history[-SocialLSTM.LENGTH_NETWORK_HISTORY:-1]
+                                def check_netflow():
+                                    _embed = self.check_embed(inputs)
+                                    _hids = []
+                                    for _ihid in xrange(len(self.checks_hid)):
+                                        _check_hid = self.checks_hid[_ihid]
+                                        _hids += [_check_hid(inputs)]
+                                    _netout = self.check_outputs(inputs)
+
+                                    dict_netflow = {'embed': _embed, 'hiddens': _hids, 'netout': _netout}
+                                    return dict_netflow
+
+                                if self.network_history is not None:
+
+                                    _netflow = check_netflow()
+                                    _probs = self.check_probs(inputs, targets)
+                                    # note that record [i, j] contains variable values BEFORE this training
+                                    self.network_history[-1].append({'params': params,
+                                                                     'netflow': _netflow,
+                                                                     'probs': _probs})
+
+                                    # throw away overdue history
+                                    if self.limit_network_history is not None \
+                                            and len(self.network_history) > self.limit_network_history:
+                                        self.network_history = \
+                                            self.network_history[-self.limit_network_history:-1]
 
                                 predictions = self.func_predict(inputs)
                                 deviations = self.func_compare(inputs, targets)
@@ -849,9 +862,7 @@ class SocialLSTM:
                                     utils.assertor.assert_finite(loss, 'loss')
 
                                 except AssertionError, e:
-                                    raise utils.InvalidTrainError("Get loss of 'inf'.",
-                                                                  details="Network output:\n"
-                                                                          "%s" % netflow['netout'])
+                                    raise utils.InvalidTrainError("Get loss of 'inf'.")
 
                                 # Validate params after training
 
@@ -973,8 +984,10 @@ class SocialLSTM:
                         self.update_learning_rate(new_learning_rate)
 
                         # Reinitialize related variables
-                        self.network_history = []
                         self.sampler.reset_entry()
+                        if self.network_history is not None:
+                            self.network_history = []
+
                         continue
 
                     else:
@@ -991,7 +1004,8 @@ class SocialLSTM:
 
     def export_history(self, path=None):
         try:
-            if len(self.network_history) == 0:
+            if self.network_history is None \
+                    or len(self.network_history) == 0:
                 return
 
             FILENAME_EXPORT = 'history.pkl'
