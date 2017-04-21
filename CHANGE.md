@@ -342,9 +342,13 @@
 
 - OPT: Set max length for network history to decrease RAM usage. & Log network history for future analysis;
 
-###### 2017-04-21
+###### [2017-04-21](ef98205288ef3d876f22d74bb7d09fab3e8d326c)
 
 - FIX: Bug with command line importing argument;
+
+###### 2017-04-21
+
+- FIX: Bug with param pickling. No long compatible with old pickled files;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

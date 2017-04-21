@@ -701,16 +701,6 @@ class Filer:
             Assertor.assert_exists(path)
             pfile = open(path, 'rb')
 
-            # To fix wrongly pickled files,
-            # which were written thru mode 'w' instead of 'wb', or closed improperly.
-            original = pfile.read()
-            pfile.close()
-            converted = original.replace('\r\n', '\n')
-            pfile = open(path, 'wb')
-            pfile.write(converted)
-            pfile.close()
-            pfile = open(path, 'rb')
-
             what = cPickle.load(pfile)
             pfile.close()
 
