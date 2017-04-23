@@ -350,9 +350,13 @@
 
 - FIX: Bug with param pickling. No long compatible with old pickled files;
 
-###### 2017-04-21
+###### [2017-04-21](27cfb034b2da44de86d067ffa404e58dce55b7a7)
 
 - OPT: Disable the recording of network history to speed up;
+
+###### 2017-04-23
+
+- OPT: For printing & logging;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

@@ -2,6 +2,17 @@
 
 import numpy
 
+
+def _set_numpy_():
+    """
+    Set print options for numpy.
+    """
+    numpy.set_printoptions(precision=2, suppress=False)
+
+
+_set_numpy_()
+
+
 # import all the files first to ensure that
 # all the needed packages get imported before the handler is reset
 import config
@@ -11,16 +22,6 @@ import model
 
 import thread
 import win32api
-
-
-def _set_numpy_():
-    """
-    Set print options for numpy.
-    """
-    numpy.set_printoptions(precision=2, suppress=True)
-
-
-_set_numpy_()
 
 
 def _set_handler_():

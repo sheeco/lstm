@@ -196,13 +196,15 @@ class SocialLSTM:
 
             # Prepare for logging
 
-            self.root_logger = utils.get_rootlogger()
-            self.sub_logger = utils.get_sublogger()
-
-            self.sub_logger.register("training", columns=['epoch', 'batch', 'loss', 'deviations'])
+            self.logger = utils.get_sublogger()
 
             columns_prediction = ['epoch', 'batch', 'sample', 'instant'] + self.nodes
-            self.sub_logger.register("prediction", columns=columns_prediction)
+            self.logger.register("training-sample", columns=columns_prediction)
+            self.logger.register("training-batch", columns=['epoch', 'batch', 'loss',
+                                                            'mean-deviation', 'min-deviation', 'max-deviation'])
+
+            self.logger.register("training-epoch", columns=["epoch", "mean-loss",
+                                                            "mean-deviation", "min-deviation", "max-deviation"])
 
         except:
             raise
@@ -780,7 +782,7 @@ class SocialLSTM:
                     timer = utils.Timer()
 
                     loss_epoch = numpy.zeros((0,))
-                    deviation_epoch = numpy.zeros((0,))
+                    deviations_epoch = numpy.zeros((0,))
                     params = None
                     stop = False  # Whether to stop and exit
                     completed = None  # Whether a batch has got proceeded completely
@@ -795,7 +797,7 @@ class SocialLSTM:
                         loss = None
                         deviations = None
                         loss_batch = numpy.zeros((0,))
-                        deviation_batch = numpy.zeros((0,))
+                        deviations_batch = numpy.zeros((0,))
                         ibatch = 0
                         while True:
                             # start of single batch
@@ -895,9 +897,9 @@ class SocialLSTM:
                             finally:
                                 if completed:
 
-                                    # Log predictions, targets & deviations
+                                    # Log [deviation, prediction, target] by each sample
 
-                                    def log_predictions():
+                                    def log_by_sample():
                                         size_this_batch = len(instants)
                                         for isample in xrange(0, size_this_batch):
 
@@ -911,30 +913,36 @@ class SocialLSTM:
                                                     # [x, y]
                                                     _deviation = deviations[inode, isample, iseq]
                                                     _prediction = predictions[inode, isample, iseq]
-                                                    _target = targets[inode, isample, iseq]
-                                                    dict_content[self.nodes[inode]] = "(%.1f, [%.1f, %.1f], [%.1f, %.1f])" \
-                                                                                      % (_deviation, _prediction[0],
-                                                                                         _prediction[1],
-                                                                                         _target[-2], _target[-1])
+                                                    _target = targets[inode, isample, iseq, -2:-1]
+                                                    dict_content[self.nodes[inode]] = "(%s, %s, %s)" \
+                                                                                      % (_deviation, _prediction,
+                                                                                         _target)
 
-                                                self.sub_logger.log(dict_content, name="prediction")
+                                                self.logger.log(dict_content, name="training-sample")
 
-                                    log_predictions()
-
-                                    # Log loss together with brief deviation info
+                                    log_by_sample()
 
                                     loss_batch = numpy.append(loss_batch, loss)
-                                    deviation_batch = numpy.append(deviation_batch, numpy.mean(deviations))
+                                    deviations_batch = numpy.append(deviations_batch, numpy.mean(deviations))
 
-                                    self.sub_logger.log({'epoch': iepoch, 'batch': ibatch,
-                                                         'loss': utils.format_var(float(loss)),
-                                                         'deviations': utils.format_var(deviations)},
-                                                        name="training")
-
+                                    # Print loss & deviation info to console
                                     utils.xprint('%s; %s'
                                                  % (utils.format_var(float(loss), name='loss'),
                                                     utils.format_var(deviations, name='deviations')),
                                                  newline=True)
+
+                                    # Log [loss, mean-deviation, min-deviation, max-deviation] by each batch
+
+                                    def log_by_batch():
+                                        _peek_batch = utils.peek_matrix(deviations)
+
+                                        self.logger.log({'epoch': iepoch, 'batch': ibatch,
+                                                         'loss': utils.format_var(float(loss)),
+                                                         'mean-deviation': _peek_batch[0],
+                                                         'min-deviation': _peek_batch[1],
+                                                         'max-deviation': _peek_batch[2]},
+                                                        name="training-batch")
+                                    log_by_batch()
 
                                     ibatch += 1
 
@@ -942,7 +950,26 @@ class SocialLSTM:
                         pass  # end of single epoch
 
                         loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
-                        deviation_epoch = numpy.append(deviation_epoch, numpy.mean(deviation_batch))
+                        deviations_epoch = numpy.append(deviations_epoch, numpy.mean(deviations_batch))
+
+                        # Print loss & deviation info to console
+                        utils.xprint('  mean-loss: %s; mean-deviation: %s'
+                                     % (utils.peek_matrix(loss_batch)[0], utils.peek_matrix(deviations_batch)[0]),
+                                     newline=True)
+
+                        # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
+
+                        def log_by_epoch():
+                            _peek_epoch = utils.peek_matrix(deviations_batch)
+
+                            self.logger.log({'epoch': iepoch,
+                                             'mean-loss': utils.format_var(float(loss)),
+                                             'mean-deviation': _peek_epoch[0],
+                                             'min-deviation': _peek_epoch[1],
+                                             'max-deviation': _peek_epoch[2]},
+                                            name="training-epoch")
+
+                        log_by_epoch()
 
                         iepoch += 1
                         utils.update_config('num_epoch', iepoch, 'runtime')
@@ -1000,7 +1027,7 @@ class SocialLSTM:
 
         else:
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
-            return loss_epoch, deviation_epoch
+            return loss_epoch, deviations_epoch
 
     def export_history(self, path=None):
         try:
@@ -1011,7 +1038,7 @@ class SocialLSTM:
             FILENAME_EXPORT = 'history.pkl'
 
             if path is None:
-                path = utils.filer.format_subpath(self.sub_logger.log_path, FILENAME_EXPORT)
+                path = utils.filer.format_subpath(self.logger.log_path, FILENAME_EXPORT)
 
             utils.xprint("\nExporting recent network history to '%s' ...  " % path)
 
@@ -1030,7 +1057,7 @@ class SocialLSTM:
             utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
             if path is None:
-                path = utils.filer.format_subpath(self.sub_logger.log_path, FILENAME_EXPORT)
+                path = utils.filer.format_subpath(self.logger.log_path, FILENAME_EXPORT)
 
             utils.xprint("\nExporting parameters to '%s' ...  " % path)
             utils.update_config('path_pickle', path, 'runtime', tags=['path'])
@@ -1096,13 +1123,12 @@ class SocialLSTM:
             raise
 
     def complete(self):
-        self.sub_logger.complete()
+        self.logger.complete()
 
     @staticmethod
     def test():
 
         try:
-            utils.get_rootlogger().register("loss", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
             # Select certain nodes if requested
             nodes = utils.get_config('nodes') if utils.has_config('nodes') else None
@@ -1132,7 +1158,7 @@ class SocialLSTM:
 
                 check_e, checks_hid, check_outputs, check_params, check_probs = model.get_checks()
 
-                utils.get_rootlogger().register("loss", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
+                utils.get_rootlogger().register("training", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
                 # Do training
                 try:
@@ -1144,7 +1170,7 @@ class SocialLSTM:
                                                 "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
                                                 "deviation-by-epoch": '%s\n' % utils.format_var(deviations,
                                                                                                 detail=True)},
-                                               name="loss")
+                                               name="training")
 
                 finally:
                     model.export_history()

@@ -877,8 +877,13 @@ def _interpret_file_path_(answer):
 interpret_file_path = _interpret_file_path_
 
 
-def peek_matrix(mat):
-    return [numpy.mean(mat), numpy.min(mat), numpy.max(mat)]
+def peek_matrix(mat, hint=False):
+    _mean, _min, _max = numpy.mean(mat), numpy.min(mat), numpy.max(mat)
+    _mean, _min, _max = '%.2f' % _mean, '%.2f' % _min, '%.2f' % _max
+    if hint:
+        return 'mean: %s' % _mean, 'min: %s' % _min, 'max: %s' % _max
+    else:
+        return _mean, _min, _max
 
 
 def format_var(var, name=None, detail=False):
@@ -895,9 +900,9 @@ def format_var(var, name=None, detail=False):
             if detail:
                 string += '\n%s' % var if name is not None else '%s' % var
             elif var.size == 1:
-                string += '%.1f' % var[0]
+                string += '%s' % var[0]
             elif numpy.isfinite(var).all():
-                string += '(mean: %.1f, min: %.1f, max: %.1f)' % tuple(peek_matrix(var))
+                string += '(%s, %s, %s)' % peek_matrix(var, hint=True)
             elif numpy.isnan(var).all():
                 string += 'nan'
             elif numpy.isinf(var).all():
@@ -905,7 +910,7 @@ def format_var(var, name=None, detail=False):
             else:
                 string += '\n%s' % var if name is not None else '%s' % var
         elif isinstance(var, float):
-            string += '%.1f' % var
+            string += '%.2f' % var
         else:
             string += '%s' % var
     return string
@@ -994,7 +999,7 @@ def update_config(key, value, source, tags=None, silence=True, strict=True):
         if strict and not has_config(key, ignore_none=False):
             raise ValueError("Unknown configuration key '%s'." % key)
         if not silence:
-            xprint("Update '%s' from %s to %s (by %s)." % (key, config.get_config(key), value, source), newline=True)
+            xprint("Update '%s' from %s to %s (from %s)." % (key, config.get_config(key), value, source), newline=True)
 
         config._update_config_(key, value, source, tags)
         _validate_config_()
