@@ -80,6 +80,12 @@ config_pool = {
                 'value': 3,
                 'tags': ['build']
             },
+            # Decoding scheme
+            'decode_scheme': {
+                # Among ['binorm', 'euclidean']
+                'value': 'binorm',
+                'tags': ['build']
+            },
             # If only a full size batch will be accepted
             'strict_batch_size': {
                 'value': True,
@@ -91,12 +97,6 @@ config_pool = {
                 'tags': []
             },
 
-            # Loss definition
-            'loss_scheme': {
-                # Among ['sum', 'mean']
-                'value': 'sum',
-                'tags': ['train']
-            },
             # Training scheme
             'train_scheme': {
                 # Among ['rmsprop', 'adagrad', 'momentum', 'nesterov']

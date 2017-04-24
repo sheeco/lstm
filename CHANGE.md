@@ -358,9 +358,13 @@
 
 - OPT: For printing & logging;
 
-###### 2017-04-24
+###### [2017-04-24](4dab6013d9333d039393fdf40d9c12f542fb8e9a)
 
 - ADD: Enable to choose from stopping, continuing & peeking during training;
+
+###### 2017-04-24
+
+- ADD: Enable to choose decoding scheme between bivariant normal distribution / euclidean distance;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

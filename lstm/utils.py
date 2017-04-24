@@ -476,6 +476,14 @@ class Assertor:
         raise TypeError("Mustn't instantiate interface.")
 
     @staticmethod
+    def assert_(var, message, raising=True):
+        fine = var is True
+        if raising \
+                and not fine:
+            raise AssertionError(message)
+        return True
+
+    @staticmethod
     def assert_not_none(var, message, raising=True):
         """
 

@@ -25,11 +25,11 @@ class SocialLSTM:
                      'momentum',
                      'nesterov']
 
-    LOSS_SCHEMES = ['sum',
-                    'mean']
+    DECODE_SCHEMES = ['binorm',
+                    'euclidean']
 
     def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, adaptive_learning_rate=None,
-                 share_scheme=None, loss_scheme=None, train_scheme=None,
+                 share_scheme=None, decode_scheme=None, train_scheme=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
                  learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
                  limit_network_history=None):
@@ -78,9 +78,10 @@ class SocialLSTM:
                                  len(dimension_hidden_layer))
             self.dimension_hidden_layers = dimension_hidden_layer
             self.grad_clip = grad_clip if grad_clip is not None else utils.get_config('grad_clip')
-            self.loss_scheme = loss_scheme if loss_scheme is not None else utils.get_config('loss_scheme')
-            if self.loss_scheme not in SocialLSTM.LOSS_SCHEMES:
-                raise ValueError("Unknown loss scheme '%s'. Must be among %s." % (self.loss_scheme, SocialLSTM.LOSS_SCHEMES))
+            self.decode_scheme = decode_scheme if decode_scheme is not None else utils.get_config('decode_scheme')
+
+            if self.decode_scheme not in SocialLSTM.DECODE_SCHEMES:
+                raise ValueError("Unknown loss scheme '%s'. Must choose among %s." % (self.decode_scheme, SocialLSTM.DECODE_SCHEMES))
 
             self.train_scheme = train_scheme if train_scheme is not None else utils.get_config('train_scheme')
             if self.train_scheme not in SocialLSTM.TRAIN_SCHEMES:
@@ -175,11 +176,11 @@ class SocialLSTM:
             self.b_means = L.init.Constant(0.)
             self.f_means = None
 
-            self.scaled_deviation = True
+            self.scaled_sigma = True
 
             self.w_deviations = L.init.Uniform(std=0.1, mean=(100. / self.dimension_hidden_layers[1] / self.num_node))
             self.b_deviations = L.init.Constant(0.)
-            if self.scaled_deviation:
+            if self.scaled_sigma:
                 self.f_deviations = L.nonlinearities.sigmoid
             else:
                 self.f_deviations = L.nonlinearities.softplus
@@ -274,7 +275,7 @@ class SocialLSTM:
         try:
             timer = utils.Timer()
 
-            utils.xprint('Building shared LSTM network ... ')
+            utils.xprint('Building Social LSTM network ... ')
 
             # IN = [(sec, x, y)]
             layer_in = L.layers.InputLayer(input_var=self.inputs,
@@ -438,9 +439,8 @@ class SocialLSTM:
                                (self.num_node, self.size_batch, self.length_sequence_input, dim_hid))
 
             """
-            Build the distribution layer
+            Build the decoding layer
             """
-
             layer_means = L.layers.DenseLayer(layer_last_hid,
                                               num_units=2,
                                               W=self.w_means,
@@ -448,38 +448,46 @@ class SocialLSTM:
                                               nonlinearity=self.f_means,
                                               num_leading_axes=3,
                                               name="mean-layer")
-            layer_deviations = L.layers.DenseLayer(layer_last_hid,
-                                                   num_units=2,
-                                                   W=self.w_deviations,
-                                                   b=self.b_deviations,
-                                                   nonlinearity=self.f_deviations,
-                                                   num_leading_axes=3,
-                                                   name="deviation-layer")
-            layer_correlation = L.layers.DenseLayer(layer_last_hid,
-                                                    num_units=1,
-                                                    W=self.w_correlation,
-                                                    b=self.b_correlation,
-                                                    nonlinearity=self.f_correlation,
-                                                    num_leading_axes=3,
-                                                    name="correlation-layer")
-            layer_distribution = L.layers.ConcatLayer([layer_means, layer_deviations, layer_correlation],
-                                                      axis=-1,
-                                                      name="distribution-layer")
 
-            assert utils.match(layer_distribution.output_shape,
-                               (self.num_node, self.size_batch, self.length_sequence_input, 5))
+            if self.decode_scheme == 'binorm':
+                layer_deviations = L.layers.DenseLayer(layer_last_hid,
+                                                       num_units=2,
+                                                       W=self.w_deviations,
+                                                       b=self.b_deviations,
+                                                       nonlinearity=self.f_deviations,
+                                                       num_leading_axes=3,
+                                                       name="deviation-layer")
+                layer_correlation = L.layers.DenseLayer(layer_last_hid,
+                                                        num_units=1,
+                                                        W=self.w_correlation,
+                                                        b=self.b_correlation,
+                                                        nonlinearity=self.f_correlation,
+                                                        num_leading_axes=3,
+                                                        name="correlation-layer")
+                layer_distribution = L.layers.ConcatLayer([layer_means, layer_deviations, layer_correlation],
+                                                          axis=-1,
+                                                          name="distribution-layer")
+
+                assert utils.match(layer_distribution.output_shape,
+                                   (self.num_node, self.size_batch, self.length_sequence_input, 5))
+                layer_decoded = layer_distribution
+
+            elif self.decode_scheme == 'euclidean':
+                assert utils.match(layer_means.output_shape,
+                                   (self.num_node, self.size_batch, self.length_sequence_input, 2))
+                layer_decoded = layer_means
+            else:
+                raise ValueError("No definition found for loss scheme '%s'." % self.decode_scheme)
 
             """
             Build final output layer
             """
 
             # Slice x-length sequence from the last, according to <length_sequence_output>
-            layer_out = L.layers.SliceLayer(layer_distribution,
+            layer_out = L.layers.SliceLayer(layer_decoded,
                                             name='output-layer',
                                             indices=slice(-self.length_sequence_output, None),
                                             axis=2)
-            assert utils.match(layer_out.output_shape,
-                               (self.num_node, self.size_batch, self.length_sequence_output, 5))
 
             """
             Save some useful variables
@@ -524,7 +532,7 @@ class SocialLSTM:
         except:
             raise
 
-    def build_decoder(self):
+    def compute_prediction(self):
         """
         Build computation graph from `outputs` to `predictions`.
         :return: `predictions`
@@ -547,13 +555,13 @@ class SocialLSTM:
 
     def compute_loss(self):
         """
-        NNL Loss for Training.
+        (NNL) bivariant normal loss of Euclidean distance loss for training.
         Build computation graph from `predictions`, `targets` to `loss`.
         :return: `loss`
         """
         try:
             utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
-            utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
 
             timer = utils.Timer()
             utils.xprint('Computing loss ... ')
@@ -563,75 +571,96 @@ class SocialLSTM:
             shape_facts = facts.shape
             shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
 
-            # Reshape for convenience
-            facts = T.reshape(facts, shape_stacked_facts)
-            shape_distributions = self.outputs.shape
-            shape_stacked_distributions = (shape_distributions[0] * shape_distributions[1] * shape_distributions[2],
-                                           shape_distributions[3])
-            distributions = T.reshape(self.outputs, shape_stacked_distributions)
+            # Use either (nnl) binorm or euclidean distance for loss
 
-            # Use scan to replace loop with tensors
-            def step_loss(idx, distribution_mat, fact_mat):
-
-                # From the idx of the start of the slice, the vector and the length of
-                # the slice, obtain the desired slice.
-
-                distribution = distribution_mat[idx, :]
-                means = distribution[0:2]
-                # deviations = distribution[2:4]
-                deviations = distribution[2:4]
-                correlation = distribution[5]
-                target = fact_mat[idx, :]
-                prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
-                                             correlation)
-
-                # Do something with the slice here.
-
-                return prob
-
-            def step_loss_scaled(idx, distribution_mat, fact_mat, motion_range_v):
-
-                # From the idx of the start of the slice, the vector and the length of
-                # the slice, obtain the desired slice.
-
-                distribution = distribution_mat[idx, :]
-                means = distribution[0:2]
-                # deviations = distribution[2:4]
-                deviations = T.mul(distribution[2:4], motion_range_v)
-                correlation = distribution[4]
-                target = fact_mat[idx, :]
-                prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
-                                             correlation)
-
-                # Do something with the slice here.
-
-                return prob
-
-            # Make a vector containing the start idx of every slice
-            indices = T.arange(facts.shape[0])
-
-            if self.scaled_deviation:
-                motion_range = T.constant(self.motion_range[1] - self.motion_range[0])
-                probs, updates_loss = theano.scan(fn=step_loss_scaled, sequences=[indices],
-                                                  non_sequences=[distributions, facts, motion_range])
-            else:
-                probs, updates_loss = theano.scan(fn=step_loss, sequences=[indices],
-                                                  non_sequences=[distributions, facts])
-
-            # Normal Negative Log-likelihood
-            nnls = T.neg(T.log(probs))
-
-            # Use either sum or mean for loss
             loss = None
-            if self.loss_scheme == 'sum':
-                loss = T.sum(nnls)
-            elif self.loss_scheme == 'mean':
-                loss = T.mean(nnls)
-            else:
-                raise ValueError("No definition found for loss scheme '%s'." % self.loss_scheme)
 
-            utils.assertor.assert_not_none(loss, "Computation of loss has failed.")
-            self.probabilities = probs
+            if self.decode_scheme == 'binorm':
+                """
+                NNL Bivariant normal distribution
+                """
+                # Reshape for convenience
+                facts = T.reshape(facts, shape_stacked_facts)
+
+                shape_distributions = self.outputs.shape
+                shape_stacked_distributions = (shape_distributions[0] * shape_distributions[1] * shape_distributions[2],
+                                               shape_distributions[3])
+                distributions = T.reshape(self.outputs, shape_stacked_distributions)
+
+                # Use scan to replace loop with tensors
+                def step_loss(idx, distribution_mat, fact_mat):
+
+                    # From the idx of the start of the slice, the vector and the length of
+                    # the slice, obtain the desired slice.
+
+                    distribution = distribution_mat[idx, :]
+                    means = distribution[0:2]
+                    # deviations = distribution[2:4]
+                    stds = distribution[2:4]
+                    correlation = distribution[5]
+                    target = fact_mat[idx, :]
+                    prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], stds[0], stds[1],
+                                                 correlation)
+
+                    # Do something with the slice here.
+
+                    return prob
+
+                def step_loss_scaled(idx, distribution_mat, fact_mat, motion_range_v):
+
+                    # From the idx of the start of the slice, the vector and the length of
+                    # the slice, obtain the desired slice.
+
+                    distribution = distribution_mat[idx, :]
+                    means = distribution[0:2]
+                    # deviations = distribution[2:4]
+                    deviations = T.mul(distribution[2:4], motion_range_v)
+                    correlation = distribution[4]
+                    target = fact_mat[idx, :]
+                    prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
+                                                 correlation)
+
+                    # Do something with the slice here.
+
+                    return prob
+
+                # Make a vector containing the start idx of every slice
+                indices = T.arange(facts.shape[0])
+
+                if self.scaled_sigma:
+                    motion_range = T.constant(self.motion_range[1] - self.motion_range[0])
+                    probs, updates_loss = theano.scan(fn=step_loss_scaled, sequences=[indices],
+                                                      non_sequences=[distributions, facts, motion_range])
+                else:
+                    probs, updates_loss = theano.scan(fn=step_loss, sequences=[indices],
+                                                      non_sequences=[distributions, facts])
+
+                # save binorm probabilities for future peeking
+                self.probabilities = probs
+
+                # Normal Negative Log-likelihood
+                nnls = T.neg(T.log(probs))
+                loss = nnls
+
+            elif self.decode_scheme == 'euclidean':
+                """
+                Euclidean distance loss
+                """
+                # Elemwise differences
+                differences = T.sub(self.predictions, facts)
+                differences = T.reshape(differences, shape_stacked_facts)
+                deviations = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
+                shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2])
+                deviations = T.reshape(deviations, shape_deviations)
+
+                loss = deviations
+
+            else:
+                raise ValueError("No definition found for loss scheme '%s'." % self.decode_scheme)
+
+            # Compute mean for loss
+            loss = T.mean(loss)
+
             self.loss = loss
             utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.loss
@@ -647,10 +676,10 @@ class SocialLSTM:
         """
         try:
             utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
-            utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
 
             timer = utils.Timer()
-            utils.xprint('Building observer ... ')
+            utils.xprint('Computing deviation for observation ... ')
 
             # Remove time column
             facts = self.targets[:, :, :, 1:3]
@@ -678,7 +707,7 @@ class SocialLSTM:
         """
         try:
             utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
-            utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
             utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
 
             timer = utils.Timer()
@@ -716,7 +745,7 @@ class SocialLSTM:
         """
         try:
             utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
-            utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
+            utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
             utils.assertor.assert_not_none(self.loss, "Must compute the loss first.")
             utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
             utils.assertor.assert_not_none(self.updates, "Must compute the updates first.")
@@ -749,7 +778,7 @@ class SocialLSTM:
             self.peek_outputs = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
             self.peek_params = theano.function([], self.params_all, allow_input_downcast=True)
             self.peek_probs = theano.function([self.inputs, self.targets], self.probabilities,
-                                               allow_input_downcast=True)
+                                               allow_input_downcast=True) if self.probabilities is not None else None
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.func_predict, self.func_compare, self.func_train
@@ -767,7 +796,7 @@ class SocialLSTM:
         :return: Two <ndarray> containing average loss & deviation of each epoch.
         """
         utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
-        utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
+        utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
         utils.assertor.assert_not_none(self.loss, "Must compute the loss first.")
         utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
         for _func in (self.func_predict, self.func_compare, self.func_train):
@@ -847,7 +876,7 @@ class SocialLSTM:
                                 if self.network_history is not None:
 
                                     _netflow = peek_netflow()
-                                    _probs = self.peek_probs(inputs, targets)
+                                    _probs = self.peek_probs(inputs, targets) if self.peek_probs is not None else None
                                     # note that record [i, j] contains variable values BEFORE this training
                                     self.network_history[-1].append({'params': params,
                                                                      'netflow': _netflow,
@@ -1202,7 +1231,7 @@ class SocialLSTM:
 
                 # Build & compile the model
                 outputs_var, params_var = model.build_network(params=params_unpickled)
-                predictions_var = model.build_decoder()
+                predictions_var = model.compute_prediction()
                 loss_var = model.compute_loss()
                 deviations_var = model.compute_deviation()
                 updates_var = model.compute_update()
@@ -1238,7 +1267,7 @@ class SocialLSTM:
                 _model = SocialLSTM(sampler=half, motion_range=sampler.motion_range)
                 _model.build_network()
                 _model.import_params()
-                _model.build_decoder()
+                _model.compute_prediction()
                 _model.compute_loss()
                 _model.compute_deviation()
                 _model.compute_update()
