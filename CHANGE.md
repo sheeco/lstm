@@ -354,9 +354,13 @@
 
 - OPT: Disable the recording of network history to speed up;
 
-###### 2017-04-23
+###### [2017-04-23](957e531f00f52ab19d3ecd8fcefd0d1866e1418d)
 
 - OPT: For printing & logging;
+
+###### 2017-04-24
+
+- ADD: Enable to choose from stopping, continuing & peeking during training;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

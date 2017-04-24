@@ -404,7 +404,7 @@ class Sampler:
             while True:
                 # 1 batch for each node
                 instants, inputs, targets = sampler.load_batch(with_target=True)
-                check_entry = sampler.entry
+                peek_entry = sampler.entry
                 if inputs is None:
                     break
 
@@ -413,7 +413,7 @@ class Sampler:
                 while True:
                     # 1 batch for each node
                     instants, inputs, targets = sampler.load_batch(with_target=True)
-                    check_entry = sampler.entry
+                    peek_entry = sampler.entry
                     if inputs is None:
                         break
 

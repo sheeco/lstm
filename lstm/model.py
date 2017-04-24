@@ -148,11 +148,11 @@ class SocialLSTM:
             self.func_compare = None
             self.func_train = None
 
-            self.check_embed = None
-            self.checks_hid = []
-            self.check_outputs = None
-            self.check_params = None
-            self.check_probs = None
+            self.peek_embed = None
+            self.peeks_hid = []
+            self.peek_outputs = None
+            self.peek_params = None
+            self.peek_probs = None
 
             """
             Initialization Definitions
@@ -739,16 +739,16 @@ class SocialLSTM:
             #                                                     big_is_error=True))
 
             """
-            Compile checking functions for debugging
+            Compile peeking functions for debugging
             """
 
-            self.check_embed = theano.function([self.inputs], self.embed, allow_input_downcast=True)
-            self.checks_hid = []
+            self.peek_embed = theano.function([self.inputs], self.embed, allow_input_downcast=True)
+            self.peeks_hid = []
             for ihid in self.hids:
-                self.checks_hid += [theano.function([self.inputs], ihid, allow_input_downcast=True)]
-            self.check_outputs = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
-            self.check_params = theano.function([], self.params_all, allow_input_downcast=True)
-            self.check_probs = theano.function([self.inputs, self.targets], self.probabilities,
+                self.peeks_hid += [theano.function([self.inputs], ihid, allow_input_downcast=True)]
+            self.peek_outputs = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
+            self.peek_params = theano.function([], self.params_all, allow_input_downcast=True)
+            self.peek_probs = theano.function([self.inputs, self.targets], self.probabilities,
                                                allow_input_downcast=True)
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
@@ -757,9 +757,9 @@ class SocialLSTM:
         except:
             raise
 
-    def get_checks(self):
+    def get_peeks(self):
 
-        return self.check_embed, self.checks_hid, self.check_outputs, self.check_params, self.check_probs
+        return self.peek_embed, self.peeks_hid, self.peek_outputs, self.peek_params, self.peek_probs
 
     def train(self):
         """
@@ -770,12 +770,12 @@ class SocialLSTM:
         utils.assertor.assert_not_none(self.predictions, "Must build the decoder first.")
         utils.assertor.assert_not_none(self.loss, "Must compute the loss first.")
         utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
-        if any(func is None for func in [self.func_predict, self.func_compare, self.func_train]):
-            raise RuntimeError("Must compile the functions first.")
+        for _func in (self.func_predict, self.func_compare, self.func_train):
+            utils.assertor.assert_not_none(_func, "Must compile the functions first.")
 
-        invalid = True
+        done_training = False
         try:
-            while invalid:
+            while not done_training:
                 # start of single training try
                 try:
                     utils.xprint('Training ... ', newline=True)
@@ -784,13 +784,13 @@ class SocialLSTM:
                     loss_epoch = numpy.zeros((0,))
                     deviations_epoch = numpy.zeros((0,))
                     params = None
-                    stop = False  # Whether to stop and exit
-                    completed = None  # Whether a batch has got proceeded completely
+                    do_stop = False  # Whether to stop and exit
 
                     # for iepoch in range(self.num_epoch):
                     iepoch = 0
                     while True:
                         # start of single epoch
+                        done_epoch = False  # Whether an epoch has got finished properly
                         utils.xprint('  Epoch %d ... ' % iepoch, newline=True)
                         if self.network_history is not None:
                             self.network_history.append([])
@@ -798,17 +798,21 @@ class SocialLSTM:
                         deviations = None
                         loss_batch = numpy.zeros((0,))
                         deviations_batch = numpy.zeros((0,))
+                        done_batch = None  # Whether a batch has got finished properly
+
                         ibatch = 0
                         while True:
                             # start of single batch
                             try:
+                                # sleep a bit to catch KeyboardInterrupt
+                                utils.sleep(0.001)
 
                                 # retrieve the next batch for nodes
                                 # only if the previous batch is completed
                                 # else, redo the previous batch
-                                if completed is None \
-                                        or completed:
-                                    completed = False
+                                if done_batch is None \
+                                        or done_batch:
+                                    done_batch = False
                                     instants, inputs, targets = self.sampler.load_batch(with_target=True)
                                 if inputs is None:
                                     if ibatch == 0:
@@ -817,32 +821,33 @@ class SocialLSTM:
                                                            % (self.sampler.length, self.size_batch))
 
                                     self.sampler.reset_entry()
-                                    completed = None
+                                    done_batch = None
+                                    done_epoch = True
                                     break
 
                                 utils.xprint('    Batch %d ... ' % ibatch)
 
                                 if params is None:
-                                    params = self.check_params()
+                                    params = self.peek_params()
                                 self.param_values = params
 
                                 # Record params, flow of data & probabilities to network history BEFORE training
 
-                                def check_netflow():
-                                    _embed = self.check_embed(inputs)
+                                def peek_netflow():
+                                    _embed = self.peek_embed(inputs)
                                     _hids = []
-                                    for _ihid in xrange(len(self.checks_hid)):
-                                        _check_hid = self.checks_hid[_ihid]
-                                        _hids += [_check_hid(inputs)]
-                                    _netout = self.check_outputs(inputs)
+                                    for _ihid in xrange(len(self.peeks_hid)):
+                                        _peek_hid = self.peeks_hid[_ihid]
+                                        _hids += [_peek_hid(inputs)]
+                                    _netout = self.peek_outputs(inputs)
 
                                     dict_netflow = {'embed': _embed, 'hiddens': _hids, 'netout': _netout}
                                     return dict_netflow
 
                                 if self.network_history is not None:
 
-                                    _netflow = check_netflow()
-                                    _probs = self.check_probs(inputs, targets)
+                                    _netflow = peek_netflow()
+                                    _probs = self.peek_probs(inputs, targets)
                                     # note that record [i, j] contains variable values BEFORE this training
                                     self.network_history[-1].append({'params': params,
                                                                      'netflow': _netflow,
@@ -868,7 +873,7 @@ class SocialLSTM:
 
                                 # Validate params after training
 
-                                new_params = self.check_params()
+                                new_params = self.peek_params()
                                 try:
                                     utils.assertor.assert_finite(new_params, 'params')
 
@@ -880,14 +885,48 @@ class SocialLSTM:
                                 else:
                                     params = new_params
                                     # consider successful if training is done and successful
-                                    completed = True
+                                    done_batch = True
 
                             except KeyboardInterrupt, e:
-                                utils.xprint('', newline=True)
+
+                                _menu = ('stop', 'continue', 'peek')
+                                _abbr_menu = ('s', 'c', 'p')
+                                _hint_menu = "0: (s)top & exit   1: (c)ontinue    2: (p)eek network output"
+
+                                def interpret_menu(answer):
+                                    try:
+                                        if answer in _menu:
+                                            return _menu.index(answer)
+                                        elif answer in _abbr_menu:
+                                            return _abbr_menu.index(answer)
+                                        else:
+                                            n = int(answer)
+                                            if 0 <= answer < len(_menu):
+                                                return n
+                                            else:
+                                                raise AssertionError("Choice out of scope.")
+                                    except Exception, e:
+                                        raise AssertionError(e.message)
+
+                                utils.xprint('\n', newline=True)
                                 timer.pause()
-                                stop = utils.ask("Stop and exit?", code_quit=None, interpretor=utils.interpret_confirm)
+                                choice = utils.ask(_hint_menu, code_quit='q', interpretor=interpret_menu)
+                                utils.xprint('', newline=True)
                                 timer.resume()
-                                if stop:
+
+                                while choice == _menu.index('peek'):
+                                    _netout = self.peek_outputs(inputs)
+                                    utils.xprint('Network Output:\n%s\n' % _netout, newline=True)
+
+                                    # ask again after peeking
+                                    utils.xprint('', newline=True)
+                                    timer.pause()
+                                    choice = utils.ask(_hint_menu, code_quit='q', interpretor=interpret_menu)
+                                    utils.xprint('', newline=True)
+                                    timer.resume()
+
+                                if choice == _menu.index('stop'):
+                                    do_stop = True
                                     # means n complete epochs
                                     utils.update_config('num_epoch', iepoch, 'runtime', silence=False)
                                     break
@@ -895,86 +934,99 @@ class SocialLSTM:
                                     continue
 
                             finally:
-                                if completed:
 
-                                    # Log [deviation, prediction, target] by each sample
+                                if done_batch:
 
-                                    def log_by_sample():
-                                        size_this_batch = len(instants)
-                                        for isample in xrange(0, size_this_batch):
+                                    # Make sure complete logging discarding KeyboardInterrupt
+                                    _done_logging = False
+                                    while not _done_logging:
+                                        try:
+                                            # Log [deviation, prediction, target] by each sample
 
-                                            dict_content = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
+                                            def log_by_sample():
+                                                size_this_batch = len(instants)
+                                                for isample in xrange(0, size_this_batch):
 
-                                            for iseq in xrange(0, self.length_sequence_output):
-                                                # index in [-n, -1]
-                                                dict_content['instant'] = instants[
-                                                    isample, iseq - self.length_sequence_output]
-                                                for inode in xrange(0, self.num_node):
-                                                    # [x, y]
-                                                    _deviation = deviations[inode, isample, iseq]
-                                                    _prediction = predictions[inode, isample, iseq]
-                                                    _target = targets[inode, isample, iseq, -2:-1]
-                                                    dict_content[self.nodes[inode]] = "(%s, %s, %s)" \
-                                                                                      % (_deviation, _prediction,
-                                                                                         _target)
+                                                    dict_content = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
 
-                                                self.logger.log(dict_content, name="training-sample")
+                                                    for iseq in xrange(0, self.length_sequence_output):
+                                                        # index in [-n, -1]
+                                                        dict_content['instant'] = instants[
+                                                            isample, iseq - self.length_sequence_output]
+                                                        for inode in xrange(0, self.num_node):
+                                                            # [x, y]
+                                                            _deviation = deviations[inode, isample, iseq]
+                                                            _prediction = predictions[inode, isample, iseq]
+                                                            _target = targets[inode, isample, iseq, -2:-1]
+                                                            dict_content[self.nodes[inode]] = "(%s, %s, %s)" \
+                                                                                              % (_deviation, _prediction,
+                                                                                                 _target)
 
-                                    log_by_sample()
+                                                        self.logger.log(dict_content, name="training-sample")
 
-                                    loss_batch = numpy.append(loss_batch, loss)
-                                    deviations_batch = numpy.append(deviations_batch, numpy.mean(deviations))
+                                            log_by_sample()
 
-                                    # Print loss & deviation info to console
-                                    utils.xprint('%s; %s'
-                                                 % (utils.format_var(float(loss), name='loss'),
-                                                    utils.format_var(deviations, name='deviations')),
-                                                 newline=True)
+                                            loss_batch = numpy.append(loss_batch, loss)
+                                            deviations_batch = numpy.append(deviations_batch, numpy.mean(deviations))
 
-                                    # Log [loss, mean-deviation, min-deviation, max-deviation] by each batch
+                                            # Print loss & deviation info to console
+                                            utils.xprint('%s; %s'
+                                                         % (utils.format_var(float(loss), name='loss'),
+                                                            utils.format_var(deviations, name='deviations')),
+                                                         newline=True)
 
-                                    def log_by_batch():
-                                        _peek_batch = utils.peek_matrix(deviations)
+                                            # Log [loss, mean-deviation, min-deviation, max-deviation] by each batch
 
-                                        self.logger.log({'epoch': iepoch, 'batch': ibatch,
-                                                         'loss': utils.format_var(float(loss)),
-                                                         'mean-deviation': _peek_batch[0],
-                                                         'min-deviation': _peek_batch[1],
-                                                         'max-deviation': _peek_batch[2]},
-                                                        name="training-batch")
-                                    log_by_batch()
+                                            def log_by_batch():
+                                                _peek_batch = utils.peek_matrix(deviations)
 
-                                    ibatch += 1
+                                                self.logger.log({'epoch': iepoch, 'batch': ibatch,
+                                                                 'loss': utils.format_var(float(loss)),
+                                                                 'mean-deviation': _peek_batch[0],
+                                                                 'min-deviation': _peek_batch[1],
+                                                                 'max-deviation': _peek_batch[2]},
+                                                                name="training-batch")
+                                            log_by_batch()
+
+                                            ibatch += 1
+                                            break
+                                        except KeyboardInterrupt, e:
+                                            pass
+                                    pass  # end of while not _done_logging
+                                else:  # skip logging if this batch is undone
+                                    pass
 
                             pass  # end of single batch
                         pass  # end of single epoch
 
-                        loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
-                        deviations_epoch = numpy.append(deviations_epoch, numpy.mean(deviations_batch))
+                        if done_epoch:
+                            loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
+                            deviations_epoch = numpy.append(deviations_epoch, numpy.mean(deviations_batch))
 
-                        # Print loss & deviation info to console
-                        utils.xprint('  mean-loss: %s; mean-deviation: %s'
-                                     % (utils.peek_matrix(loss_batch)[0], utils.peek_matrix(deviations_batch)[0]),
-                                     newline=True)
+                            # Print loss & deviation info to console
+                            utils.xprint('  mean-loss: %s; mean-deviation: %s'
+                                         % (utils.peek_matrix(loss_batch)[0], utils.peek_matrix(deviations_batch)[0]),
+                                         newline=True)
 
-                        # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
+                            # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
 
-                        def log_by_epoch():
-                            _peek_epoch = utils.peek_matrix(deviations_batch)
+                            def log_by_epoch():
+                                _peek_epoch = utils.peek_matrix(deviations_batch)
 
-                            self.logger.log({'epoch': iepoch,
-                                             'mean-loss': utils.format_var(float(loss)),
-                                             'mean-deviation': _peek_epoch[0],
-                                             'min-deviation': _peek_epoch[1],
-                                             'max-deviation': _peek_epoch[2]},
-                                            name="training-epoch")
+                                self.logger.log({'epoch': iepoch,
+                                                 'mean-loss': utils.format_var(float(loss)),
+                                                 'mean-deviation': _peek_epoch[0],
+                                                 'min-deviation': _peek_epoch[1],
+                                                 'max-deviation': _peek_epoch[2]},
+                                                name="training-epoch")
 
-                        log_by_epoch()
+                            log_by_epoch()
 
-                        iepoch += 1
-                        utils.update_config('num_epoch', iepoch, 'runtime')
+                            iepoch += 1
+                        else:  # skip logging if this epoch is undone
+                            pass
 
-                        if stop:
+                        if do_stop:
                             break
 
                         elif iepoch >= self.num_epoch:
@@ -1000,7 +1052,7 @@ class SocialLSTM:
                                 break
 
                     pass  # end of all epochs
-                    invalid = False
+                    done_training = True
 
                 except utils.InvalidTrainError, e:
                     # Update learning rate & Retrain
@@ -1020,8 +1072,8 @@ class SocialLSTM:
                     else:
                         raise
 
-                pass  # end of single training try
-
+                pass  # end of single training attempt
+            pass  # end of while not done_training
         except:
             raise
 
@@ -1156,7 +1208,7 @@ class SocialLSTM:
                 updates_var = model.compute_update()
                 func_predict, func_compare, func_train = model.compile()
 
-                check_e, checks_hid, check_outputs, check_params, check_probs = model.get_checks()
+                peek_e, peeks_hid, peek_outputs, peek_params, peek_probs = model.get_peeks()
 
                 utils.get_rootlogger().register("training", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 

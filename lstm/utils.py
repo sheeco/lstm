@@ -25,6 +25,7 @@ __all__ = [
     "xprint",
     "warn",
     "handle",
+    "sleep",
     "ask",
     "interpret_confirm",
     "interpret_positive_int",
@@ -784,6 +785,13 @@ def handle(exception, logger=None, exiting=False):
         exit("Stop munually.")
     else:
         exit("Exit Due to Failure.")
+
+
+def sleep(seconds):
+    try:
+        time.sleep(seconds)
+    except:
+        raise
 
 
 def ask(message, code_quit='q', interpretor=None):
