@@ -21,21 +21,21 @@ class GridSystem:
 class Sampler:
 
     def __init__(self, path=None, nodes=None, length=None, dimension_sample=None, length_sequence_input=None,
-                 length_sequence_output=None, size_batch=None, strict_batch_size=None, keep_positive=True):
+                 length_sequence_output=None, size_batch=None, strict_batch_size=None, keep_positive=True, gridding=False):
 
         try:
             self.path = path if path is not None else utils.get_config('path_trace')
             self.path = utils.filer.validate_path_format(self.path)
 
-            self.dict_all_traces = {}
+            self._dict_all_traces_ = {}
             self.node_identifiers = []
             self._read_traces_from_path_()
 
             self.node_filter = nodes
-            self.dict_traces = {}
+            self._dict_traces_ = {}
             self._filter_nodes_()
 
-            self.traces = Sampler._dict_to_array_(self.dict_traces, length)
+            self.traces = Sampler._dict_to_array_(self._dict_traces_, length)
             self.num_node = int(self.traces.shape[0])
             self.motion_range = Sampler._compute_range_(self.traces)
             self.grid_system = None
@@ -114,43 +114,43 @@ class Sampler:
             except:
                 raise
 
-        self.dict_all_traces = dict_traces
-        self.node_identifiers = self.dict_all_traces.keys()
-        return self.dict_all_traces
+        self._dict_all_traces_ = dict_traces
+        self.node_identifiers = self._dict_all_traces_.keys()
+        return self._dict_all_traces_
 
     def _filter_nodes_(self):
 
         try:
             if self.node_filter is None:
-                self.dict_traces = self.dict_all_traces
-                return self.dict_traces
+                self._dict_traces_ = self._dict_all_traces_
+                return self._dict_traces_
 
             nodes_requested = []
             # 指定节点个数
             if isinstance(self.node_filter, int):
-                if 0 < self.node_filter < len(self.dict_all_traces):
-                    nodes_requested = self.dict_all_traces.keys()[:self.node_filter]
+                if 0 < self.node_filter < len(self._dict_all_traces_):
+                    nodes_requested = self._dict_all_traces_.keys()[:self.node_filter]
                 elif self.node_filter < 0:
                     raise ValueError("Expect a positive integer for `node_filter`, "
                                      "while getting %d instead." % self.node_filter)
-                elif self.node_filter > len(self.dict_all_traces):
+                elif self.node_filter > len(self._dict_all_traces_):
                     raise ValueError("%d nodes are expected, "
                                      "while only %d nodes in the given path are available."
-                                     % (self.node_filter, len(self.dict_all_traces)))
+                                     % (self.node_filter, len(self._dict_all_traces_)))
 
             # 指定 node identifiers
             elif isinstance(self.node_filter, list) \
                     and len(self.node_filter) > 0:
                 nodes_requested = self.node_filter
             else:
-                self.dict_traces = self.dict_all_traces
-                return self.dict_traces
+                self._dict_traces_ = self._dict_all_traces_
+                return self._dict_traces_
 
-            self.dict_traces = {node_id: self.dict_all_traces[node_id] for node_id in nodes_requested}
-            self.node_identifiers = self.dict_traces.keys()
+            self._dict_traces_ = {node_id: self._dict_all_traces_[node_id] for node_id in nodes_requested}
+            self.node_identifiers = self._dict_traces_.keys()
             utils.xprint("Select node %s according to node filter %s." % (self.node_identifiers, self.node_filter),
                          newline=True)
-            return self.dict_traces
+            return self._dict_traces_
 
         except KeyError, e:
             e.message = "%s. Cannot find the node in given path '%s'." % (e.message, self.path)
@@ -238,29 +238,25 @@ class Sampler:
         if numpy.min(self.motion_range) >= 0.:
             return self.traces
 
-        traces = self.traces
         stride = - self.motion_range[0, :]
-        for trace in traces:
+        for trace in self.traces:
             for triple in trace:
                 triple[1:3] = triple[1:3] + stride
 
         self.motion_range += stride
-        self.traces = traces
         return self.traces
 
     def map_to_grid(self, grid_system=None):
 
-        traces = self.traces
         if grid_system is None:
             grid_system = GridSystem(utils.get_config('grain_grid'))
         if grid_system.base_xy is None:
             grid_system.base_xy = numpy.floor_divide(self.motion_range[0, :], grid_system.grain) * grid_system.grain
-        for trace in traces:
+        for trace in self.traces:
             for triple in trace:
                 triple[1:3] = numpy.floor_divide((triple[1:3] - grid_system.base_xy), grid_system.grain)
 
-        self.motion_range = Sampler._compute_range_(traces)
-        self.traces = traces
+        self.motion_range = Sampler._compute_range_(self.traces)
         self.grid_system = grid_system
         return self.traces
 

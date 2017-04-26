@@ -366,9 +366,13 @@
 
 - ADD: Enable to choose decoding scheme between bivariant normal distribution / euclidean distance;
 
-###### 2017-04-25
+###### [2017-04-25](919aa2071f0cca1c330c2f490c17545e3cf19e57)
 
 - FIX: Error during logging of loss by epoch;
+
+###### 2017-04-26
+
+- ADD: Enable to map coordinates to grid through config;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

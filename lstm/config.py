@@ -55,15 +55,6 @@ config_pool = {
                 'tags': ['path']
             },
 
-            # Sharing scheme for LSTMS of multiple nodes
-            'share_scheme': {
-                # Among ['parameter', 'input', None]
-                # 'parameter' means all the nodes share the same set of parameters
-                # 'input' means all the nodes share the embedded sample input with each other
-                # None means neither
-                'value': 'input',
-                'tags': ['build']
-            },
             # How many nodes to learn on
             'num_node': {
                 'value': 2,
@@ -80,20 +71,34 @@ config_pool = {
                 'value': 3,
                 'tags': ['build']
             },
+            # Whether to map the coordinates to certain grid
+            'sample_gridding': {
+                'value': False,
+                'tags': []
+            },
+            # Length of edge when coordinates need to be mapped to grid
+            'grain_grid': {
+                'value': 50,
+                'tags': []
+            },
             # Decoding scheme
             'decode_scheme': {
                 # Among ['binorm', 'euclidean']
                 'value': 'binorm',
                 'tags': ['build']
             },
+            # Sharing scheme for LSTMS of multiple nodes
+            'share_scheme': {
+                # Among ['parameter', 'input', None]
+                # 'parameter' means all the nodes share the same set of parameters
+                # 'input' means all the nodes share the embedded sample input with each other
+                # None means neither
+                'value': 'input',
+                'tags': ['build']
+            },
             # If only a full size batch will be accepted
             'strict_batch_size': {
                 'value': True,
-                'tags': []
-            },
-            # Length of edge when coordinates need to be mapped to grid
-            'grain_grid': {
-                'value': 100,
                 'tags': []
             },
 

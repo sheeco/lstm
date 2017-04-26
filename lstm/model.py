@@ -8,7 +8,7 @@ from theano.tensor.sharedvar import TensorSharedVariable
 import lasagne as L
 
 import utils
-from sampler import Sampler
+from sampler import *
 
 __all__ = [
     'SocialLSTM'
@@ -1218,6 +1218,9 @@ class SocialLSTM:
 
             # Build sampler
             sampler = Sampler(nodes=nodes, keep_positive=True)
+            sample_gridding = utils.get_config('sample_gridding')
+            if sample_gridding is True:
+                sampler.map_to_grid(grid_system=GridSystem(utils.get_config('grain_grid')))
             half = Sampler.clip(sampler, indices=(sampler.length / 2))
 
             # Define the model
