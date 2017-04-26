@@ -893,13 +893,11 @@ def _interpret_file_path_(answer):
 interpret_file_path = _interpret_file_path_
 
 
-def peek_matrix(mat, hint=False):
+def peek_matrix(mat, formatted=False):
     _mean, _min, _max = numpy.mean(mat), numpy.min(mat), numpy.max(mat)
-    _mean, _min, _max = '%.2f' % _mean, '%.2f' % _min, '%.2f' % _max
-    if hint:
-        return 'mean: %s' % _mean, 'min: %s' % _min, 'max: %s' % _max
-    else:
-        return _mean, _min, _max
+    if formatted:
+        _mean, _min, _max = '%.2f' % _mean, '%.2f' % _min, '%.2f' % _max
+    return {'mean': _mean, 'min': _min, 'max': _max}
 
 
 def format_var(var, name=None, detail=False):
@@ -918,7 +916,8 @@ def format_var(var, name=None, detail=False):
             elif var.size == 1:
                 string += '%s' % var[0]
             elif numpy.isfinite(var).all():
-                string += '(%s, %s, %s)' % peek_matrix(var, hint=True)
+                _peek = peek_matrix(var, formatted=True)
+                string += '(mean: %s, min: %s, max: %s)' % (_peek['mean'], _peek['min'], _peek['max'])
             elif numpy.isnan(var).all():
                 string += 'nan'
             elif numpy.isinf(var).all():

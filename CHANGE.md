@@ -362,9 +362,13 @@
 
 - ADD: Enable to choose from stopping, continuing & peeking during training;
 
-###### 2017-04-24
+###### [2017-04-24](360ae3d4044f4d353fad2ae012a692e767bdc006)
 
 - ADD: Enable to choose decoding scheme between bivariant normal distribution / euclidean distance;
+
+###### 2017-04-25
+
+- FIX: Error during logging of loss by epoch;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

@@ -810,8 +810,8 @@ class SocialLSTM:
                     utils.xprint('Training ... ', newline=True)
                     timer = utils.Timer()
 
-                    loss_epoch = numpy.zeros((0,))
-                    deviations_epoch = numpy.zeros((0,))
+                    losses_by_epoch = numpy.zeros((0,))
+                    deviations_by_epoch = numpy.zeros((0,))
                     params = None
                     do_stop = False  # Whether to stop and exit
 
@@ -825,8 +825,8 @@ class SocialLSTM:
                             self.network_history.append([])
                         loss = None
                         deviations = None
-                        loss_batch = numpy.zeros((0,))
-                        deviations_batch = numpy.zeros((0,))
+                        losses_by_batch = numpy.zeros((0,))
+                        deviations_by_batch = numpy.zeros((0,))
                         done_batch = None  # Whether a batch has got finished properly
 
                         ibatch = 0
@@ -995,8 +995,8 @@ class SocialLSTM:
 
                                             log_by_sample()
 
-                                            loss_batch = numpy.append(loss_batch, loss)
-                                            deviations_batch = numpy.append(deviations_batch, numpy.mean(deviations))
+                                            losses_by_batch = numpy.append(losses_by_batch, loss)
+                                            deviations_by_batch = numpy.append(deviations_by_batch, numpy.mean(deviations))
 
                                             # Print loss & deviation info to console
                                             utils.xprint('%s; %s'
@@ -1007,13 +1007,13 @@ class SocialLSTM:
                                             # Log [loss, mean-deviation, min-deviation, max-deviation] by each batch
 
                                             def log_by_batch():
-                                                _peek_batch = utils.peek_matrix(deviations)
+                                                _peek_deviations_this_batch = utils.peek_matrix(deviations, formatted=True)
 
                                                 self.logger.log({'epoch': iepoch, 'batch': ibatch,
                                                                  'loss': utils.format_var(float(loss)),
-                                                                 'mean-deviation': _peek_batch[0],
-                                                                 'min-deviation': _peek_batch[1],
-                                                                 'max-deviation': _peek_batch[2]},
+                                                                 'mean-deviation': _peek_deviations_this_batch['mean'],
+                                                                 'min-deviation': _peek_deviations_this_batch['min'],
+                                                                 'max-deviation': _peek_deviations_this_batch['max']},
                                                                 name="training-batch")
                                             log_by_batch()
 
@@ -1029,24 +1029,25 @@ class SocialLSTM:
                         pass  # end of single epoch
 
                         if done_epoch:
-                            loss_epoch = numpy.append(loss_epoch, numpy.mean(loss_batch))
-                            deviations_epoch = numpy.append(deviations_epoch, numpy.mean(deviations_batch))
+                            losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
+                            deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
+
+                            _peek_losses_this_epoch = utils.peek_matrix(losses_by_batch, formatted=True)
+                            _peek_deviations_this_epoch = utils.peek_matrix(deviations_by_batch, formatted=True)
 
                             # Print loss & deviation info to console
                             utils.xprint('  mean-loss: %s; mean-deviation: %s'
-                                         % (utils.peek_matrix(loss_batch)[0], utils.peek_matrix(deviations_batch)[0]),
+                                         % (_peek_losses_this_epoch['mean'], _peek_deviations_this_epoch['mean']),
                                          newline=True)
 
                             # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
 
                             def log_by_epoch():
-                                _peek_epoch = utils.peek_matrix(deviations_batch)
-
                                 self.logger.log({'epoch': iepoch,
-                                                 'mean-loss': utils.format_var(float(loss)),
-                                                 'mean-deviation': _peek_epoch[0],
-                                                 'min-deviation': _peek_epoch[1],
-                                                 'max-deviation': _peek_epoch[2]},
+                                                 'mean-loss': _peek_losses_this_epoch['mean'],
+                                                 'mean-deviation': _peek_deviations_this_epoch['mean'],
+                                                 'min-deviation': _peek_deviations_this_epoch['min'],
+                                                 'max-deviation': _peek_deviations_this_epoch['max']},
                                                 name="training-epoch")
 
                             log_by_epoch()
@@ -1108,7 +1109,7 @@ class SocialLSTM:
 
         else:
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
-            return loss_epoch, deviations_epoch
+            return losses_by_epoch, deviations_by_epoch
 
     def export_history(self, path=None):
         try:
