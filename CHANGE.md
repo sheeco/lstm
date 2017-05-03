@@ -370,9 +370,13 @@
 
 - FIX: Error during logging of loss by epoch;
 
-###### 2017-04-26
+###### [2017-04-26](6fbfac05519e77e67e5fd8e28f959b817f51fdbb)
 
 - ADD: Enable to map coordinates to grid through config;
+
+###### 2017-05-03
+
+- RFCT: For sampler in SocialLSTM;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

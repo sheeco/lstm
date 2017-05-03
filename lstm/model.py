@@ -28,8 +28,9 @@ class SocialLSTM:
     DECODE_SCHEMES = ['binorm',
                     'euclidean']
 
-    def __init__(self, sampler=None, motion_range=None, inputs=None, targets=None, adaptive_learning_rate=None,
+    def __init__(self, node_identifiers, motion_range, inputs=None, targets=None, adaptive_learning_rate=None,
                  share_scheme=None, decode_scheme=None, train_scheme=None,
+                 dimension_sample=None, length_sequence_input=None, length_sequence_output=None, size_batch=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
                  learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
                  limit_network_history=None):
@@ -38,19 +39,11 @@ class SocialLSTM:
                 theano.config.exception_verbosity = 'high'
                 theano.config.optimizer = 'fast_compile'
 
-            # Sampler related variables
+            # Node related variables
 
-            if sampler is None:
-                sampler = Sampler()
-                sampler.pan_to_positive()
-            self.sampler = sampler
-            self.sampler.reset_entry()
-            self.num_node = self.sampler.num_node
-            self.nodes = self.sampler.node_identifiers
-            if motion_range is None:
-                self.motion_range = self.sampler.motion_range
-            else:
-                self.motion_range = motion_range
+            self.node_identifiers = node_identifiers
+            self.num_node = len(self.node_identifiers)
+            self.motion_range = motion_range
 
             # Variables defining the network
             self.share_scheme = share_scheme if share_scheme is not None else utils.get_config('share_scheme')
@@ -58,10 +51,14 @@ class SocialLSTM:
                 raise ValueError(
                     "Unknown sharing scheme '%s'. Must be among %s." % (self.share_scheme, SocialLSTM.SHARE_SCHEMES))
 
-            self.dimension_sample = self.sampler.dimension_sample
-            self.length_sequence_input = self.sampler.length_sequence_input
-            self.length_sequence_output = self.sampler.length_sequence_output
-            self.size_batch = self.sampler.size_batch
+            self.dimension_sample = dimension_sample \
+                if dimension_sample is not None else utils.get_config('dimension_sample')
+            self.length_sequence_input = length_sequence_input \
+                if length_sequence_input is not None else utils.get_config('length_sequence_input')
+            self.length_sequence_output = length_sequence_output \
+                if length_sequence_output is not None else utils.get_config('length_sequence_output')
+            self.size_batch = size_batch \
+                if size_batch is not None else utils.get_config('size_batch')
             self.dimension_embed_layer = dimension_embed_layer \
                 if dimension_embed_layer is not None else utils.get_config('dimension_embed_layer')
             dimension_hidden_layer = dimension_hidden_layer \
@@ -199,7 +196,7 @@ class SocialLSTM:
 
             self.logger = utils.get_sublogger()
 
-            columns_prediction = ['epoch', 'batch', 'sample', 'instant'] + self.nodes
+            columns_prediction = ['epoch', 'batch', 'sample', 'instant'] + self.node_identifiers
             self.logger.register("training-sample", columns=columns_prediction)
             self.logger.register("training-batch", columns=['epoch', 'batch', 'loss',
                                                             'mean-deviation', 'min-deviation', 'max-deviation'])
@@ -790,7 +787,7 @@ class SocialLSTM:
 
         return self.peek_embed, self.peeks_hid, self.peek_outputs, self.peek_params, self.peek_probs
 
-    def train(self):
+    def train(self, sampler):
         """
 
         :return: Two <ndarray> containing average loss & deviation of each epoch.
@@ -842,14 +839,14 @@ class SocialLSTM:
                                 if done_batch is None \
                                         or done_batch:
                                     done_batch = False
-                                    instants, inputs, targets = self.sampler.load_batch(with_target=True)
+                                    instants, inputs, targets = sampler.load_batch(with_target=True)
                                 if inputs is None:
                                     if ibatch == 0:
                                         raise RuntimeError("Only %d sample pairs are found, "
                                                            "not enough for one single batch of size %d."
-                                                           % (self.sampler.length, self.size_batch))
+                                                           % (sampler.length, self.size_batch))
 
-                                    self.sampler.reset_entry()
+                                    sampler.reset_entry()
                                     done_batch = None
                                     done_epoch = True
                                     break
@@ -987,8 +984,8 @@ class SocialLSTM:
                                                             _deviation = deviations[inode, isample, iseq]
                                                             _prediction = predictions[inode, isample, iseq]
                                                             _target = targets[inode, isample, iseq, -2:-1]
-                                                            dict_content[self.nodes[inode]] = "(%s, %s, %s)" \
-                                                                                              % (_deviation, _prediction,
+                                                            dict_content[self.node_identifiers[inode]] = "(%s, %s, %s)" \
+                                                                                                         % (_deviation, _prediction,
                                                                                                  _target)
 
                                                         self.logger.log(dict_content, name="training-sample")
@@ -1093,7 +1090,7 @@ class SocialLSTM:
                         self.update_learning_rate(new_learning_rate)
 
                         # Reinitialize related variables
-                        self.sampler.reset_entry()
+                        sampler.reset_entry()
                         if self.network_history is not None:
                             self.network_history = []
 
@@ -1224,7 +1221,7 @@ class SocialLSTM:
             half = Sampler.clip(sampler, indices=(sampler.length / 2))
 
             # Define the model
-            model = SocialLSTM(sampler=half, motion_range=sampler.motion_range)
+            model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range)
 
             try:
                 # Import previously pickled parameters if requested
@@ -1247,7 +1244,7 @@ class SocialLSTM:
 
                 # Do training
                 try:
-                    loss, deviations = model.train()
+                    loss, deviations = model.train(sampler)
                 except Exception, e:
                     utils.handle(e)
                 else:
@@ -1268,7 +1265,7 @@ class SocialLSTM:
                 utils.get_sublogger().log_config()
 
             def test_importing():
-                _model = SocialLSTM(sampler=half, motion_range=sampler.motion_range)
+                _model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range)
                 _model.build_network()
                 _model.import_params()
                 _model.compute_prediction()
