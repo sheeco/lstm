@@ -374,9 +374,13 @@
 
 - ADD: Enable to map coordinates to grid through config;
 
-###### 2017-05-03
+###### [2017-05-03](4832e5fdd7835321f2bc8b5a3b4e2658c957d625)
 
 - RFCT: For sampler in SocialLSTM;
+
+###### 2017-05-04
+
+- FIX: Bugs with instants & targets logging;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

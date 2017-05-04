@@ -839,7 +839,7 @@ class SocialLSTM:
                                 if done_batch is None \
                                         or done_batch:
                                     done_batch = False
-                                    instants, inputs, targets = sampler.load_batch(with_target=True)
+                                    instants_input, inputs, instants_target, targets = sampler.load_batch(with_target=True)
                                 if inputs is None:
                                     if ibatch == 0:
                                         raise RuntimeError("Only %d sample pairs are found, "
@@ -970,21 +970,21 @@ class SocialLSTM:
                                             # Log [deviation, prediction, target] by each sample
 
                                             def log_by_sample():
-                                                size_this_batch = len(instants)
+                                                size_this_batch = len(instants_input)
                                                 for isample in xrange(0, size_this_batch):
 
                                                     dict_content = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
 
                                                     for iseq in xrange(0, self.length_sequence_output):
                                                         # index in [-n, -1]
-                                                        dict_content['instant'] = instants[
+                                                        dict_content['instant'] = instants_target[
                                                             isample, iseq - self.length_sequence_output]
                                                         for inode in xrange(0, self.num_node):
                                                             # [x, y]
                                                             _deviation = deviations[inode, isample, iseq]
                                                             _prediction = predictions[inode, isample, iseq]
-                                                            _target = targets[inode, isample, iseq, -2:-1]
-                                                            dict_content[self.node_identifiers[inode]] = "(%s, %s, %s)" \
+                                                            _target = targets[inode, isample, iseq, -2:]
+                                                            dict_content[self.node_identifiers[inode]] = "(%.2f, %s, %s)" \
                                                                                                          % (_deviation, _prediction,
                                                                                                  _target)
 

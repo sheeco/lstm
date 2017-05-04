@@ -271,7 +271,7 @@ class Sampler:
 
         try:
             if self.entry >= self.length:
-                return None, None, None
+                return None, None, None, None
 
             array_traces = self.traces
             # 提取时序
@@ -290,14 +290,15 @@ class Sampler:
 
             # 如果超出采样数，返回 None, None, None
             if end_line_input > self.length:
-                return None, None, None
+                return None, None, None, None
 
-            sequences_instants = instants[begin_line_input: end_line_input]
+            instants_input = instants[begin_line_input: end_line_input]
+            instants_target = instants[begin_line_target: end_line_target]
             sequences_input = array_traces[:, begin_line_input: end_line_input, :]
 
             sequences_target = array_traces[:, begin_line_target: end_line_target, :] if with_target else None
 
-            return sequences_instants, sequences_input, sequences_target
+            return instants_input, sequences_input, instants_target, sequences_target
 
         except:
             raise
@@ -314,21 +315,26 @@ class Sampler:
         if size_batch is None:
             size_batch = self.size_batch
         try:
-            batch_instants = numpy.zeros((0, 0))
+            batch_instants_input = numpy.zeros((0, 0))
+            batch_instants_target = numpy.zeros((0, 0))
             batch_input = numpy.zeros((0, 0, 0, 0))
             batch_target = numpy.zeros((0, 0, 0, 0))
             for i in range(size_batch):
-                sample_instants, sample_input, sample_target = self._load_sample_(with_target)
+                sample_instant_input, sample_input, sample_instant_target, sample_target = self._load_sample_(with_target)
                 if sample_input is not None:
                     self.entry += 1
-                    shape_in = sample_input.shape
+                    shape_input = sample_input.shape
+                    shape_target = sample_target.shape
 
-                    batch_instants = numpy.resize(batch_instants, (i + 1, shape_in[1]))
+                    batch_instants_input = numpy.resize(batch_instants_input, (i + 1, shape_input[1]))
+                    batch_instants_target = numpy.resize(batch_instants_target, (i + 1, shape_target[1]))
+                    batch_input = numpy.resize(batch_input, (shape_input[0], i + 1, shape_input[1], shape_input[2]))
 
-                    batch_input = numpy.resize(batch_input, (shape_in[0], i + 1, shape_in[1], shape_in[2]))
-                    batch_instants[i] = sample_instants
-                    for inode in range(shape_in[0]):
+                    batch_instants_input[i] = sample_instant_input
+                    batch_instants_target[i] = sample_instant_target
+                    for inode in range(shape_input[0]):
                         batch_input[inode, i] = sample_input[inode]
+                        6
                     if with_target:
                         shape_target = sample_target.shape
                         batch_target = numpy.resize(batch_target,
@@ -337,12 +343,12 @@ class Sampler:
                             batch_target[inode, i] = sample_target[inode]
 
                 elif len(batch_input) == 0:
-                    return None, None, None
+                    return None, None, None, None
                 elif self.strict_batch_size:
                     utils.warn("load_batch @ Sampler: "
                                "An insufficient batch of %s samples is discarded."
                                % batch_input.shape[1])
-                    return None, None, None
+                    return None, None, None, None
                 elif not self.strict_batch_size:
                     utils.warn("load_batch @ Sampler: "
                                "Insufficient batch. Only  %s  samples are left."
@@ -352,7 +358,7 @@ class Sampler:
                     utils.assertor.assert_unreachable()
             if not with_target:
                 batch_target = None
-            return batch_instants, batch_input, batch_target
+            return batch_instants_input, batch_input, batch_instants_target, batch_target
 
         except:
             raise
