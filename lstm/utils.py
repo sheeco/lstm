@@ -31,6 +31,7 @@ __all__ = [
     "interpret_positive_int",
     "interpret_positive_float",
     "interpret_file_path",
+    "interpret_menu",
     "peek_matrix",
     "format_var",
     "get_timestamp",
@@ -802,7 +803,7 @@ def sleep(seconds):
         raise
 
 
-def ask(message, code_quit='q', interpretor=None):
+def ask(message, code_quit='q', interpretor=None, **kwargs):
     if not callable(interpretor):
         raise ValueError("Argument `interpret` is not callable.")
 
@@ -824,6 +825,9 @@ def ask(message, code_quit='q', interpretor=None):
 
         try:
             if interpretor is None:
+                return answer
+            elif len(kwargs) > 0:
+                answer = interpretor(answer, **kwargs)
                 return answer
             else:
                 answer = interpretor(answer)
@@ -891,6 +895,30 @@ def _interpret_file_path_(answer):
 
 
 interpret_file_path = _interpret_file_path_
+
+
+def _interpret_menu_(answer, menu):
+    """
+
+    :param menu: e.g. [['stop', 's'],
+                       ['continue', 'c'],
+                       ['peek', 'p']]
+    """
+    try:
+        for irow in xrange(len(menu)):
+            if answer in menu[irow]:
+                return menu[irow][0]
+
+        n = int(answer)
+        if 0 <= answer < len(menu):
+            return menu[n][0]
+        else:
+            raise AssertionError("Choice out of scope.")
+    except Exception, e:
+        raise AssertionError(e.message)
+
+
+interpret_menu = _interpret_menu_
 
 
 def peek_matrix(mat, formatted=False):
@@ -1197,6 +1225,15 @@ def test():
             except Exception, e:
                 pass
 
+        def test_ask_menu():
+            _menu = [['stop', 's'],
+                     ['continue', 'c'],
+                     ['peek', 'p']]
+            _hint = "0: (s)top & exit   1: (c)ontinue    2: (p)eek network output"
+
+            xprint('\n', newline=True)
+            choice = ask(_hint, code_quit='q', interpretor=interpret_menu, menu=_menu)
+
         def test_pickling():
             temp_logger = Logger(identifier='pickle')
             temp_logger.register('pickle')
@@ -1226,9 +1263,10 @@ def test():
         # test_args()
         # test_exception()
         # test_ask()
+        test_ask_menu()
         # Timer.test()
         # test_abstract()
-        test_unknown_config()
+        # test_unknown_config()
 
     except:
         raise

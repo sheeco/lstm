@@ -989,40 +989,25 @@ class SocialLSTM:
 
             except KeyboardInterrupt, e:
 
-                # todo extract into utils.ask_menu()
-                _menu = ('stop', 'continue', 'peek')
-                _abbr_menu = ('s', 'c', 'p')
-                _hint_menu = "0: (s)top & exit   1: (c)ontinue    2: (p)eek network output"
-
-                def interpret_menu(answer):
-                    try:
-                        if answer in _menu:
-                            return _menu.index(answer)
-                        elif answer in _abbr_menu:
-                            return _abbr_menu.index(answer)
-                        else:
-                            n = int(answer)
-                            if 0 <= answer < len(_menu):
-                                return n
-                            else:
-                                raise AssertionError("Choice out of scope.")
-                    except Exception, e:
-                        raise AssertionError(e.message)
+                _menu = [['stop', 's'],
+                         ['continue', 'c'],
+                         ['peek', 'p']]
+                _hint = "0: (s)top & exit   1: (c)ontinue    2: (p)eek network output"
 
                 utils.xprint('\n', newline=True)
-                choice = utils.ask(_hint_menu, code_quit='q', interpretor=interpret_menu)
+                _choice = utils.ask(_hint, code_quit='q', interpretor=utils.interpret_menu, menu=_menu)
                 utils.xprint('', newline=True)
 
-                while choice == _menu.index('peek'):
+                while _choice == 'peek':
                     _netout = self.peek_outputs(inputs)
                     utils.xprint('Network Output:\n%s\n' % _netout, newline=True)
 
                     # ask again after peeking
                     utils.xprint('', newline=True)
-                    choice = utils.ask(_hint_menu, code_quit='q', interpretor=interpret_menu)
+                    _choice = utils.ask(_hint, code_quit='q', interpretor=utils.interpret_menu, menu=_menu)
                     utils.xprint('', newline=True)
 
-                if choice == _menu.index('stop'):
+                if _choice == 'stop':
                     do_stop = True
                     # means n complete epochs
                     utils.update_config('num_epoch', self.entry_epoch, 'runtime', silence=False)

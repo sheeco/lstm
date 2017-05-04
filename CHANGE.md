@@ -382,9 +382,13 @@
 
 - FIX: Bugs with instants & targets logging;
 
-###### 2017-05-04
+###### [2017-05-04](edffd7015000e9b4b9932c7007051eb814f6798e)
 
 - RFCT: Seperate training control on different levels;
+
+###### 2017-05-04
+
+- RFCT: Extract interpretation of menu asking into function;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
