@@ -26,7 +26,7 @@ class SocialLSTM:
                      'nesterov']
 
     DECODE_SCHEMES = ['binorm',
-                    'euclidean']
+                      'euclidean']
 
     def __init__(self, node_identifiers, motion_range, inputs=None, targets=None, adaptive_learning_rate=None,
                  share_scheme=None, decode_scheme=None, train_scheme=None,
@@ -122,6 +122,10 @@ class SocialLSTM:
             self.updates = None  # dict of tensors, returned from predefined training functions in Lasagne.updates
 
             # Real values stored for printing / debugging
+
+            self.count_batch = 0  # real time batch counter for training
+            self.entry_epoch = 0
+            self.entry_batch = 0
 
             self.loss = None  # numpy float, loss computed for single batch
             self.predictions = None  # numpy ndarray, predictions of single batch
@@ -513,6 +517,7 @@ class SocialLSTM:
             self.param_names = get_names_for_params(self.params_all)
             # Save initial values of params for possible future restoration
             self.initial_param_values = L.layers.get_all_param_values(layer_out)
+            self.param_values = self.initial_param_values
 
             """
             Import external paratemers if given
@@ -775,7 +780,7 @@ class SocialLSTM:
             self.peek_outputs = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
             self.peek_params = theano.function([], self.params_all, allow_input_downcast=True)
             self.peek_probs = theano.function([self.inputs, self.targets], self.probabilities,
-                                               allow_input_downcast=True) if self.probabilities is not None else None
+                                              allow_input_downcast=True) if self.probabilities is not None else None
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.func_predict, self.func_compare, self.func_train
@@ -786,6 +791,292 @@ class SocialLSTM:
     def get_peeks(self):
 
         return self.peek_embed, self.peeks_hid, self.peek_outputs, self.peek_params, self.peek_probs
+
+    def _predict_single_batch_(self, inputs, targets=None):
+        try:
+            predictions = self.func_predict(inputs)
+            deviations = self.func_compare(inputs, targets) if targets is not None else None
+            return predictions, deviations
+        except:
+            raise
+
+    def _train_single_batch_(self, batch):
+
+        instants_input, inputs, instants_target, targets = batch[0], batch[1], batch[2], batch[3]
+
+        # Prepare for training, allowing interrupt
+        # Record params, flow of data & probabilities to network history BEFORE training
+
+        try:
+            def peek_netflow():
+                _embed = self.peek_embed(inputs)
+                _hids = []
+                for _ihid in xrange(len(self.peeks_hid)):
+                    _peek_hid = self.peeks_hid[_ihid]
+                    _hids += [_peek_hid(inputs)]
+                _netout = self.peek_outputs(inputs)
+
+                dict_netflow = {'embed': _embed, 'hiddens': _hids, 'netout': _netout}
+                return dict_netflow
+
+            if self.network_history is not None:
+
+                _netflow = peek_netflow()
+                _probs = self.peek_probs(inputs, targets) if self.peek_probs is not None else None
+                # note that record [i, j] contains variable values BEFORE this training
+                self.network_history[-1].append({'params': self.param_values,
+                                                 'netflow': _netflow,
+                                                 'probs': _probs})
+
+                # throw away overdue history
+                if self.limit_network_history is not None \
+                        and len(self.network_history) > self.limit_network_history:
+                    self.network_history = \
+                        self.network_history[-self.limit_network_history:]
+
+            predictions, deviations = self._predict_single_batch_(inputs, targets)
+
+        except:
+            raise
+
+        # Not allowing interrupt once starting training
+        # Keep trying until (1) done & return (2) exception caught
+
+        loss = None
+        while True:
+            try:
+                # Actually do training, & only once
+
+                while loss is None:
+                    try:
+                        loss = self.func_train(inputs, targets)
+                    except KeyboardInterrupt:
+                        pass
+
+                # Validate loss
+
+                try:
+                    utils.assertor.assert_finite(loss, 'loss')
+
+                except AssertionError, e:
+                    raise utils.InvalidTrainError("Get loss of 'inf'.")
+
+                # Validate params after training
+
+                new_params = self.peek_params()
+                try:
+                    utils.assertor.assert_finite(new_params, 'params')
+
+                except AssertionError, e:
+                    raise utils.InvalidTrainError(
+                        "Get parameters containing 'nan' or 'inf' after training.",
+                        details="Parameters:\n"
+                                "%s" % new_params)
+                else:
+                    self.param_values = new_params
+
+                # Done & break
+                break
+
+            except utils.InvalidTrainError, e:
+                raise
+            except KeyboardInterrupt:
+                pass
+            except:
+                raise
+
+        # Logging
+
+        _done_logging = False
+        while not _done_logging:
+            try:
+                # Log [deviation, prediction, target] by each sample
+
+                def log_by_sample():
+                    size_this_batch = len(instants_input)
+                    for isample in xrange(0, size_this_batch):
+
+                        dict_content = {'epoch': self.entry_epoch, 'batch': self.entry_batch, 'sample': isample}
+
+                        for iseq in xrange(0, self.length_sequence_output):
+                            # index in [-n, -1]
+                            dict_content['instant'] = instants_target[
+                                isample, iseq - self.length_sequence_output]
+                            for inode in xrange(0, self.num_node):
+                                # [x, y]
+                                _deviation = deviations[inode, isample, iseq]
+                                _prediction = predictions[inode, isample, iseq]
+                                _target = targets[inode, isample, iseq, -2:]
+                                dict_content[self.node_identifiers[inode]] = "(%.2f\t[%.2f, %.2f]\t[%.2f, %.2f])" \
+                                                                             % (_deviation, _prediction[0], _prediction[1],
+                                                                                _target[0], _target[1])
+
+                            self.logger.log(dict_content, name="training-sample")
+
+                log_by_sample()
+
+                # Print loss & deviation info to console
+                utils.xprint('%.s; %s'
+                             % (utils.format_var(float(loss), name='loss'),
+                                utils.format_var(deviations, name='deviations')),
+                             newline=True)
+
+                # Log [loss, mean-deviation, min-deviation, max-deviation] by each batch
+
+                def log_by_batch():
+                    _peek_deviations_this_batch = utils.peek_matrix(deviations, formatted=True)
+
+                    self.logger.log({'epoch': self.entry_epoch, 'batch': self.entry_batch,
+                                     'loss': utils.format_var(float(loss)),
+                                     'mean-deviation': _peek_deviations_this_batch['mean'],
+                                     'min-deviation': _peek_deviations_this_batch['min'],
+                                     'max-deviation': _peek_deviations_this_batch['max']},
+                                    name="training-batch")
+
+                log_by_batch()
+
+                # Done & break
+                break
+
+            except KeyboardInterrupt, e:
+                pass
+            except:
+                raise
+        pass  # end of while not _done_logging
+
+        self.entry_batch += 1
+        self.count_batch += 1
+        return predictions, deviations, loss
+
+    def _train_single_epoch_(self, sampler):
+
+        # start of single epoch
+        if self.network_history is not None:
+            self.network_history.append([])
+
+        losses_by_batch = numpy.zeros((0,))
+        deviations_by_batch = numpy.zeros((0,))
+
+        done_batch = None  # Whether a batch has got finished properly
+        # loop for each batch in single epoch
+        while True:
+            # start of single batch
+            try:
+                predictions, deviations, loss = None, None, None
+
+                # retrieve the next batch for nodes
+                # only if the previous batch is completed
+                # else, redo the previous batch
+                if done_batch is None \
+                        or done_batch:
+                    done_batch = False
+                    instants_input, inputs, instants_target, targets = sampler.load_batch(with_target=True)
+
+                # break if cannot find a new batch
+                if inputs is None:
+                    if self.entry_batch == 0:
+                        raise RuntimeError("Only %d sample pairs are found, "
+                                           "not enough for one single batch of size %d."
+                                           % (sampler.length, self.size_batch))
+                    break
+
+                utils.xprint('    Batch %d ... ' % self.entry_batch)
+
+                predictions, deviations, loss = self._train_single_batch_((instants_input, inputs, instants_target, targets))
+
+                # consider successful if training is done and successful
+                done_batch = True
+
+            except KeyboardInterrupt, e:
+
+                # todo extract into utils.ask_menu()
+                _menu = ('stop', 'continue', 'peek')
+                _abbr_menu = ('s', 'c', 'p')
+                _hint_menu = "0: (s)top & exit   1: (c)ontinue    2: (p)eek network output"
+
+                def interpret_menu(answer):
+                    try:
+                        if answer in _menu:
+                            return _menu.index(answer)
+                        elif answer in _abbr_menu:
+                            return _abbr_menu.index(answer)
+                        else:
+                            n = int(answer)
+                            if 0 <= answer < len(_menu):
+                                return n
+                            else:
+                                raise AssertionError("Choice out of scope.")
+                    except Exception, e:
+                        raise AssertionError(e.message)
+
+                utils.xprint('\n', newline=True)
+                choice = utils.ask(_hint_menu, code_quit='q', interpretor=interpret_menu)
+                utils.xprint('', newline=True)
+
+                while choice == _menu.index('peek'):
+                    _netout = self.peek_outputs(inputs)
+                    utils.xprint('Network Output:\n%s\n' % _netout, newline=True)
+
+                    # ask again after peeking
+                    utils.xprint('', newline=True)
+                    choice = utils.ask(_hint_menu, code_quit='q', interpretor=interpret_menu)
+                    utils.xprint('', newline=True)
+
+                if choice == _menu.index('stop'):
+                    do_stop = True
+                    # means n complete epochs
+                    utils.update_config('num_epoch', self.entry_epoch, 'runtime', silence=False)
+                    break
+                else:
+                    continue
+            except:
+                raise
+
+            finally:
+
+                if done_batch:
+
+                    losses_by_batch = numpy.append(losses_by_batch, loss)
+                    deviations_by_batch = numpy.append(deviations_by_batch, numpy.mean(deviations))
+
+                else:  # skip logging if this batch is undone
+                    pass
+
+            pass  # end of single batch
+        pass  # end of single epoch
+
+        _done_logging = False
+        while not _done_logging:
+            try:
+                _peek_losses_this_epoch = utils.peek_matrix(losses_by_batch, formatted=True)
+                _peek_deviations_this_epoch = utils.peek_matrix(deviations_by_batch, formatted=True)
+
+                # Print loss & deviation info to console
+                utils.xprint('  mean-loss: %s; mean-deviation: %s'
+                             % (_peek_losses_this_epoch['mean'], _peek_deviations_this_epoch['mean']),
+                             newline=True)
+
+                # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
+
+                def log_by_epoch():
+                    self.logger.log({'epoch': self.entry_epoch,
+                                     'mean-loss': _peek_losses_this_epoch['mean'],
+                                     'mean-deviation': _peek_deviations_this_epoch['mean'],
+                                     'min-deviation': _peek_deviations_this_epoch['min'],
+                                     'max-deviation': _peek_deviations_this_epoch['max']},
+                                    name="training-epoch")
+
+                log_by_epoch()
+                _done_logging = True
+            except KeyboardInterrupt:
+                pass
+            except:
+                raise
+            pass  # end of while not _done_logging
+
+        self.entry_epoch += 1
+        self.entry_batch = 0
+        return losses_by_batch, deviations_by_batch
 
     def train(self, sampler):
         """
@@ -800,313 +1091,81 @@ class SocialLSTM:
             utils.assertor.assert_not_none(_func, "Must compile the functions first.")
 
         done_training = False
-        try:
-            while not done_training:
-                # start of single training try
-                try:
-                    utils.xprint('Training ... ', newline=True)
-                    timer = utils.Timer()
+        while not done_training:
+            # start of single training try
+            try:
+                utils.xprint('Training ... ', newline=True)
+                timer = utils.Timer()
 
-                    losses_by_epoch = numpy.zeros((0,))
-                    deviations_by_epoch = numpy.zeros((0,))
-                    params = None
-                    do_stop = False  # Whether to stop and exit
+                losses_by_epoch = numpy.zeros((0,))
+                deviations_by_epoch = numpy.zeros((0,))
+                params = self.param_values
+                do_stop = False  # Whether to stop and exit
 
-                    # for iepoch in range(self.num_epoch):
-                    iepoch = 0
-                    while True:
-                        # start of single epoch
-                        done_epoch = False  # Whether an epoch has got finished properly
-                        utils.xprint('  Epoch %d ... ' % iepoch, newline=True)
-                        if self.network_history is not None:
-                            self.network_history.append([])
-                        loss = None
-                        deviations = None
-                        losses_by_batch = numpy.zeros((0,))
-                        deviations_by_batch = numpy.zeros((0,))
-                        done_batch = None  # Whether a batch has got finished properly
+                # for iepoch in range(self.num_epoch):
+                iepoch = 0
+                while True:
+                    # start of single epoch
+                    losses_by_batch, deviations_by_batch = self._train_single_epoch_(sampler)
 
-                        ibatch = 0
-                        while True:
-                            # start of single batch
-                            try:
-                                # sleep a bit to catch KeyboardInterrupt
-                                utils.sleep(0.001)
+                    losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
+                    deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
 
-                                # retrieve the next batch for nodes
-                                # only if the previous batch is completed
-                                # else, redo the previous batch
-                                if done_batch is None \
-                                        or done_batch:
-                                    done_batch = False
-                                    instants_input, inputs, instants_target, targets = sampler.load_batch(with_target=True)
-                                if inputs is None:
-                                    if ibatch == 0:
-                                        raise RuntimeError("Only %d sample pairs are found, "
-                                                           "not enough for one single batch of size %d."
-                                                           % (sampler.length, self.size_batch))
+                    sampler.reset_entry()
+                    iepoch += 1
 
-                                    sampler.reset_entry()
-                                    done_batch = None
-                                    done_epoch = True
-                                    break
+                    if do_stop:
+                        break
 
-                                utils.xprint('    Batch %d ... ' % ibatch)
+                    elif iepoch >= self.num_epoch:
 
-                                if params is None:
-                                    params = self.peek_params()
-                                self.param_values = params
+                        timer.pause()
+                        more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
+                        timer.resume()
 
-                                # Record params, flow of data & probabilities to network history BEFORE training
-
-                                def peek_netflow():
-                                    _embed = self.peek_embed(inputs)
-                                    _hids = []
-                                    for _ihid in xrange(len(self.peeks_hid)):
-                                        _peek_hid = self.peeks_hid[_ihid]
-                                        _hids += [_peek_hid(inputs)]
-                                    _netout = self.peek_outputs(inputs)
-
-                                    dict_netflow = {'embed': _embed, 'hiddens': _hids, 'netout': _netout}
-                                    return dict_netflow
-
-                                if self.network_history is not None:
-
-                                    _netflow = peek_netflow()
-                                    _probs = self.peek_probs(inputs, targets) if self.peek_probs is not None else None
-                                    # note that record [i, j] contains variable values BEFORE this training
-                                    self.network_history[-1].append({'params': params,
-                                                                     'netflow': _netflow,
-                                                                     'probs': _probs})
-
-                                    # throw away overdue history
-                                    if self.limit_network_history is not None \
-                                            and len(self.network_history) > self.limit_network_history:
-                                        self.network_history = \
-                                            self.network_history[-self.limit_network_history:-1]
-
-                                predictions = self.func_predict(inputs)
-                                deviations = self.func_compare(inputs, targets)
-
-                                # Validate loss
-
-                                loss = self.func_train(inputs, targets)
-                                try:
-                                    utils.assertor.assert_finite(loss, 'loss')
-
-                                except AssertionError, e:
-                                    raise utils.InvalidTrainError("Get loss of 'inf'.")
-
-                                # Validate params after training
-
-                                new_params = self.peek_params()
-                                try:
-                                    utils.assertor.assert_finite(new_params, 'params')
-
-                                except AssertionError, e:
-                                    raise utils.InvalidTrainError(
-                                        "Get parameters containing 'nan' or 'inf' after training.",
-                                        details="Parameters:\n"
-                                                "%s" % new_params)
-                                else:
-                                    params = new_params
-                                    # consider successful if training is done and successful
-                                    done_batch = True
-
-                            except KeyboardInterrupt, e:
-
-                                _menu = ('stop', 'continue', 'peek')
-                                _abbr_menu = ('s', 'c', 'p')
-                                _hint_menu = "0: (s)top & exit   1: (c)ontinue    2: (p)eek network output"
-
-                                def interpret_menu(answer):
-                                    try:
-                                        if answer in _menu:
-                                            return _menu.index(answer)
-                                        elif answer in _abbr_menu:
-                                            return _abbr_menu.index(answer)
-                                        else:
-                                            n = int(answer)
-                                            if 0 <= answer < len(_menu):
-                                                return n
-                                            else:
-                                                raise AssertionError("Choice out of scope.")
-                                    except Exception, e:
-                                        raise AssertionError(e.message)
-
-                                utils.xprint('\n', newline=True)
-                                timer.pause()
-                                choice = utils.ask(_hint_menu, code_quit='q', interpretor=interpret_menu)
-                                utils.xprint('', newline=True)
-                                timer.resume()
-
-                                while choice == _menu.index('peek'):
-                                    _netout = self.peek_outputs(inputs)
-                                    utils.xprint('Network Output:\n%s\n' % _netout, newline=True)
-
-                                    # ask again after peeking
-                                    utils.xprint('', newline=True)
-                                    timer.pause()
-                                    choice = utils.ask(_hint_menu, code_quit='q', interpretor=interpret_menu)
-                                    utils.xprint('', newline=True)
-                                    timer.resume()
-
-                                if choice == _menu.index('stop'):
-                                    do_stop = True
-                                    # means n complete epochs
-                                    utils.update_config('num_epoch', iepoch, 'runtime', silence=False)
-                                    break
-                                else:
-                                    continue
-
-                            finally:
-
-                                if done_batch:
-
-                                    # Make sure complete logging discarding KeyboardInterrupt
-                                    _done_logging = False
-                                    while not _done_logging:
-                                        try:
-                                            # Log [deviation, prediction, target] by each sample
-
-                                            def log_by_sample():
-                                                size_this_batch = len(instants_input)
-                                                for isample in xrange(0, size_this_batch):
-
-                                                    dict_content = {'epoch': iepoch, 'batch': ibatch, 'sample': isample}
-
-                                                    for iseq in xrange(0, self.length_sequence_output):
-                                                        # index in [-n, -1]
-                                                        dict_content['instant'] = instants_target[
-                                                            isample, iseq - self.length_sequence_output]
-                                                        for inode in xrange(0, self.num_node):
-                                                            # [x, y]
-                                                            _deviation = deviations[inode, isample, iseq]
-                                                            _prediction = predictions[inode, isample, iseq]
-                                                            _target = targets[inode, isample, iseq, -2:]
-                                                            dict_content[self.node_identifiers[inode]] = "(%.2f, %s, %s)" \
-                                                                                                         % (_deviation, _prediction,
-                                                                                                 _target)
-
-                                                        self.logger.log(dict_content, name="training-sample")
-
-                                            log_by_sample()
-
-                                            losses_by_batch = numpy.append(losses_by_batch, loss)
-                                            deviations_by_batch = numpy.append(deviations_by_batch, numpy.mean(deviations))
-
-                                            # Print loss & deviation info to console
-                                            utils.xprint('%s; %s'
-                                                         % (utils.format_var(float(loss), name='loss'),
-                                                            utils.format_var(deviations, name='deviations')),
-                                                         newline=True)
-
-                                            # Log [loss, mean-deviation, min-deviation, max-deviation] by each batch
-
-                                            def log_by_batch():
-                                                _peek_deviations_this_batch = utils.peek_matrix(deviations, formatted=True)
-
-                                                self.logger.log({'epoch': iepoch, 'batch': ibatch,
-                                                                 'loss': utils.format_var(float(loss)),
-                                                                 'mean-deviation': _peek_deviations_this_batch['mean'],
-                                                                 'min-deviation': _peek_deviations_this_batch['min'],
-                                                                 'max-deviation': _peek_deviations_this_batch['max']},
-                                                                name="training-batch")
-                                            log_by_batch()
-
-                                            ibatch += 1
-                                            break
-                                        except KeyboardInterrupt, e:
-                                            pass
-                                    pass  # end of while not _done_logging
-                                else:  # skip logging if this batch is undone
-                                    pass
-
-                            pass  # end of single batch
-                        pass  # end of single epoch
-
-                        if done_epoch:
-                            losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
-                            deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
-
-                            _peek_losses_this_epoch = utils.peek_matrix(losses_by_batch, formatted=True)
-                            _peek_deviations_this_epoch = utils.peek_matrix(deviations_by_batch, formatted=True)
-
-                            # Print loss & deviation info to console
-                            utils.xprint('  mean-loss: %s; mean-deviation: %s'
-                                         % (_peek_losses_this_epoch['mean'], _peek_deviations_this_epoch['mean']),
-                                         newline=True)
-
-                            # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
-
-                            def log_by_epoch():
-                                self.logger.log({'epoch': iepoch,
-                                                 'mean-loss': _peek_losses_this_epoch['mean'],
-                                                 'mean-deviation': _peek_deviations_this_epoch['mean'],
-                                                 'min-deviation': _peek_deviations_this_epoch['min'],
-                                                 'max-deviation': _peek_deviations_this_epoch['max']},
-                                                name="training-epoch")
-
-                            log_by_epoch()
-
-                            iepoch += 1
-                        else:  # skip logging if this epoch is undone
-                            pass
-
-                        if do_stop:
-                            break
-
-                        elif iepoch >= self.num_epoch:
+                        if more:
 
                             timer.pause()
-                            more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
+                            num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
                             timer.resume()
 
-                            if more:
-
-                                timer.pause()
-                                num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
-                                timer.resume()
-
-                                # quit means no more epochs
-                                if num_more is not None \
-                                        and num_more > 0:
-                                    self.num_epoch += num_more
-                                    utils.update_config('num_epoch', self.num_epoch, 'runtime', silence=False)
-                                else:
-                                    break
+                            # quit means no more epochs
+                            if num_more is not None \
+                                    and num_more > 0:
+                                self.num_epoch += num_more
+                                utils.update_config('num_epoch', self.num_epoch, 'runtime', silence=False)
                             else:
                                 break
+                        else:
+                            break
 
-                    pass  # end of all epochs
-                    done_training = True
+                pass  # end of all epochs
+                done_training = True
 
-                except utils.InvalidTrainError, e:
-                    # Update learning rate & Retrain
+            except utils.InvalidTrainError, e:
+                # Update learning rate & Retrain
 
-                    if self.adaptive_learning_rate is not None:
-                        utils.warn(e.message)
-                        new_learning_rate = self.learning_rate * self.adaptive_learning_rate
-                        self.update_learning_rate(new_learning_rate)
+                if self.adaptive_learning_rate is not None:
+                    utils.warn(e.message)
+                    new_learning_rate = self.learning_rate * self.adaptive_learning_rate
+                    self.update_learning_rate(new_learning_rate)
 
-                        # Reinitialize related variables
-                        sampler.reset_entry()
-                        if self.network_history is not None:
-                            self.network_history = []
+                    # Reinitialize related variables
+                    sampler.reset_entry()
+                    if self.network_history is not None:
+                        self.network_history = []
 
-                        continue
+                    continue
 
-                    else:
-                        raise
+                else:
+                    raise
 
-                pass  # end of single training attempt
-            pass  # end of while not done_training
-        except:
-            raise
+            pass  # end of single training attempt
+        pass  # end of while not done_training
 
-        else:
-            utils.xprint('Done in %s.' % timer.stop(), newline=True)
-            return losses_by_epoch, deviations_by_epoch
+
+        utils.xprint('Done in %s.' % timer.stop(), newline=True)
+        return losses_by_epoch, deviations_by_epoch
 
     def export_history(self, path=None):
         try:
@@ -1274,7 +1333,7 @@ class SocialLSTM:
                 _model.compute_update()
                 _model.compile()
 
-            # test_importing()
+                # test_importing()
 
         except Exception, e:
-                raise
+            raise

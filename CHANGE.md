@@ -378,9 +378,13 @@
 
 - RFCT: For sampler in SocialLSTM;
 
-###### 2017-05-04
+###### [2017-05-04](8eb12daac7910eac9165d58cecfcb9f2bde0d3f3)
 
 - FIX: Bugs with instants & targets logging;
+
+###### 2017-05-04
+
+- RFCT: Seperate training control on different levels;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

@@ -916,8 +916,7 @@ def format_var(var, name=None, detail=False):
             elif var.size == 1:
                 string += '%s' % var[0]
             elif numpy.isfinite(var).all():
-                _peek = peek_matrix(var, formatted=True)
-                string += '(mean: %s, min: %s, max: %s)' % (_peek['mean'], _peek['min'], _peek['max'])
+                string += '%s' % peek_matrix(var, formatted=True)
             elif numpy.isnan(var).all():
                 string += 'nan'
             elif numpy.isinf(var).all():
