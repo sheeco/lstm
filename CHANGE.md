@@ -386,9 +386,14 @@
 
 - RFCT: Seperate training control on different levels;
 
-###### 2017-05-04
+###### [2017-05-04](fc395728ec10576e4aae7dece6ae37d5b8f0b736)
 
 - RFCT: Extract interpretation of menu asking into function;
+
+###### 2017-05-08
+
+- FIX: Wrong sampler arg passed into `SocialLSTM.train()`;
+- RFCT: for `SocialLSTM.train()`;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

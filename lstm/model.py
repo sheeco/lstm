@@ -1063,7 +1063,7 @@ class SocialLSTM:
         self.entry_batch = 0
         return losses_by_batch, deviations_by_batch
 
-    def train(self, sampler):
+    def train(self, sampler, num_epoch=None):
         """
 
         :return: Two <ndarray> containing average loss & deviation of each epoch.
@@ -1074,6 +1074,9 @@ class SocialLSTM:
         utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
         for _func in (self.func_predict, self.func_compare, self.func_train):
             utils.assertor.assert_not_none(_func, "Must compile the functions first.")
+
+        if num_epoch is None:
+            num_epoch = self.num_epoch
 
         done_training = False
         while not done_training:
@@ -1087,7 +1090,7 @@ class SocialLSTM:
                 params = self.param_values
                 do_stop = False  # Whether to stop and exit
 
-                # for iepoch in range(self.num_epoch):
+                # for iepoch in range(num_epoch):
                 iepoch = 0
                 while True:
                     # start of single epoch
@@ -1102,7 +1105,7 @@ class SocialLSTM:
                     if do_stop:
                         break
 
-                    elif iepoch >= self.num_epoch:
+                    elif iepoch >= num_epoch:
 
                         timer.pause()
                         more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
@@ -1117,8 +1120,8 @@ class SocialLSTM:
                             # quit means no more epochs
                             if num_more is not None \
                                     and num_more > 0:
-                                self.num_epoch += num_more
-                                utils.update_config('num_epoch', self.num_epoch, 'runtime', silence=False)
+                                num_epoch += num_more
+                                utils.update_config('num_epoch', num_epoch, 'runtime', silence=False)
                             else:
                                 break
                         else:
@@ -1288,7 +1291,7 @@ class SocialLSTM:
 
                 # Do training
                 try:
-                    loss, deviations = model.train(sampler)
+                    loss, deviations = model.train(half)
                 except Exception, e:
                     utils.handle(e)
                 else:
