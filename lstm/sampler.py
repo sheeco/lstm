@@ -202,7 +202,7 @@ class Sampler:
                                  "Index must be within [0, %d)."
                                  % (ifrom, ito, a.length))
 
-            ito += a.length_sequence_output
+            ito = ito + a.length_sequence_output if ito is not None else None
             traces = a.traces
             traces = numpy.array([trace[ifrom:ito, :] for trace in traces], dtype=numpy.float32)
             out.traces = traces

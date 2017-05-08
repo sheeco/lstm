@@ -126,6 +126,7 @@ class SocialLSTM:
             self.count_batch = 0  # real time batch counter for training
             self.entry_epoch = 0
             self.entry_batch = 0
+            self.stop = False  # to mark for manual stop
 
             self.loss = None  # numpy float, loss computed for single batch
             self.predictions = None  # numpy ndarray, predictions of single batch
@@ -839,7 +840,7 @@ class SocialLSTM:
         except:
             raise
 
-        # Not allowing interrupt once starting training
+        # Disallowing interrupt once starting training
         # Keep trying until (1) done & return (2) exception caught
 
         loss = None
@@ -916,7 +917,7 @@ class SocialLSTM:
                 log_by_sample()
 
                 # Print loss & deviation info to console
-                utils.xprint('%.s; %s'
+                utils.xprint('%s; %s'
                              % (utils.format_var(float(loss), name='loss'),
                                 utils.format_var(deviations, name='deviations')),
                              newline=True)
@@ -947,6 +948,107 @@ class SocialLSTM:
         self.entry_batch += 1
         self.count_batch += 1
         return predictions, deviations, loss
+
+    def _predict_single_epoch_(self, sampler):
+
+        deviations_by_batch = numpy.zeros((0,))
+
+        done_batch = None  # Whether a batch has got finished properly
+        # loop for each batch in single epoch
+        ibatch = 0
+        while True:
+            # start of single batch
+            try:
+                predictions, deviations = None, None
+
+                # retrieve the next batch for nodes
+                # only if the previous batch is completed
+                # else, redo the previous batch
+                if done_batch is None \
+                        or done_batch:
+                    done_batch = False
+                    instants_input, inputs, instants_target, targets = sampler.load_batch(with_target=True)
+
+                # break if cannot find a new batch
+                if inputs is None:
+                    if ibatch == 0:
+                        raise RuntimeError("Only %d samples are found, "
+                                           "not enough for one single batch of size %d."
+                                           % (sampler.length, self.size_batch))
+                    break
+
+                predictions, deviations = self._predict_single_batch_(inputs, targets)
+
+                # consider successful if training is done and successful
+                done_batch = True
+
+            # disallow interrupting while predicting
+            except KeyboardInterrupt, e:
+                pass
+
+            except:
+                raise
+
+            finally:
+
+                if done_batch:
+
+                    deviations_by_batch = numpy.append(deviations_by_batch, numpy.mean(deviations))
+
+                    # Log [deviation, prediction, target] by each sample
+
+                    _done_logging = False
+                    while not _done_logging:
+                        try:
+                            def log_by_sample():
+                                size_this_batch = len(instants_input)
+                                for isample in xrange(0, size_this_batch):
+
+                                    dict_content = {'epoch': self.entry_epoch, 'batch': ibatch, 'sample': isample}
+
+                                    for iseq in xrange(0, self.length_sequence_output):
+                                        _dict_deviations = {}  # for console printing
+
+                                        # index in [-n, -1]
+                                        _instant = instants_target[
+                                            isample, iseq - self.length_sequence_output]
+                                        dict_content['instant'] = _instant
+                                        for inode in xrange(0, self.num_node):
+                                            # [x, y]
+                                            _deviation = deviations[inode, isample, iseq]
+                                            _prediction = predictions[inode, isample, iseq]
+                                            _target = targets[inode, isample, iseq, -2:]
+                                            _node_id = self.node_identifiers[inode]
+                                            dict_content[_node_id] = \
+                                                "(%.2f\t[%.2f, %.2f]\t[%.2f, %.2f])" \
+                                                % (_deviation, _prediction[0], _prediction[1],
+                                                   _target[0], _target[1])
+
+                                            _dict_deviations[_node_id] = '%.2f' % _deviation
+
+                                        # # Print deviation info to console
+                                        # utils.xprint('  %d: %s' % (_instant, _dict_deviations), newline=True)
+
+                                        self.logger.log(dict_content, name="prediction")
+
+                            log_by_sample()
+
+                            _done_logging = True
+
+                        except KeyboardInterrupt:
+                            pass
+                        except:
+                            raise
+
+                    ibatch += 1
+
+                else:  # skip logging if this batch is undone
+                    pass
+
+            pass  # end of single batch
+        pass  # end of single epoch
+
+        return deviations_by_batch
 
     def _train_single_epoch_(self, sampler):
 
@@ -1008,9 +1110,10 @@ class SocialLSTM:
                     utils.xprint('', newline=True)
 
                 if _choice == 'stop':
-                    do_stop = True
                     # means n complete epochs
+                    self.num_epoch = self.entry_epoch
                     utils.update_config('num_epoch', self.entry_epoch, 'runtime', silence=False)
+                    self.stop = True
                     break
                 else:
                     continue
@@ -1063,10 +1166,36 @@ class SocialLSTM:
         self.entry_batch = 0
         return losses_by_batch, deviations_by_batch
 
+    def predict(self, sampler):
+
+        utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
+        utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
+        utils.assertor.assert_not_none(self.loss, "Must compute the loss first.")
+        utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
+        for _func in (self.func_predict, self.func_compare):
+            utils.assertor.assert_not_none(_func, "Must compile the functions first.")
+
+        try:
+            columns_prediction = ['epoch', 'batch', 'sample', 'instant'] + self.node_identifiers
+            self.logger.register("prediction", columns=columns_prediction)
+
+            utils.xprint('Testing ... ')
+
+            deviations_by_batch = self._predict_single_epoch_(sampler)
+            sampler.reset_entry()
+
+            # Print deviation info to console
+            utils.xprint('mean-deviation: %s' % numpy.mean(deviations_by_batch), newline=True)
+
+            return deviations_by_batch
+
+        except:
+            raise
+
     def train(self, sampler, num_epoch=None):
         """
 
-        :return: Two <ndarray> containing average loss & deviation of each epoch.
+        :return: 2 <ndarray> containing average loss & deviation of each epoch.
         """
         utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
         utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
@@ -1088,7 +1217,6 @@ class SocialLSTM:
                 losses_by_epoch = numpy.zeros((0,))
                 deviations_by_epoch = numpy.zeros((0,))
                 params = self.param_values
-                do_stop = False  # Whether to stop and exit
 
                 # for iepoch in range(num_epoch):
                 iepoch = 0
@@ -1102,30 +1230,8 @@ class SocialLSTM:
                     sampler.reset_entry()
                     iepoch += 1
 
-                    if do_stop:
+                    if iepoch >= num_epoch:
                         break
-
-                    elif iepoch >= num_epoch:
-
-                        timer.pause()
-                        more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
-                        timer.resume()
-
-                        if more:
-
-                            timer.pause()
-                            num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
-                            timer.resume()
-
-                            # quit means no more epochs
-                            if num_more is not None \
-                                    and num_more > 0:
-                                num_epoch += num_more
-                                utils.update_config('num_epoch', num_epoch, 'runtime', silence=False)
-                            else:
-                                break
-                        else:
-                            break
 
                 pass  # end of all epochs
                 done_training = True
@@ -1265,7 +1371,8 @@ class SocialLSTM:
             sample_gridding = utils.get_config('sample_gridding')
             if sample_gridding is True:
                 sampler.map_to_grid(grid_system=GridSystem(utils.get_config('grain_grid')))
-            half = Sampler.clip(sampler, indices=(sampler.length / 2))
+            half = Sampler.clip(sampler, indices=(0, sampler.length / 2))
+            rest = Sampler.clip(sampler, indices=(half.length, None))
 
             # Define the model
             model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range)
@@ -1291,7 +1398,33 @@ class SocialLSTM:
 
                 # Do training
                 try:
-                    loss, deviations = model.train(half)
+                    while True:
+                        loss, deviations = model.train(half, num_epoch=1)
+                        if model.stop:
+                            break
+
+                        deviations = model.predict(rest)
+
+                        if model.entry_epoch >= model.num_epoch:
+
+                            more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
+
+                            if more:
+
+                                num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
+
+                                # quit means no more epochs
+                                if num_more is not None \
+                                        and num_more > 0:
+                                    model.num_epoch += num_more
+                                    utils.update_config('num_epoch', model.num_epoch, 'runtime', silence=False)
+                                else:
+                                    break
+                            else:
+                                break
+                        else:
+                            continue
+
                 except Exception, e:
                     utils.handle(e)
                 else:

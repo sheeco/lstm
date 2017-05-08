@@ -390,10 +390,14 @@
 
 - RFCT: Extract interpretation of menu asking into function;
 
-###### 2017-05-08
+###### [2017-05-08](20d9898f9bca5e2edf6d3cde0cb788e69a59e1a7)
 
 - FIX: Wrong sampler arg passed into `SocialLSTM.train()`;
 - RFCT: for `SocialLSTM.train()`;
+
+###### 2017-05-08
+
+- ADD: Predicting function;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
