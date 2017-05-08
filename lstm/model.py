@@ -135,7 +135,8 @@ class SocialLSTM:
 
             self.param_names = []  # list of str, names of all the parameters
             self.param_values = None  # list of ndarrays, stored for debugging or exporting
-            self.initial_param_values = None  # list of ndarrays, stored for possible parameter restoration
+            self.initial_param_values = None  # ..., stored for possible parameter restoration
+            self.best_param_values = {'epoch': None, 'value': None}  # ..., stored for possible parameter export
 
             self.limit_network_history = limit_network_history if limit_network_history is not None \
                 else utils.get_config('limit_network_history')
@@ -519,6 +520,7 @@ class SocialLSTM:
             # Save initial values of params for possible future restoration
             self.initial_param_values = L.layers.get_all_param_values(layer_out)
             self.param_values = self.initial_param_values
+            self.best_param_values = {'epoch': 0, 'value': self.initial_param_values}
 
             """
             Import external paratemers if given
@@ -1208,6 +1210,7 @@ class SocialLSTM:
             num_epoch = self.num_epoch
 
         done_training = False
+        best_record = None
         while not done_training:
             # start of single training try
             try:
@@ -1216,7 +1219,6 @@ class SocialLSTM:
 
                 losses_by_epoch = numpy.zeros((0,))
                 deviations_by_epoch = numpy.zeros((0,))
-                params = self.param_values
 
                 # for iepoch in range(num_epoch):
                 iepoch = 0
@@ -1226,9 +1228,16 @@ class SocialLSTM:
 
                     losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
                     deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
-
                     sampler.reset_entry()
                     iepoch += 1
+
+                    # Save as the best params if necessary
+
+                    if best_record is None \
+                            or numpy.mean(deviations_by_batch) <= best_record:
+                        best_record = numpy.mean(deviations_by_batch)
+                        self.best_param_values['epoch'] = iepoch
+                        self.best_param_values['value'] = self.param_values
 
                     if iepoch >= num_epoch:
                         break
@@ -1284,24 +1293,30 @@ class SocialLSTM:
 
     def export_params(self, path=None):
         try:
-            FILENAME_EXPORT = 'params.pkl'
+            FILENAME = 'params.pkl'
+            FILENAME_BEST = 'params-%d.pkl' % self.best_param_values['epoch']
 
             utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
             if path is None:
-                path = utils.filer.format_subpath(self.logger.log_path, FILENAME_EXPORT)
+                path = utils.filer.format_subpath(self.logger.log_path, FILENAME)
+            path_best = utils.filer.format_subpath(self.logger.log_path, FILENAME_BEST)
 
-            utils.xprint("\nExporting parameters to '%s' ...  " % path)
-            utils.update_config('path_pickle', path, 'runtime', tags=['path'])
+            utils.update_config('path_pickle', path_best, 'runtime', tags=['path'])
             # last validated values during training
             if self.param_values is not None:
-                params_all = self.param_values
+                params_last = self.param_values
             # initial values
             else:
-                params_all = self.initial_param_values
+                params_last = self.initial_param_values
+            params_best = self.best_param_values['value']
 
-            utils.filer.dump_to_file(params_all, path)
+            utils.xprint("\nExporting last parameters to '%s' ...  " % path)
+            utils.filer.dump_to_file(params_last, path)
+            utils.xprint('done.', newline=True)
 
+            utils.xprint("\nExporting best parameters to '%s' ...  " % path_best)
+            utils.filer.dump_to_file(params_best, path_best)
             utils.xprint('done.', newline=True)
             return path
 
@@ -1393,6 +1408,9 @@ class SocialLSTM:
                 func_predict, func_compare, func_train = model.compile()
 
                 peek_e, peeks_hid, peek_outputs, peek_params, peek_probs = model.get_peeks()
+
+                if params_unpickled is not None:
+                    model.predict(rest)
 
                 utils.get_rootlogger().register("training", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 

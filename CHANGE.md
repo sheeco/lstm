@@ -395,9 +395,13 @@
 - FIX: Wrong sampler arg passed into `SocialLSTM.train()`;
 - RFCT: for `SocialLSTM.train()`;
 
-###### 2017-05-08
+###### [2017-05-08](3549db600e4ff735bc94f5b64622b9df41344bf2)
 
 - ADD: Predicting function;
+
+###### 2017-05-08
+
+- ADD: Save & export param values with the best training result;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
