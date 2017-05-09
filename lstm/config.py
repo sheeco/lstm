@@ -180,6 +180,11 @@ config_pool = {
                 'value': 2,
                 'tags': []
             },
+            # Tryout after every n * epochs of training
+            'tryout_frequency': {
+                'value': 1,
+                'tags': []
+            },
         },
 
     'run':
@@ -215,6 +220,11 @@ config_pool = {
             # Number of epochs to train the net
             'num_epoch': {
                 'value': 300,
+                'tags': []
+            },
+            # Tryout after every n * epochs of training
+            'tryout_frequency': {
+                'value': 10,
                 'tags': []
             },
         }

@@ -17,6 +17,7 @@ __all__ = [
 
 class SocialLSTM:
 
+    # todo add None
     SHARE_SCHEMES = ['parameter',
                      'input']
 
@@ -134,7 +135,7 @@ class SocialLSTM:
             self.probabilities = None  # numpy ndarray, binorm probabilities before computing into NNL
 
             self.param_names = []  # list of str, names of all the parameters
-            self.param_values = None  # list of ndarrays, stored for debugging or exporting
+            self.current_param_values = None  # list of ndarrays, stored for debugging or exporting
             self.initial_param_values = None  # ..., stored for possible parameter restoration
             self.best_param_values = {'epoch': None, 'value': None}  # ..., stored for possible parameter export
 
@@ -202,13 +203,19 @@ class SocialLSTM:
 
             self.logger = utils.get_sublogger()
 
-            columns_prediction = ['epoch', 'batch', 'sample', 'instant'] + self.node_identifiers
-            self.logger.register("training-sample", columns=columns_prediction)
-            self.logger.register("training-batch", columns=['epoch', 'batch', 'loss',
-                                                            'mean-deviation', 'min-deviation', 'max-deviation'])
+            _columns = ['epoch', 'batch', 'sample', 'instant'] + self.node_identifiers
+            self.logger.register("train-sample", columns=_columns)
+            self.logger.register("train-batch", columns=['epoch', 'batch', 'loss',
+                                                         'mean-deviation', 'min-deviation', 'max-deviation'])
 
-            self.logger.register("training-epoch", columns=["epoch", "mean-loss",
-                                                            "mean-deviation", "min-deviation", "max-deviation"])
+            self.logger.register("train-epoch", columns=["epoch", "mean-loss",
+                                                         "mean-deviation", "min-deviation", "max-deviation"])
+            self.logger.register("test-sample", columns=_columns)
+            self.logger.register("test-batch", columns=['epoch', 'batch', 'loss',
+                                                        'mean-deviation', 'min-deviation', 'max-deviation'])
+
+            self.logger.register("test-epoch", columns=["epoch", "mean-loss",
+                                                        "mean-deviation", "min-deviation", "max-deviation"])
 
         except:
             raise
@@ -517,10 +524,6 @@ class SocialLSTM:
                 return param_keys
 
             self.param_names = get_names_for_params(self.params_all)
-            # Save initial values of params for possible future restoration
-            self.initial_param_values = L.layers.get_all_param_values(layer_out)
-            self.param_values = self.initial_param_values
-            self.best_param_values = {'epoch': 0, 'value': self.initial_param_values}
 
             """
             Import external paratemers if given
@@ -530,6 +533,11 @@ class SocialLSTM:
             if params is not None:
                 utils.xprint('Importing given parameters ... ')
                 self.set_params(params)
+
+            # Save initial values of params for possible future restoration
+            self.initial_param_values = L.layers.get_all_param_values(layer_out)
+            self.current_param_values = self.initial_param_values
+            self.best_param_values = {'epoch': 0, 'value': self.initial_param_values}
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.outputs, self.params_all
@@ -803,7 +811,7 @@ class SocialLSTM:
         except:
             raise
 
-    def _train_single_batch_(self, batch):
+    def _train_single_batch_(self, batch, tag_log='train'):
 
         instants_input, inputs, instants_target, targets = batch[0], batch[1], batch[2], batch[3]
 
@@ -827,7 +835,7 @@ class SocialLSTM:
                 _netflow = peek_netflow()
                 _probs = self.peek_probs(inputs, targets) if self.peek_probs is not None else None
                 # note that record [i, j] contains variable values BEFORE this training
-                self.network_history[-1].append({'params': self.param_values,
+                self.network_history[-1].append({'params': self.current_param_values,
                                                  'netflow': _netflow,
                                                  'probs': _probs})
 
@@ -876,7 +884,7 @@ class SocialLSTM:
                         details="Parameters:\n"
                                 "%s" % new_params)
                 else:
-                    self.param_values = new_params
+                    self.current_param_values = new_params
 
                 # Done & break
                 break
@@ -914,7 +922,7 @@ class SocialLSTM:
                                                                              % (_deviation, _prediction[0], _prediction[1],
                                                                                 _target[0], _target[1])
 
-                            self.logger.log(dict_content, name="training-sample")
+                            self.logger.log(dict_content, name="%s-sample" % tag_log)
 
                 log_by_sample()
 
@@ -934,7 +942,7 @@ class SocialLSTM:
                                      'mean-deviation': _peek_deviations_this_batch['mean'],
                                      'min-deviation': _peek_deviations_this_batch['min'],
                                      'max-deviation': _peek_deviations_this_batch['max']},
-                                    name="training-batch")
+                                    name="%s-batch" % tag_log)
 
                 log_by_batch()
 
@@ -951,108 +959,7 @@ class SocialLSTM:
         self.count_batch += 1
         return predictions, deviations, loss
 
-    def _predict_single_epoch_(self, sampler):
-
-        deviations_by_batch = numpy.zeros((0,))
-
-        done_batch = None  # Whether a batch has got finished properly
-        # loop for each batch in single epoch
-        ibatch = 0
-        while True:
-            # start of single batch
-            try:
-                predictions, deviations = None, None
-
-                # retrieve the next batch for nodes
-                # only if the previous batch is completed
-                # else, redo the previous batch
-                if done_batch is None \
-                        or done_batch:
-                    done_batch = False
-                    instants_input, inputs, instants_target, targets = sampler.load_batch(with_target=True)
-
-                # break if cannot find a new batch
-                if inputs is None:
-                    if ibatch == 0:
-                        raise RuntimeError("Only %d samples are found, "
-                                           "not enough for one single batch of size %d."
-                                           % (sampler.length, self.size_batch))
-                    break
-
-                predictions, deviations = self._predict_single_batch_(inputs, targets)
-
-                # consider successful if training is done and successful
-                done_batch = True
-
-            # disallow interrupting while predicting
-            except KeyboardInterrupt, e:
-                pass
-
-            except:
-                raise
-
-            finally:
-
-                if done_batch:
-
-                    deviations_by_batch = numpy.append(deviations_by_batch, numpy.mean(deviations))
-
-                    # Log [deviation, prediction, target] by each sample
-
-                    _done_logging = False
-                    while not _done_logging:
-                        try:
-                            def log_by_sample():
-                                size_this_batch = len(instants_input)
-                                for isample in xrange(0, size_this_batch):
-
-                                    dict_content = {'epoch': self.entry_epoch, 'batch': ibatch, 'sample': isample}
-
-                                    for iseq in xrange(0, self.length_sequence_output):
-                                        _dict_deviations = {}  # for console printing
-
-                                        # index in [-n, -1]
-                                        _instant = instants_target[
-                                            isample, iseq - self.length_sequence_output]
-                                        dict_content['instant'] = _instant
-                                        for inode in xrange(0, self.num_node):
-                                            # [x, y]
-                                            _deviation = deviations[inode, isample, iseq]
-                                            _prediction = predictions[inode, isample, iseq]
-                                            _target = targets[inode, isample, iseq, -2:]
-                                            _node_id = self.node_identifiers[inode]
-                                            dict_content[_node_id] = \
-                                                "(%.2f\t[%.2f, %.2f]\t[%.2f, %.2f])" \
-                                                % (_deviation, _prediction[0], _prediction[1],
-                                                   _target[0], _target[1])
-
-                                            _dict_deviations[_node_id] = '%.2f' % _deviation
-
-                                        # # Print deviation info to console
-                                        # utils.xprint('  %d: %s' % (_instant, _dict_deviations), newline=True)
-
-                                        self.logger.log(dict_content, name="prediction")
-
-                            log_by_sample()
-
-                            _done_logging = True
-
-                        except KeyboardInterrupt:
-                            pass
-                        except:
-                            raise
-
-                    ibatch += 1
-
-                else:  # skip logging if this batch is undone
-                    pass
-
-            pass  # end of single batch
-        pass  # end of single epoch
-
-        return deviations_by_batch
-
-    def _train_single_epoch_(self, sampler):
+    def _train_single_epoch_(self, sampler, tag_log='train'):
 
         # start of single epoch
         if self.network_history is not None:
@@ -1086,7 +993,8 @@ class SocialLSTM:
 
                 utils.xprint('    Batch %d ... ' % self.entry_batch)
 
-                predictions, deviations, loss = self._train_single_batch_((instants_input, inputs, instants_target, targets))
+                predictions, deviations, loss = self._train_single_batch_(
+                    batch=(instants_input, inputs, instants_target, targets), tag_log=tag_log)
 
                 # consider successful if training is done and successful
                 done_batch = True
@@ -1154,7 +1062,7 @@ class SocialLSTM:
                                      'mean-deviation': _peek_deviations_this_epoch['mean'],
                                      'min-deviation': _peek_deviations_this_epoch['min'],
                                      'max-deviation': _peek_deviations_this_epoch['max']},
-                                    name="training-epoch")
+                                    name="%s-epoch" % tag_log)
 
                 log_by_epoch()
                 _done_logging = True
@@ -1164,11 +1072,10 @@ class SocialLSTM:
                 raise
             pass  # end of while not _done_logging
 
-        self.entry_epoch += 1
         self.entry_batch = 0
         return losses_by_batch, deviations_by_batch
 
-    def predict(self, sampler):
+    def tryout(self, sampler):
 
         utils.assertor.assert_not_none(self.outputs, "Must build the network first.")
         utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
@@ -1178,17 +1085,24 @@ class SocialLSTM:
             utils.assertor.assert_not_none(_func, "Must compile the functions first.")
 
         try:
-            columns_prediction = ['epoch', 'batch', 'sample', 'instant'] + self.node_identifiers
-            self.logger.register("prediction", columns=columns_prediction)
+            utils.xprint('Testing ... ', newline=True)
+            timer = utils.Timer()
 
-            utils.xprint('Testing ... ')
+            # backup current param values
+            params_original = self.current_param_values
 
-            deviations_by_batch = self._predict_single_epoch_(sampler)
+            _, deviations_by_batch = self._train_single_epoch_(sampler, tag_log='test')
             sampler.reset_entry()
+            # must not change training entry
+            # self.entry_epoch += 1
+
+            # restore original param values after testing
+            self.set_params(params_original)
 
             # Print deviation info to console
-            utils.xprint('mean-deviation: %s' % numpy.mean(deviations_by_batch), newline=True)
+            # utils.xprint('  mean-deviation: %s' % numpy.mean(deviations_by_batch), newline=True)
 
+            utils.xprint('Done in %s.' % timer.stop(), newline=True)
             return deviations_by_batch
 
         except:
@@ -1206,6 +1120,7 @@ class SocialLSTM:
         for _func in (self.func_predict, self.func_compare, self.func_train):
             utils.assertor.assert_not_none(_func, "Must compile the functions first.")
 
+        # do the epochs all at once if not specified
         if num_epoch is None:
             num_epoch = self.num_epoch
 
@@ -1224,11 +1139,14 @@ class SocialLSTM:
                 iepoch = 0
                 while True:
                     # start of single epoch
+                    utils.xprint('  Epoch %d ... ' % self.entry_epoch)
+
                     losses_by_batch, deviations_by_batch = self._train_single_epoch_(sampler)
 
                     losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
                     deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
                     sampler.reset_entry()
+                    self.entry_epoch += 1
                     iepoch += 1
 
                     # Save as the best params if necessary
@@ -1237,7 +1155,7 @@ class SocialLSTM:
                             or numpy.mean(deviations_by_batch) <= best_record:
                         best_record = numpy.mean(deviations_by_batch)
                         self.best_param_values['epoch'] = iepoch
-                        self.best_param_values['value'] = self.param_values
+                        self.best_param_values['value'] = self.current_param_values
 
                     if iepoch >= num_epoch:
                         break
@@ -1266,8 +1184,8 @@ class SocialLSTM:
             pass  # end of single training attempt
         pass  # end of while not done_training
 
-
         utils.xprint('Done in %s.' % timer.stop(), newline=True)
+        self.export_params()
         return losses_by_epoch, deviations_by_epoch
 
     def export_history(self, path=None):
@@ -1304,8 +1222,8 @@ class SocialLSTM:
 
             utils.update_config('path_pickle', path_best, 'runtime', tags=['path'])
             # last validated values during training
-            if self.param_values is not None:
-                params_last = self.param_values
+            if self.current_param_values is not None:
+                params_last = self.current_param_values
             # initial values
             else:
                 params_last = self.initial_param_values
@@ -1315,7 +1233,7 @@ class SocialLSTM:
             utils.filer.dump_to_file(params_last, path)
             utils.xprint('done.', newline=True)
 
-            utils.xprint("\nExporting best parameters to '%s' ...  " % path_best)
+            utils.xprint("Exporting best parameters to '%s' ...  " % path_best)
             utils.filer.dump_to_file(params_best, path_best)
             utils.xprint('done.', newline=True)
             return path
@@ -1333,7 +1251,8 @@ class SocialLSTM:
                     return
             utils.xprint('Importing given parameters ... ')
             params_all = utils.filer.load_from_file(path)
-            self.set_params(params_all)
+            self.reset_params(params_all)
+
             utils.xprint('done.', newline=True)
 
         except:
@@ -1342,8 +1261,19 @@ class SocialLSTM:
     def set_params(self, params):
         try:
             L.layers.set_all_param_values(self.network, params)
-            # update initial param values to restore from
+            self.current_param_values = params
+
+        except:
+            raise
+
+    def reset_params(self, params):
+        try:
+            L.layers.set_all_param_values(self.network, params)
+
+            # Save initial values of params for possible future restoration
             self.initial_param_values = params
+            self.current_param_values = self.initial_param_values
+            self.best_param_values = {'epoch': 0, 'value': self.initial_param_values}
 
         except:
             raise
@@ -1363,7 +1293,7 @@ class SocialLSTM:
                                            "No initial values are found for parameter restoration.")
 
             utils.xprint("Restore parameters from initial values ... ")
-            self.set_params(self.initial_param_values)
+            self.reset_params(self.initial_param_values)
             utils.xprint("done.", newline=True)
 
         except:
@@ -1410,18 +1340,18 @@ class SocialLSTM:
                 peek_e, peeks_hid, peek_outputs, peek_params, peek_probs = model.get_peeks()
 
                 if params_unpickled is not None:
-                    model.predict(rest)
+                    model.tryout(rest)
 
                 utils.get_rootlogger().register("training", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
                 # Do training
                 try:
                     while True:
-                        loss, deviations = model.train(half, num_epoch=1)
+                        loss, deviations = model.train(half, num_epoch=utils.get_config('tryout_frequency'))
                         if model.stop:
                             break
 
-                        deviations = model.predict(rest)
+                        deviations = model.tryout(rest)
 
                         if model.entry_epoch >= model.num_epoch:
 
@@ -1454,7 +1384,6 @@ class SocialLSTM:
 
                 finally:
                     model.export_history()
-                    model.export_params()
 
             except:
                 raise

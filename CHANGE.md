@@ -399,9 +399,15 @@
 
 - ADD: Predicting function;
 
-###### 2017-05-08
+###### [2017-05-08](e6a45a0ad91b17b616922f3e49e7ec6a4dbca315)
 
 - ADD: Save & export param values with the best training result;
+
+###### 2017-05-09
+
+- FIX: Tryout (predicting) should be actually training of one single epoch;
+- NOTE: However parameter values would be restored after each tryout, thus to enable multiple tryouts during training without interference;
+- FIX: Possible bug with parameter values;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
