@@ -98,7 +98,7 @@ config_pool = {
             },
             # If only a full size batch will be accepted
             'strict_batch_size': {
-                'value': True,
+                'value': False,
                 'tags': []
             },
 

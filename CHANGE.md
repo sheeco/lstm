@@ -403,11 +403,15 @@
 
 - ADD: Save & export param values with the best training result;
 
-###### 2017-05-09
+###### [2017-05-09](c7356e2c5f54098382f17113f25492e8b6e8e9d6)
 
 - FIX: Tryout (predicting) should be actually training of one single epoch;
 - NOTE: However parameter values would be restored after each tryout, thus to enable multiple tryouts during training without interference;
 - FIX: Possible bug with parameter values;
+
+###### 2017-05-09
+
+- OPT: Enable loose batch size;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

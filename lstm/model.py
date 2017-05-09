@@ -18,6 +18,7 @@ __all__ = [
 class SocialLSTM:
 
     # todo add None
+    # todo add the sharing of social tensor H maybe
     SHARE_SCHEMES = ['parameter',
                      'input']
 
@@ -289,7 +290,7 @@ class SocialLSTM:
 
             # IN = [(sec, x, y)]
             layer_in = L.layers.InputLayer(input_var=self.inputs,
-                                           shape=(self.num_node, self.size_batch, self.length_sequence_input,
+                                           shape=(self.num_node, None, self.length_sequence_input,
                                                   self.dimension_sample),
                                            name='input-layer')
 
@@ -306,7 +307,7 @@ class SocialLSTM:
                                           num_leading_axes=3,
                                           name='embed-layer')
             assert utils.match(layer_e.output_shape,
-                               (self.num_node, self.size_batch, self.length_sequence_input, self.dimension_embed_layer))
+                               (self.num_node, None, self.length_sequence_input, self.dimension_embed_layer))
 
             """
             Build LSTM hidden layers
@@ -331,10 +332,9 @@ class SocialLSTM:
                                                                name='sliced-embed-layer[%d]' % inode,
                                                                indices=inode,
                                                                axis=0)]
-            # todo add the sharing of social tensor H maybe
 
             assert all(utils.match(_each_input_hidden.output_shape,
-                                   (self.size_batch, self.length_sequence_input, None))
+                                   (None, self.length_sequence_input, None))
                        for _each_input_hidden in list_inputs_hidden)
 
             # number of hidden layers
@@ -386,7 +386,7 @@ class SocialLSTM:
                                                                      b=self.b_lstm),
                                                name="LSTM[%d,%d]" % (ihid + 1, inode + 1))
 
-                    assert utils.match(_lstm.output_shape, (self.size_batch, self.length_sequence_input, dim_hid))
+                    assert utils.match(_lstm.output_shape, (None, self.length_sequence_input, dim_hid))
                     list_this_layer += [_lstm]
 
                 # the last unique LSTMLayer object to share from
@@ -425,7 +425,7 @@ class SocialLSTM:
                                                                   nonlinearity=self.f_lstm_cell),
                                                name="LSTM[%d,%d]" % (ihid + 1, inode + 1))
 
-                    assert utils.match(_lstm.output_shape, (self.size_batch, self.length_sequence_input, dim_hid))
+                    assert utils.match(_lstm.output_shape, (None, self.length_sequence_input, dim_hid))
                     list_this_layer += [_lstm]
 
                 pass  # end of building of single hidden layer for all nodes
@@ -446,7 +446,7 @@ class SocialLSTM:
             layer_last_hid = L.layers.ConcatLayer(list_shuffled_lstms,
                                                   axis=0)
             assert utils.match(layer_last_hid.output_shape,
-                               (self.num_node, self.size_batch, self.length_sequence_input, dim_hid))
+                               (self.num_node, None, self.length_sequence_input, dim_hid))
 
             """
             Build the decoding layer
@@ -479,12 +479,12 @@ class SocialLSTM:
                                                           name="distribution-layer")
 
                 assert utils.match(layer_distribution.output_shape,
-                                   (self.num_node, self.size_batch, self.length_sequence_input, 5))
+                                   (self.num_node, None, self.length_sequence_input, 5))
                 layer_decoded = layer_distribution
 
             elif self.decode_scheme == 'euclidean':
                 assert utils.match(layer_means.output_shape,
-                                   (self.num_node, self.size_batch, self.length_sequence_input, 2))
+                                   (self.num_node, None, self.length_sequence_input, 2))
                 layer_decoded = layer_means
             else:
                 raise ValueError("No definition found for loss scheme '%s'." % self.decode_scheme)
