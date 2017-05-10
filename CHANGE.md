@@ -409,9 +409,13 @@
 - NOTE: However parameter values would be restored after each tryout, thus to enable multiple tryouts during training without interference;
 - FIX: Possible bug with parameter values;
 
-###### 2017-05-09
+###### [2017-05-09](5c7d9203e624d31b980d2bef19cd8505a066ccaf)
 
 - OPT: Enable loose batch size;
+
+###### 2017-05-10
+
+- FIX: Bug with best param value exporting;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

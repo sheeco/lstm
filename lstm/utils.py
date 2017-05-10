@@ -553,7 +553,7 @@ class Filer:
 
     @staticmethod
     def if_exists(path):
-        return os.path.exists(path)
+        return os.path.exists(path) if isinstance(path, str) else False
 
     @staticmethod
     def is_file(path):
@@ -667,6 +667,15 @@ class Filer:
     def copy_file(frompath, topath):
         try:
             shutil.copy(frompath, topath)
+        except:
+            raise
+
+    @staticmethod
+    def remove_file(path):
+        try:
+            if filer.if_exists(path) \
+                    and filer.is_file(path):
+                os.remove(path)
         except:
             raise
 

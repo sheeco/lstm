@@ -140,6 +140,10 @@ class SocialLSTM:
             self.initial_param_values = None  # ..., stored for possible parameter restoration
             self.best_param_values = {'epoch': None, 'value': None}  # ..., stored for possible parameter export
 
+            # path of pickled param value files
+            self.path_current_param_values = None
+            self.path_best_param_values = None
+
             self.limit_network_history = limit_network_history if limit_network_history is not None \
                 else utils.get_config('limit_network_history')
             # 2d list (iepoch, ibatch) of dict, data flow though the network
@@ -1139,7 +1143,7 @@ class SocialLSTM:
                 iepoch = 0
                 while True:
                     # start of single epoch
-                    utils.xprint('  Epoch %d ... ' % self.entry_epoch)
+                    utils.xprint('  Epoch %d ... ' % self.entry_epoch, newline=True)
 
                     losses_by_batch, deviations_by_batch = self._train_single_epoch_(sampler)
 
@@ -1154,7 +1158,7 @@ class SocialLSTM:
                     if best_record is None \
                             or numpy.mean(deviations_by_batch) <= best_record:
                         best_record = numpy.mean(deviations_by_batch)
-                        self.best_param_values['epoch'] = iepoch
+                        self.best_param_values['epoch'] = self.entry_epoch
                         self.best_param_values['value'] = self.current_param_values
 
                     if iepoch >= num_epoch:
@@ -1209,18 +1213,21 @@ class SocialLSTM:
         except:
             raise
 
-    def export_params(self, path=None):
+    def export_params(self, path_current_param_values=None, path_best_param_values=None):
         try:
-            FILENAME = 'params.pkl'
-            FILENAME_BEST = 'params-%d.pkl' % self.best_param_values['epoch']
+            PICKLE_NAME = 'params.pkl'
+            PICKLE_NAME_WITH_EPOCH = 'params-%d.pkl'
 
             utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
-            if path is None:
-                path = utils.filer.format_subpath(self.logger.log_path, FILENAME)
-            path_best = utils.filer.format_subpath(self.logger.log_path, FILENAME_BEST)
+            if path_current_param_values is None:
+                path_current_param_values = utils.filer.format_subpath(self.logger.log_path, PICKLE_NAME)
 
-            utils.update_config('path_pickle', path_best, 'runtime', tags=['path'])
+            if path_best_param_values is None:
+                path_best_param_values = utils.filer.format_subpath(self.logger.log_path,
+                                                                PICKLE_NAME_WITH_EPOCH % self.best_param_values['epoch'])
+
+            utils.update_config('path_pickle', path_best_param_values, 'runtime', tags=['path'])
             # last validated values during training
             if self.current_param_values is not None:
                 params_last = self.current_param_values
@@ -1229,14 +1236,18 @@ class SocialLSTM:
                 params_last = self.initial_param_values
             params_best = self.best_param_values['value']
 
-            utils.xprint("\nExporting last parameters to '%s' ...  " % path)
-            utils.filer.dump_to_file(params_last, path)
+            utils.xprint("\nExporting current parameters to '%s' ... " % path_current_param_values)
+            utils.filer.dump_to_file(params_last, path_current_param_values)
             utils.xprint('done.', newline=True)
+            self.path_current_param_values = path_current_param_values
 
-            utils.xprint("Exporting best parameters to '%s' ...  " % path_best)
-            utils.filer.dump_to_file(params_best, path_best)
-            utils.xprint('done.', newline=True)
-            return path
+            utils.xprint("Exporting best parameters to '%s' ... " % path_best_param_values)
+            utils.filer.dump_to_file(params_best, path_best_param_values)
+            utils.xprint('done.\n', newline=True)
+            if self.path_best_param_values is not None:
+                utils.filer.remove_file(self.path_best_param_values)
+            self.path_best_param_values = path_best_param_values
+            return self.path_current_param_values, self.path_best_param_values
 
         except:
             raise
