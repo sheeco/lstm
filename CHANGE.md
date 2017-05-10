@@ -413,9 +413,13 @@
 
 - OPT: Enable loose batch size;
 
-###### 2017-05-10
+###### [2017-05-10](b2bae08837905a811a5c10a0cddaf6c41566590a)
 
 - FIX: Bug with best param value exporting;
+
+###### 2017-05-10
+
+- ADD: Enable to config trainset size;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

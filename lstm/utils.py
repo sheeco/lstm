@@ -1013,6 +1013,12 @@ def _validate_config_():
                 if validated != original:
                     config._update_config_(key, validated, source=content['source'])
 
+        # Validate numeric configs
+        assertor.assert_type(get_config('trainset'), [float, int])
+        if not get_config('trainset') > 0:
+            raise ValueError("Configuration 'trainset' must be positive.")
+
+
     except:
         raise
     pass

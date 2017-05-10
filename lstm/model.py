@@ -1327,8 +1327,13 @@ class SocialLSTM:
             sample_gridding = utils.get_config('sample_gridding')
             if sample_gridding is True:
                 sampler.map_to_grid(grid_system=GridSystem(utils.get_config('grain_grid')))
-            half = Sampler.clip(sampler, indices=(0, sampler.length / 2))
-            rest = Sampler.clip(sampler, indices=(half.length, None))
+            # Devide into train set & test set
+            trainset = utils.get_config('trainset')
+            trainset = trainset * sampler.length if trainset < 1 else trainset
+            sampler_trainset = Sampler.clip(sampler, indices=(0, trainset))
+            sampler_testset = Sampler.clip(sampler, indices=(sampler_trainset.length, None))
+            utils.xprint("Use %d samples as train set & %d samples as test set."
+                         % (sampler_trainset.length, sampler_testset.length), newline=True)
 
             # Define the model
             model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range)
@@ -1351,18 +1356,18 @@ class SocialLSTM:
                 peek_e, peeks_hid, peek_outputs, peek_params, peek_probs = model.get_peeks()
 
                 if params_unpickled is not None:
-                    model.tryout(rest)
+                    model.tryout(sampler_testset)
 
                 utils.get_rootlogger().register("training", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
                 # Do training
                 try:
                     while True:
-                        loss, deviations = model.train(half, num_epoch=utils.get_config('tryout_frequency'))
+                        loss, deviations = model.train(sampler_trainset, num_epoch=utils.get_config('tryout_frequency'))
                         if model.stop:
                             break
 
-                        deviations = model.tryout(rest)
+                        deviations = model.tryout(sampler_testset)
 
                         if model.entry_epoch >= model.num_epoch:
 

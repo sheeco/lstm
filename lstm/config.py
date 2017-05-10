@@ -101,6 +101,13 @@ config_pool = {
                 'value': False,
                 'tags': []
             },
+            # Devision of train set & test set
+            # <float> within (0, 1): x = train set size / total
+            # <int> above 1: exact size of train set (in terms of sample)
+            'trainset': {
+                'value': .5,
+                'tags': []
+            },
 
             # Training scheme
             'train_scheme': {
