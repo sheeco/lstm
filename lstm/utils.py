@@ -314,6 +314,11 @@ class Logger:
             self._validate_log_path_()
 
             if not self.has_log(name):
+                # Create the sub path if necessary
+                _dir, _filename = filer.split_path(name)
+                if _dir not in ('', '/'):
+                    filer.create_path(filer.format_subpath(self.log_path, _dir))
+
                 content = []
                 if columns is None:
                     columns = ['']
@@ -323,13 +328,14 @@ class Logger:
 
                 filepath = '%s%s.log' % (self.log_path, name)
                 pfile = open(filepath, 'a')
+                title = '# '
                 hastag = False
                 for tag in columns:
                     if tag != '':
                         hastag = True
-                        pfile.write('%s\t' % tag)
+                        title += '%s\t' % tag
                 if hastag:
-                    pfile.write('\n')
+                    pfile.write('%s\n' % title)
                 pfile.flush()
                 pfile.close()
 
@@ -474,7 +480,7 @@ class Logger:
 
 class Assertor:
     def __init__(self):
-        raise TypeError("Mustn't instantiate interface.")
+        raise TypeError("This is an interface class, which must not get instantiated.")
 
     @staticmethod
     def assert_(var, message, raising=True):
@@ -534,10 +540,10 @@ class Assertor:
                     raise IOError("'%s' already exists." % path)
             # else:
                 # if assertion is True:
-                #     warn("assert_exists @ file: "
+                #     warn("filer.assert_exists: "
                 #          "'%s' does not exists." % path)
                 # else:
-                #     warn("assert_exists @ file: "
+                #     warn("filer.assert_exists: "
                 #          "'%s' already exists." % path)
             return False
         else:
@@ -549,7 +555,7 @@ assertor = Assertor
 
 class Filer:
     def __init__(self):
-        raise TypeError("Mustn't instantiate interface.")
+        raise TypeError("This is an interface class, which must not get instantiated.")
 
     @staticmethod
     def if_exists(path):

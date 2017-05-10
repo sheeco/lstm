@@ -908,25 +908,37 @@ class SocialLSTM:
                 # Log [deviation, prediction, target] by each sample
 
                 def log_by_sample():
+                    # log as .trace format for convenience in analyse
+                    self.logger.register('compare/%s-epoch%d' % (tag_log, self.entry_epoch))
+                    compare_content = ''
+
                     size_this_batch = len(instants_input)
                     for isample in xrange(0, size_this_batch):
 
-                        dict_content = {'epoch': self.entry_epoch, 'batch': self.entry_batch, 'sample': isample}
+                        dict_content = {'epoch': self.entry_epoch, 'batch': self.entry_batch, 'sample': isample + 1}
 
                         for iseq in xrange(0, self.length_sequence_output):
                             # index in [-n, -1]
-                            dict_content['instant'] = instants_target[
+                            _instant = instants_target[
                                 isample, iseq - self.length_sequence_output]
+                            dict_content['instant'] = _instant
+                            compare_content += "%d\t" % _instant
+
                             for inode in xrange(0, self.num_node):
                                 # [x, y]
                                 _deviation = deviations[inode, isample, iseq]
                                 _prediction = predictions[inode, isample, iseq]
                                 _target = targets[inode, isample, iseq, -2:]
-                                dict_content[self.node_identifiers[inode]] = "(%.2f\t[%.2f, %.2f]\t[%.2f, %.2f])" \
+                                dict_content[self.node_identifiers[inode]] = "(%.2f\t[%.2f\t%.2f]\t[%.2f\t%.2f])" \
                                                                              % (_deviation, _prediction[0], _prediction[1],
                                                                                 _target[0], _target[1])
+                                compare_content += "%.2f\t%.2f\t%.2f\t%.2f" \
+                                                   % (_prediction[0], _prediction[1], _target[0], _target[1])
 
                             self.logger.log(dict_content, name="%s-sample" % tag_log)
+                            compare_content += "\n"
+
+                    self.logger.log(compare_content, name='compare/%s-epoch%d' % (tag_log, self.entry_epoch))
 
                 log_by_sample()
 
@@ -959,7 +971,6 @@ class SocialLSTM:
                 raise
         pass  # end of while not _done_logging
 
-        self.entry_batch += 1
         self.count_batch += 1
         return predictions, deviations, loss
 
@@ -995,6 +1006,7 @@ class SocialLSTM:
                                            % (sampler.length, self.size_batch))
                     break
 
+                self.entry_batch += 1
                 utils.xprint('    Batch %d ... ' % self.entry_batch)
 
                 predictions, deviations, loss = self._train_single_batch_(
@@ -1024,7 +1036,7 @@ class SocialLSTM:
                     utils.xprint('', newline=True)
 
                 if _choice == 'stop':
-                    # means n complete epochs
+                    # means n incomplete epochs
                     self.num_epoch = self.entry_epoch
                     utils.update_config('num_epoch', self.entry_epoch, 'runtime', silence=False)
                     self.stop = True
@@ -1143,6 +1155,7 @@ class SocialLSTM:
                 iepoch = 0
                 while True:
                     # start of single epoch
+                    self.entry_epoch += 1
                     utils.xprint('  Epoch %d ... ' % self.entry_epoch, newline=True)
 
                     losses_by_batch, deviations_by_batch = self._train_single_epoch_(sampler)
@@ -1150,7 +1163,6 @@ class SocialLSTM:
                     losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
                     deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
                     sampler.reset_entry()
-                    self.entry_epoch += 1
                     iepoch += 1
 
                     # Save as the best params if necessary
@@ -1216,7 +1228,7 @@ class SocialLSTM:
     def export_params(self, path_current_param_values=None, path_best_param_values=None):
         try:
             PICKLE_NAME = 'params.pkl'
-            PICKLE_NAME_WITH_EPOCH = 'params-%d.pkl'
+            PICKLE_NAME_WITH_EPOCH = 'params-epoch%d.pkl'
 
             utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
@@ -1244,7 +1256,8 @@ class SocialLSTM:
             utils.xprint("Exporting best parameters to '%s' ... " % path_best_param_values)
             utils.filer.dump_to_file(params_best, path_best_param_values)
             utils.xprint('done.\n', newline=True)
-            if self.path_best_param_values is not None:
+            if self.path_best_param_values is not None \
+                    and self.path_best_param_values != path_best_param_values:
                 utils.filer.remove_file(self.path_best_param_values)
             self.path_best_param_values = path_best_param_values
             return self.path_current_param_values, self.path_best_param_values
@@ -1329,7 +1342,7 @@ class SocialLSTM:
                 sampler.map_to_grid(grid_system=GridSystem(utils.get_config('grain_grid')))
             # Devide into train set & test set
             trainset = utils.get_config('trainset')
-            trainset = trainset * sampler.length if trainset < 1 else trainset
+            trainset = int(trainset * sampler.length) if trainset < 1 else trainset
             sampler_trainset = Sampler.clip(sampler, indices=(0, trainset))
             sampler_testset = Sampler.clip(sampler, indices=(sampler_trainset.length, None))
             utils.xprint("Use %d samples as train set & %d samples as test set."
@@ -1358,16 +1371,22 @@ class SocialLSTM:
                 if params_unpickled is not None:
                     model.tryout(sampler_testset)
 
-                utils.get_rootlogger().register("training", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
+                utils.get_rootlogger().register("train", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
+
+                train_losses = numpy.zeros((0,))
+                train_deviations = numpy.zeros((0,))
 
                 # Do training
                 try:
+
                     while True:
-                        loss, deviations = model.train(sampler_trainset, num_epoch=utils.get_config('tryout_frequency'))
+                        _losses, _deviations = model.train(sampler_trainset, num_epoch=utils.get_config('tryout_frequency'))
+                        numpy.append(train_losses, _losses)
+                        numpy.append(train_deviations, _deviations)
                         if model.stop:
                             break
 
-                        deviations = model.tryout(sampler_testset)
+                        tryout_deviations = model.tryout(sampler_testset)
 
                         if model.entry_epoch >= model.num_epoch:
 
@@ -1393,10 +1412,10 @@ class SocialLSTM:
                     utils.handle(e)
                 else:
                     utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
-                                                "loss-by-epoch": '%s\n' % utils.format_var(loss, detail=True),
-                                                "deviation-by-epoch": '%s\n' % utils.format_var(deviations,
+                                                "loss-by-epoch": '%s\n' % utils.format_var(train_losses, detail=True),
+                                                "deviation-by-epoch": '%s\n' % utils.format_var(train_deviations,
                                                                                                 detail=True)},
-                                               name="training")
+                                               name="train")
 
                 finally:
                     model.export_history()

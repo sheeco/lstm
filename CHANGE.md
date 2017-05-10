@@ -417,9 +417,13 @@
 
 - FIX: Bug with best param value exporting;
 
-###### 2017-05-10
+###### [2017-05-10](eab208a32193f5f992be9e71f5a338d2cac14bf0)
 
 - ADD: Enable to config trainset size;
+
+###### 2017-05-10
+
+- FIX: & opt for printing & logging;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

@@ -345,12 +345,12 @@ class Sampler:
                 elif len(batch_input) == 0:
                     return None, None, None, None
                 elif self.strict_batch_size:
-                    utils.warn("load_batch @ Sampler: "
+                    utils.warn("Sampler.load_batch: "
                                "An insufficient batch of %s samples is discarded."
                                % batch_input.shape[1])
                     return None, None, None, None
                 elif not self.strict_batch_size:
-                    utils.warn("load_batch @ Sampler: "
+                    utils.warn("Sampler.load_batch: "
                                "Insufficient batch. Only  %s  samples are left."
                                % batch_input.shape[1])
                     break
