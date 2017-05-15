@@ -909,7 +909,9 @@ class SocialLSTM:
 
                 def log_by_sample():
                     # log as .trace format for convenience in analyse
-                    self.logger.register('compare/%s-epoch%d' % (tag_log, self.entry_epoch))
+                    FILENAME_COMPARE = '%s-epoch%d' % (tag_log, self.entry_epoch)
+                    logname_compare = utils.filer.format_subpath(utils.get_config('path_compare'), FILENAME_COMPARE)
+                    self.logger.register(logname_compare)
                     compare_content = ''
 
                     size_this_batch = len(instants_input)
@@ -935,10 +937,11 @@ class SocialLSTM:
                                 compare_content += "%.2f\t%.2f\t%.2f\t%.2f" \
                                                    % (_prediction[0], _prediction[1], _target[0], _target[1])
 
-                            self.logger.log(dict_content, name="%s-sample" % tag_log)
+                            logname_sample = "%s-sample" % tag_log
+                            self.logger.log(dict_content, name=logname_sample)
                             compare_content += "\n"
 
-                    self.logger.log(compare_content, name='compare/%s-epoch%d' % (tag_log, self.entry_epoch))
+                    self.logger.log(compare_content, name=logname_compare)
 
                 log_by_sample()
 
@@ -1210,16 +1213,15 @@ class SocialLSTM:
                     or len(self.network_history) == 0:
                 return
 
-            FILENAME_EXPORT = 'history.pkl'
+            PICKLE_NAME = 'history.pkl'
 
             if path is None:
-                path = utils.filer.format_subpath(self.logger.log_path, FILENAME_EXPORT)
+                path = PICKLE_NAME
 
-            utils.xprint("\nExporting recent network history to '%s' ...  " % path)
+            path = self.logger.log_pickle(self.network_history, PICKLE_NAME)
 
-            utils.filer.dump_to_file(self.network_history, path)
+            utils.xprint("\nRecent network history has been exported to '%s'." % path, newline=True)
 
-            utils.xprint('done.', newline=True)
             return path
 
         except:
@@ -1233,13 +1235,12 @@ class SocialLSTM:
             utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
             if path_current_param_values is None:
-                path_current_param_values = utils.filer.format_subpath(self.logger.log_path, PICKLE_NAME)
+                path_current_param_values = PICKLE_NAME
 
             if path_best_param_values is None:
-                path_best_param_values = utils.filer.format_subpath(self.logger.log_path,
-                                                                PICKLE_NAME_WITH_EPOCH % self.best_param_values['epoch'])
+                path_best_param_values = PICKLE_NAME_WITH_EPOCH % self.best_param_values['epoch']
 
-            utils.update_config('path_pickle', path_best_param_values, 'runtime', tags=['path'])
+            utils.update_config('file_pickle', path_best_param_values, 'runtime', tags=['path'])
             # last validated values during training
             if self.current_param_values is not None:
                 params_last = self.current_param_values
@@ -1248,18 +1249,19 @@ class SocialLSTM:
                 params_last = self.initial_param_values
             params_best = self.best_param_values['value']
 
-            utils.xprint("\nExporting current parameters to '%s' ... " % path_current_param_values)
-            utils.filer.dump_to_file(params_last, path_current_param_values)
-            utils.xprint('done.', newline=True)
+            path_current_param_values = self.logger.log_pickle(params_last, path_current_param_values)
+            utils.xprint("Current parameters have been exported to '%s'." % path_current_param_values, newline=True)
+            # keep a copy for record
+            _ = self.logger.log_pickle(params_last, PICKLE_NAME_WITH_EPOCH % self.entry_epoch)
             self.path_current_param_values = path_current_param_values
 
-            utils.xprint("Exporting best parameters to '%s' ... " % path_best_param_values)
-            utils.filer.dump_to_file(params_best, path_best_param_values)
-            utils.xprint('done.\n', newline=True)
+            path_best_param_values = self.logger.log_pickle(params_best, path_best_param_values)
+            utils.xprint("Best parameters have been exported to '%s'." % path_best_param_values, newline=True)
             if self.path_best_param_values is not None \
                     and self.path_best_param_values != path_best_param_values:
                 utils.filer.remove_file(self.path_best_param_values)
             self.path_best_param_values = path_best_param_values
+
             return self.path_current_param_values, self.path_best_param_values
 
         except:
@@ -1353,10 +1355,11 @@ class SocialLSTM:
 
             try:
                 # Import previously pickled parameters if requested
-                path_unpickle = utils.get_config('path_unpickle') if utils.has_config('path_unpickle') else None
-                params_unpickled = utils.filer.load_from_file(path_unpickle) if path_unpickle is not None else None
+                file_unpickle = utils.get_config('file_unpickle') if utils.has_config('file_unpickle') else None
+                params_unpickled = utils.filer.load_from_file(file_unpickle) if file_unpickle is not None else None
                 if params_unpickled is not None:
-                    utils.get_sublogger().log_file(path_unpickle, rename='params-imported.pkl')
+                    rename = utils.filer.format_subpath(utils.get_config('path_pickle'), 'params-imported.pkl')
+                    utils.get_sublogger().log_file(file_unpickle, rename=rename)
 
                 # Build & compile the model
                 outputs_var, params_var = model.build_network(params=params_unpickled)

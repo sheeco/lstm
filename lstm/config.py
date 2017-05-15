@@ -16,9 +16,19 @@ config_pool = {
                 'value': 'res/trace/NCSU/',
                 'tags': ['path']
             },
-            # Path for logs
+            # Path for all the logs
             'path_log': {
                 'value': 'log/',
+                'tags': ['path']
+            },
+            # Sub log path for comparing logs
+            'path_compare': {
+                'value': 'compare/',
+                'tags': ['path']
+            },
+            # Sub log path for pickle files
+            'path_pickle': {
+                'value': 'pickle/',
                 'tags': ['path']
             },
             # Logging identifier
@@ -44,13 +54,13 @@ config_pool = {
                 'value': None,
                 'tags': ['path']
             },
-            # File path that parameters get pickled to
-            'path_pickle': {
+            # File path that latest parameters get pickled to
+            'file_pickle': {
                 'value': None,
                 'tags': ['path']
             },
             # File path that which parameters get unpickled & imported from
-            'path_unpickle': {
+            'file_unpickle': {
                 'value': None,
                 'tags': ['path']
             },
@@ -375,9 +385,9 @@ def _import_config_(config, tag=None):
             _update_config_(impkey, impvalue, 'imported')
 
         # change pickle path to unpickle path if exists
-        if 'path_pickle' in config:
-            _update_config_('path_unpickle', config['path_pickle']['value'], 'imported')
-            remove_config('path_pickle')
+        if 'file_pickle' in config:
+            _update_config_('file_unpickle', config['file_pickle']['value'], 'imported')
+            remove_config('file_pickle')
 
     except:
         raise

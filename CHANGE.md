@@ -421,9 +421,13 @@
 
 - ADD: Enable to config trainset size;
 
-###### 2017-05-10
+###### [2017-05-10](4883b885628f35035426a5c17e51448fa12ac79b)
 
 - FIX: & opt for printing & logging;
+
+###### 2017-05-15
+
+- OPT: for param pickling;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

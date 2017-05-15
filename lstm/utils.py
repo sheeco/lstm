@@ -298,10 +298,26 @@ class Logger:
 
             Assertor.assert_exists(path)
             directory, filename = Filer.split_path(path)
-            topath = self.log_path + filename if rename is None else self.log_path + rename
+            filename = rename if rename is not None else filename
+            topath = filer.format_subpath(self.log_path, filename)
             Assertor.assert_exists(topath, assertion=False)
 
             Filer.copy_file(path, topath)
+
+        except:
+            raise
+
+    def log_pickle(self, what, filename):
+        try:
+            self._validate_log_path_()
+
+            directory = filer.format_subpath(self.log_path, get_config('path_pickle'))
+            if not filer.if_exists(directory):
+                filer.create_path(directory)
+
+            path = filer.format_subpath(directory, filename)
+            filer.dump_to_file(what, path)
+            return path
 
         except:
             raise
@@ -1122,7 +1138,7 @@ def process_command_line_args(args=None):
 
                 # Import params.pkl
                 elif Filer.is_file(_path):
-                    update_config('path_unpickle', _path, 'command-line', tags=['path'], silence=False)
+                    update_config('file_unpickle', _path, 'command-line', tags=['path'], silence=False)
 
                 else:
                     raise ValueError("Invalid path '%s' to import." % argv)
