@@ -425,9 +425,13 @@
 
 - FIX: & opt for printing & logging;
 
-###### 2017-05-15
+###### [2017-05-15](60e096513ea7b1521530a2ebac8955b71b36db01)
 
 - OPT: for param pickling;
+
+###### 2017-05-15
+
+- REM: Disable configuration importing. Only param importing is allowed now;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

@@ -1358,8 +1358,8 @@ class SocialLSTM:
                 file_unpickle = utils.get_config('file_unpickle') if utils.has_config('file_unpickle') else None
                 params_unpickled = utils.filer.load_from_file(file_unpickle) if file_unpickle is not None else None
                 if params_unpickled is not None:
-                    rename = utils.filer.format_subpath(utils.get_config('path_pickle'), 'params-imported.pkl')
-                    utils.get_sublogger().log_file(file_unpickle, rename=rename)
+                    rename = 'params-imported.pkl'
+                    utils.get_sublogger().log_pickle(params_unpickled, rename)
 
                 # Build & compile the model
                 outputs_var, params_var = model.build_network(params=params_unpickled)
