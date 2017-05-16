@@ -433,9 +433,13 @@
 
 - REM: Disable configuration importing. Only param importing is allowed now;
 
-###### 2017-05-16
+###### [2017-05-16](4bf4c893622d1c4088925c8e172e4379e73e76aa)
 
 - OPT: for param pickling;
+
+###### 2017-05-16
+
+- FIX: Bug with loss & deviation logging;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

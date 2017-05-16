@@ -1392,8 +1392,8 @@ class SocialLSTM:
 
                     while True:
                         _losses, _deviations = model.train(sampler_trainset, num_epoch=utils.get_config('tryout_frequency'))
-                        numpy.append(train_losses, _losses)
-                        numpy.append(train_deviations, _deviations)
+                        train_losses = numpy.append(train_losses, _losses)
+                        train_deviations = numpy.append(train_deviations, _deviations)
                         if model.stop:
                             break
 
