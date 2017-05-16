@@ -429,9 +429,13 @@
 
 - OPT: for param pickling;
 
-###### 2017-05-15
+###### [2017-05-15](1862cc2f727c9d852e35d63ef40df1bc0d9ade9d)
 
 - REM: Disable configuration importing. Only param importing is allowed now;
+
+###### 2017-05-16
+
+- OPT: for param pickling;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

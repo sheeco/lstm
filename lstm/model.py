@@ -138,11 +138,11 @@ class SocialLSTM:
             self.param_names = []  # list of str, names of all the parameters
             self.current_param_values = None  # list of ndarrays, stored for debugging or exporting
             self.initial_param_values = None  # ..., stored for possible parameter restoration
-            self.best_param_values = {'epoch': None, 'value': None}  # ..., stored for possible parameter export
-
-            # path of pickled param value files
-            self.path_current_param_values = None
-            self.path_best_param_values = None
+            self.best_param_values = {  # stored for possible parameter export
+                'epoch': None,  # after n^th epoch
+                'record': None,  # best record (mean deviation value) stored for comparison
+                'value': None,  # actual param values
+                'path': None}  # path of pickled file
 
             self.limit_network_history = limit_network_history if limit_network_history is not None \
                 else utils.get_config('limit_network_history')
@@ -541,7 +541,8 @@ class SocialLSTM:
             # Save initial values of params for possible future restoration
             self.initial_param_values = L.layers.get_all_param_values(layer_out)
             self.current_param_values = self.initial_param_values
-            self.best_param_values = {'epoch': 0, 'value': self.initial_param_values}
+            # export initial param values for record
+            self.export_params()
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.outputs, self.params_all
@@ -1144,7 +1145,6 @@ class SocialLSTM:
             num_epoch = self.num_epoch
 
         done_training = False
-        best_record = None
         while not done_training:
             # start of single training try
             try:
@@ -1170,11 +1170,9 @@ class SocialLSTM:
 
                     # Save as the best params if necessary
 
-                    if best_record is None \
-                            or numpy.mean(deviations_by_batch) <= best_record:
-                        best_record = numpy.mean(deviations_by_batch)
-                        self.best_param_values['epoch'] = self.entry_epoch
-                        self.best_param_values['value'] = self.current_param_values
+                    if self.best_param_values['record'] is None \
+                            or numpy.mean(deviations_by_batch) <= self.best_param_values['record']:
+                        self.update_best_params(self.entry_epoch, self.current_param_values, numpy.mean(deviations_by_batch))
 
                     if iepoch >= num_epoch:
                         break
@@ -1227,42 +1225,52 @@ class SocialLSTM:
         except:
             raise
 
-    def export_params(self, path_current_param_values=None, path_best_param_values=None):
+    def export_params(self, params=None, filename=None):
+        """
+
+        :param params: Parameter values to export. Current values are used if not specified.
+        :param filename: Filename to export to. Default format is used if not specified.
+        :return: Path of the exported file.
+        """
         try:
-            PICKLE_NAME = 'params.pkl'
-            PICKLE_NAME_WITH_EPOCH = 'params-epoch%d.pkl'
+            FILENAME_DEFAULT = 'params-epoch%d.pkl' % self.entry_epoch
 
             utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
-            if path_current_param_values is None:
-                path_current_param_values = PICKLE_NAME
+            if params is not None \
+                    and filename is None:
+                raise RuntimeError("A `filename` is requested with `params` given.")
 
-            if path_best_param_values is None:
-                path_best_param_values = PICKLE_NAME_WITH_EPOCH % self.best_param_values['epoch']
+            if params is None:
+                params = self.current_param_values
+            if filename is None:
+                filename = FILENAME_DEFAULT
 
-            utils.update_config('file_pickle', path_best_param_values, 'runtime', tags=['path'])
-            # last validated values during training
-            if self.current_param_values is not None:
-                params_last = self.current_param_values
-            # initial values
-            else:
-                params_last = self.initial_param_values
-            params_best = self.best_param_values['value']
+            path = self.logger.log_pickle(params, filename)
+            return path
 
-            path_current_param_values = self.logger.log_pickle(params_last, path_current_param_values)
-            utils.xprint("Current parameters have been exported to '%s'." % path_current_param_values, newline=True)
-            # keep a copy for record
-            _ = self.logger.log_pickle(params_last, PICKLE_NAME_WITH_EPOCH % self.entry_epoch)
-            self.path_current_param_values = path_current_param_values
+        except:
+            raise
 
-            path_best_param_values = self.logger.log_pickle(params_best, path_best_param_values)
-            utils.xprint("Best parameters have been exported to '%s'." % path_best_param_values, newline=True)
-            if self.path_best_param_values is not None \
-                    and self.path_best_param_values != path_best_param_values:
-                utils.filer.remove_file(self.path_best_param_values)
-            self.path_best_param_values = path_best_param_values
+    def update_best_params(self, epoch, value, record):
+        try:
+            self.best_param_values['epoch'] = epoch
+            self.best_param_values['value'] = value
+            self.best_param_values['record'] = record
 
-            return self.path_current_param_values, self.path_best_param_values
+            filename = 'params-best-epoch%d.pkl' % epoch
+
+            path = self.export_params(params=value, filename=filename)
+
+            old_path = self.best_param_values['path']
+            if old_path is not None \
+                    and old_path != path:
+                utils.filer.remove_file(old_path)
+            self.best_param_values['path'] = path
+            utils.update_config('file_pickle', path, 'runtime', tags=['path'])
+
+            utils.xprint("Best parameters have been exported to '%s'." % path, newline=True)
+            return path
 
         except:
             raise
