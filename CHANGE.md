@@ -437,9 +437,14 @@
 
 - OPT: for param pickling;
 
-###### 2017-05-16
+###### [2017-05-16](4a671bee91884ce5048fc25263c756f8cd55b31d)
 
 - FIX: Bug with loss & deviation logging;
+
+###### 2017-05-22
+
+- FIX: Forget to reset entries after learning rate gets updated;
+- FIX: Logging with mutiple nodes;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

@@ -280,6 +280,12 @@ class SocialLSTM:
         except:
             raise
 
+    def reset_entry(self):
+
+        self.count_batch = 0  # real time batch counter for training
+        self.entry_epoch = 0
+        self.entry_batch = 0
+
     # todo change to pure theano
     def build_network(self, params=None):
         """
@@ -929,6 +935,9 @@ class SocialLSTM:
 
                             for inode in xrange(0, self.num_node):
                                 # [x, y]
+                                if inode > 0:
+                                    compare_content += "\t"
+
                                 _deviation = deviations[inode, isample, iseq]
                                 _prediction = predictions[inode, isample, iseq]
                                 _target = targets[inode, isample, iseq, -2:]
@@ -1190,6 +1199,7 @@ class SocialLSTM:
 
                     # Reinitialize related variables
                     sampler.reset_entry()
+                    self.reset_entry()
                     if self.network_history is not None:
                         self.network_history = []
 
