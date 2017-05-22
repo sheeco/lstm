@@ -543,12 +543,15 @@ class SocialLSTM:
             if params is not None:
                 utils.xprint('Importing given parameters ... ')
                 self.set_params(params)
+                picklename = 'params-imported.pkl'
+            else:
+                picklename = 'params-init.pkl'
 
             # Save initial values of params for possible future restoration
             self.initial_param_values = L.layers.get_all_param_values(layer_out)
             self.current_param_values = self.initial_param_values
             # export initial param values for record
-            self.export_params()
+            self.export_params(filename=picklename)
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
             return self.outputs, self.params_all
@@ -1375,9 +1378,6 @@ class SocialLSTM:
                 # Import previously pickled parameters if requested
                 file_unpickle = utils.get_config('file_unpickle') if utils.has_config('file_unpickle') else None
                 params_unpickled = utils.filer.load_from_file(file_unpickle) if file_unpickle is not None else None
-                if params_unpickled is not None:
-                    rename = 'params-imported.pkl'
-                    utils.get_sublogger().log_pickle(params_unpickled, rename)
 
                 # Build & compile the model
                 outputs_var, params_var = model.build_network(params=params_unpickled)

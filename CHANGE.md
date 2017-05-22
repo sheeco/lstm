@@ -441,10 +441,14 @@
 
 - FIX: Bug with loss & deviation logging;
 
-###### 2017-05-22
+###### [2017-05-22](e31fb48b7935339aac1934fd46e779e8353722e3)
 
 - FIX: Forget to reset entries after learning rate gets updated;
 - FIX: Logging with mutiple nodes;
+
+###### 2017-05-22
+
+- OPT: for param pickling;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
