@@ -13,8 +13,8 @@ __all__ = [
 
 class GridSystem:
 
-    def __init__(self, grain, base_xy=None):
-        self.grain = grain
+    def __init__(self, scale, base_xy=None):
+        self.scale = scale
         self.base_xy = base_xy
 
 
@@ -249,12 +249,12 @@ class Sampler:
     def map_to_grid(self, grid_system=None):
 
         if grid_system is None:
-            grid_system = GridSystem(utils.get_config('grain_grid'))
+            grid_system = GridSystem(utils.get_config('scale_grid'))
         if grid_system.base_xy is None:
-            grid_system.base_xy = numpy.floor_divide(self.motion_range[0, :], grid_system.grain) * grid_system.grain
+            grid_system.base_xy = numpy.floor_divide(self.motion_range[0, :], grid_system.scale) * grid_system.scale
         for trace in self.traces:
             for triple in trace:
-                triple[1:3] = numpy.floor_divide((triple[1:3] - grid_system.base_xy), grid_system.grain)
+                triple[1:3] = numpy.floor_divide((triple[1:3] - grid_system.base_xy), grid_system.scale)
 
         self.motion_range = Sampler._compute_range_(self.traces)
         self.grid_system = grid_system

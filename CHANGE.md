@@ -437,9 +437,13 @@
 
 - OPT: for param pickling;
 
-###### 2017-05-16
+###### [2017-05-16](4a671bee91884ce5048fc25263c756f8cd55b31d)
 
 - FIX: Bug with loss & deviation logging;
+
+###### 2017-05-23
+
+- ADD: Social LSTM with Occupancy Map sharing. & Some OPT;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

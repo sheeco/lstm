@@ -87,7 +87,7 @@ config_pool = {
                 'tags': []
             },
             # Length of edge when coordinates need to be mapped to grid
-            'grain_grid': {
+            'scale_grid': {
                 'value': 50,
                 'tags': []
             },
@@ -99,11 +99,23 @@ config_pool = {
             },
             # Sharing scheme for LSTMS of multiple nodes
             'share_scheme': {
-                # Among ['parameter', 'input', None]
+                # Among ['parameter', 'input', 'olstm', 'none']
                 # 'parameter' means all the nodes share the same set of parameters
                 # 'input' means all the nodes share the embedded sample input with each other
-                # None means neither
+                # 'olstm' means Occupancy Map sharing
+                # 'none' means neither
                 'value': 'input',
+                'tags': ['build']
+            },
+            # Edge length of single neighborhood grid in social pooling
+            'scale_pool': {
+                'value': 100,
+                'tags': ['build']
+            },
+            # Maximum number of grids to consider in each direction in social pooling
+            # meaning pool dimension would be (2 * r, 2 * r)
+            'range_pool': {
+                'value': 5,
                 'tags': ['build']
             },
             # If only a full size batch will be accepted

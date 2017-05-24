@@ -20,7 +20,9 @@ class SocialLSTM:
     # todo add None
     # todo add the sharing of social tensor H maybe
     SHARE_SCHEMES = ['parameter',
-                     'input']
+                     'input',
+                     'olstm',
+                     'none']
 
     TRAIN_SCHEMES = ['rmsprop',
                      'adagrad',
@@ -30,8 +32,9 @@ class SocialLSTM:
     DECODE_SCHEMES = ['binorm',
                       'euclidean']
 
-    def __init__(self, node_identifiers, motion_range, inputs=None, targets=None, adaptive_learning_rate=None,
+    def __init__(self, node_identifiers, motion_range, samples=None, targets=None, adaptive_learning_rate=None,
                  share_scheme=None, decode_scheme=None, train_scheme=None,
+                 scale_pool=None, range_pool=None,
                  dimension_sample=None, length_sequence_input=None, length_sequence_output=None, size_batch=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
                  learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
@@ -75,7 +78,8 @@ class SocialLSTM:
             else:
                 raise ValueError("Expect len: 1~2 while getting %d instead.",
                                  len(dimension_hidden_layer))
-            self.dimension_hidden_layers = dimension_hidden_layer
+            self.num_hidden_layer = dimension_hidden_layer[0]
+            self.dimension_hidden_layer = dimension_hidden_layer[1]
             self.grad_clip = grad_clip if grad_clip is not None else utils.get_config('grad_clip')
             self.decode_scheme = decode_scheme if decode_scheme is not None else utils.get_config('decode_scheme')
 
@@ -86,6 +90,12 @@ class SocialLSTM:
             if self.train_scheme not in SocialLSTM.TRAIN_SCHEMES:
                 raise ValueError(
                     "Unknown training scheme '%s'. Must be among %s." % (self.train_scheme, SocialLSTM.TRAIN_SCHEMES))
+
+            # neighborhood definition for social pooling
+            self.scale_pool = scale_pool \
+                if scale_pool is not None else utils.get_config('scale_pool')
+            self.range_pool = range_pool \
+                if range_pool is not None else utils.get_config('range_pool')
 
             self.learning_rate = learning_rate \
                 if learning_rate is not None else utils.get_config('learning_rate')
@@ -106,22 +116,31 @@ class SocialLSTM:
 
             # Theano tensor variables (symbolic)
 
-            if inputs is None:
-                inputs = T.tensor4("input_var", dtype='float32')
+            if samples is None:
+                samples = T.tensor4("samples", dtype='float32')
             if targets is None:
-                targets = T.tensor4("target_var", dtype='float32')
+                targets = T.tensor4("targets", dtype='float32')
 
             # tensors, should take single batch of samples as real value
-            self.inputs = inputs
+            self.samples = samples
             self.targets = targets
 
             self.embed = None  # tensor, output of embedding layer
-            self.hids = []  # 2d list of tensors, output of all the hidden layers of all the nodes
+            self.hids_all = []  # 2d list of tensors, outputs of all the hidden layers of all the nodes
+            # self.hids_last = []  # list of tensors, outputs of the last hidden layers of all the nodes
+            self.hid_last = None  # tensors, output of the concatenated last hidden layers of all the nodes
             self.outputs = None  # tensor, output of the entire network
             self.network = None  # Lasagne layer object, containing the network structure
             self.params_all = None  # dict of tensors, all the parameters
             self.params_trainable = None  # dict of tensors, trainable parameters
             self.updates = None  # dict of tensors, returned from predefined training functions in Lasagne.updates
+
+            self.prev_hids = None  # reserved for social tensor sharing
+            self.social_tensors = None  # ...
+
+            # list of tensors, all the necessary input tensors for network
+            # , only contains sample inputs by default
+            self.network_inputs = [self.samples]
 
             # Real values stored for printing / debugging
 
@@ -172,22 +191,32 @@ class SocialLSTM:
             self.b_e = L.init.Constant(0.)
             self.f_e = None
 
+            # _dim_a = (2 * self.range_pool) ** 2 * self.dimension_hidden_layer
+            # self.w_a = L.init.Uniform(std=0.005, mean=1. / _dim_a)
+            # self.b_a = L.init.Constant(0.)
+            # self.f_a = None
+
+            _dim_o = (2 * self.range_pool) ** 2 * 1
+            self.w_o = L.init.Uniform(std=0.005, mean=(1. / _dim_o))
+            self.b_o = L.init.Constant(0.)
+            self.f_o = None
+
             self.w_lstm_in = L.init.Uniform(std=0.005, mean=(1. / self.dimension_embed_layer))
-            self.w_lstm_hid = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
-            self.w_lstm_cell = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
+            self.w_lstm_hid = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layer))
+            self.w_lstm_cell = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layer))
             self.b_lstm = L.init.Constant(0.)
             self.f_lstm_hid = L.nonlinearities.rectify
             self.f_lstm_cell = L.nonlinearities.rectify
             self.init_lstm_hid = L.init.Constant(0.)
             self.init_lstm_cell = L.init.Constant(0.)
 
-            self.w_means = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layers[1]))
+            self.w_means = L.init.Uniform(std=0.005, mean=(1. / self.dimension_hidden_layer))
             self.b_means = L.init.Constant(0.)
             self.f_means = None
 
             self.scaled_sigma = True
 
-            self.w_deviations = L.init.Uniform(std=0.1, mean=(100. / self.dimension_hidden_layers[1] / self.num_node))
+            self.w_deviations = L.init.Uniform(std=0.1, mean=(100. / self.dimension_hidden_layer / self.num_node))
             self.b_deviations = L.init.Constant(0.)
             if self.scaled_sigma:
                 self.f_deviations = L.nonlinearities.sigmoid
@@ -280,6 +309,141 @@ class SocialLSTM:
         except:
             raise
 
+    """
+    input: samples(node, batch, seq, dim_sample)
+    output: final occupancy_map: (node, batch, seq, m, n, 1)
+    """
+    def compute_occupancy_map(self, samples):
+        try:
+
+            # samples = T.tensor4('samples', dtype='float32')
+            # prev_hids = T.tensor4('prev_hids', dtype='float32')
+
+            shape_samples = samples.shape
+            num_node = shape_samples[0]
+            size_batch = shape_samples[1]
+            len_sequence = shape_samples[2]
+
+            # ones = T.constant(T.ones(shape=(num_node, size_batch, len_sequence, 1)), name="ones-hids")
+            ones = T.ones(shape=(num_node, size_batch, len_sequence, 1))
+            theano.gradient.zero_grad(ones)
+
+            return self.compute_social_tensors(samples, ones)
+
+        except:
+            raise
+
+    """
+    input: samples(node, batch, seq, dim_sample), prev_hids (node, batch, seq, dim_hid)
+    output: final social tensor: (node, batch, seq, m, n, dim)
+    """
+    def compute_social_tensors(self, samples, prev_hids):
+        try:
+
+            # samples = T.tensor4('samples', dtype='float32')
+            # prev_hids = T.tensor4('prev_hids', dtype='float32')
+
+            # samples = self.samples
+            # prev_hids = self.prev_hids
+            relu_hids = T.nnet.relu(prev_hids)
+
+            shape_samples = samples.shape
+            num_node = shape_samples[0]
+            size_batch = shape_samples[1]
+            len_sequence = shape_samples[2]
+
+            def make_indice(num_node_var, size_batch_var, len_sequence_var):
+                shape_indice = (num_node_var * size_batch_var * len_sequence_var * num_node_var, 4)
+                arange = T.arange(num_node_var * size_batch_var * len_sequence_var * num_node_var)
+
+                def step_make_indice(idx):
+                    zeros = T.zeros(shape_indice)
+                    floor, jnode = T.divmod(idx, num_node_var)
+                    floor, iseq = T.divmod(floor, len_sequence_var)
+                    inode, isample = T.divmod(floor, size_batch_var)
+                    subtensor_zeros = zeros[idx]
+
+                    return T.set_subtensor(subtensor_zeros, [inode, isample, iseq, jnode])
+
+                results, _ = theano.scan(fn=step_make_indice, sequences=[arange], non_sequences=[])
+                results = T.sum(results, axis=0)
+
+                return results
+
+            indice = make_indice(num_node, size_batch, len_sequence)
+
+            def test_make_indice():
+                x = numpy.random.rand(2, 1, 4, 3)
+                h = numpy.ones((2, 1, 4, 5))
+
+                fn_make_indice = theano.function(inputs=[samples], outputs=make_indice(num_node, size_batch, len_sequence),
+                                                 allow_input_downcast=True)
+                ans = fn_make_indice(x)
+
+                assert ans.shape == (16, 4)
+
+            # test_make_indice()
+
+            """Constants"""
+
+            # add extra 1 to each edge for clipping
+            min_mn = T.constant(-(self.range_pool + 1), name='min_mn')
+            max_mn = T.constant(self.range_pool + 1, name='max_mn')
+            scale_pool = T.constant(self.scale_pool, name='scale_pool')
+
+            def step_compute(idx, samples_arg, hids_arg):
+                inode = T.basic._convert_to_int8(idx[0])
+                isample = T.basic._convert_to_int8(idx[1])
+                iseq = T.basic._convert_to_int8(idx[2])
+                jnode = T.basic._convert_to_int8(idx[3])
+
+                my_xy = samples_arg[inode, isample, iseq, -2:]
+                your_xy = samples_arg[jnode, isample, iseq, -2:]
+                your_hid = hids_arg[jnode, isample, iseq]  # (dim_hid,)
+                your_hid = T._tensor_py_operators.dimshuffle(your_hid, ['x', 0])
+                difference = your_xy - my_xy
+
+                mn = T.int_div(difference, scale_pool)
+                mn = T.basic._convert_to_uint8(mn)
+                mn = T.clip(mn, min_mn, max_mn - 1)
+                mn = T.add(mn, -min_mn)
+
+                zeros = T.zeros((max_mn - min_mn, max_mn - min_mn, 1))
+                indicator = T.set_subtensor(zeros[mn[0], mn[1], 0], 1)
+                # cut the edges
+                indicator = indicator[1:-1, 1:-1]
+
+                ret = T.dot(indicator, your_hid)
+                ret = T.cast(ret, dtype='float32')
+                # (range_pool, range_pool, 1) * (dim_hid,) : (range_pool, range_pool, dim_hid)
+                return ret
+
+            # (num_node, size_batch, len_sequence, num_node, range_pool, range_pool, dim_hid))
+            products, _ = theano.scan(fn=step_compute, sequences=[indice],
+                                      non_sequences=[samples, relu_hids])
+
+            shape_products = products.shape  # (*, range_pool, range_pool, dim_hid)
+            products = T.reshape(products,
+                                 newshape=(num_node, size_batch, len_sequence, num_node,
+                                           shape_products[1], shape_products[2], shape_products[3]))
+            social_tensors = T.sum(products, axis=3)
+
+            def test_social_tensor():
+                x = numpy.random.rand(2, 10, 4, 3)
+                h = numpy.ones((2, 10, 4, 1))
+
+                fn = theano.function(inputs=[samples, prev_hids], outputs=social_tensors, allow_input_downcast=True)
+                ans = fn(x, h)
+
+                assert ans.shape == (2, 1, 4, 10, 10, 5)
+
+            # test_social_tensor()
+
+            return social_tensors
+
+        except:
+            raise
+
     # todo change to pure theano
     def build_network(self, params=None):
         """
@@ -291,9 +455,10 @@ class SocialLSTM:
             timer = utils.Timer()
 
             utils.xprint('Building Social LSTM network ... ')
+            utils.xprint("using share scheme '%s' ... " % self.share_scheme)
 
             # IN = [(sec, x, y)]
-            layer_in = L.layers.InputLayer(input_var=self.inputs,
+            layer_in = L.layers.InputLayer(input_var=self.samples,
                                            shape=(self.num_node, None, self.length_sequence_input,
                                                   self.dimension_sample),
                                            name='input-layer')
@@ -309,9 +474,11 @@ class SocialLSTM:
                                           b=self.b_e,
                                           nonlinearity=self.f_e,
                                           num_leading_axes=3,
-                                          name='embed-layer')
+                                          name='e-layer')
             assert utils.match(layer_e.output_shape,
                                (self.num_node, None, self.length_sequence_input, self.dimension_embed_layer))
+
+            layer_embed = layer_e
 
             """
             Build LSTM hidden layers
@@ -321,18 +488,77 @@ class SocialLSTM:
 
             list_inputs_hidden = []
 
+            # if self.share_scheme == 'social':
+            #     # prev_hids: (num_node, batch_size, self.length_sequence_input, dim_hid)
+            #     shape_prev_hid = (self.num_node, self.size_batch, self.length_sequence_input,
+            #                       self.dimension_hidden_layer)
+            #     layer_prev_hid = L.layers.InputLayer(input_var=None, name='prev-hid-layer', shape=shape_prev_hid)
+            #     self.prev_hids = L.layers.get_output(layer_prev_hid)
+            #     self.network_inputs += [self.prev_hids]
+            #     social_tensor = self.compute_social_tensors(self.samples, self.prev_hids)
+            #
+            #     shape_social_tensor = (self.num_node, self.size_batch, self.length_sequence_input,
+            #                            2 * self.range_pool, 2 * self.range_pool, self.dimension_hidden_layer)
+            #     layer_social_tensor = L.layers.InputLayer(input_var=social_tensor,
+            #                                               shape=shape_social_tensor,
+            #                                               name='input-social_tensor')
+            #
+            #     # a = f_a(Social Tensor; W_a, b_a)
+            #     layer_a = L.layers.DenseLayer(layer_social_tensor,
+            #                                   num_units=self.dimension_embed_layer,
+            #                                   W=self.w_a,
+            #                                   b=self.b_a,
+            #                                   nonlinearity=self.f_a,
+            #                                   num_leading_axes=3,
+            #                                   name='a-layer')
+            #     assert utils.match(layer_a.output_shape,
+            #                        (self.num_node, None, self.length_sequence_input, self.dimension_embed_layer))
+            #
+            #     layer_embed = L.layers.ConcatLayer([layer_e, layer_a], axis=-1, name='embed-e&a-layer')
+            #     assert utils.match(layer_embed.output_shape,
+            #                        (self.num_node, None, self.length_sequence_input, 2 * self.dimension_embed_layer))
+
+            if self.share_scheme == 'olstm':
+
+                shape_occupancy_map = (self.num_node, self.size_batch, self.length_sequence_input,
+                                       2 * self.range_pool, 2 * self.range_pool, 1)
+                # occupancy_map = self.compute_occupancy_map(self.samples)
+                # layer_occupancy_map = L.layers.InputLayer(input_var=occupancy_map,
+                #                                           shape=shape_occupancy_map,
+                #                                           name='input-occupancy-map')
+
+                layer_occupancy_map = L.layers.ExpressionLayer(layer_in, self.compute_occupancy_map,
+                                                               output_shape=shape_occupancy_map,
+                                                               name='input-occupancy-map')
+                # o = f_o(Occupancy Map; W_o, b_o)
+                layer_o = L.layers.DenseLayer(layer_occupancy_map,
+                                              num_units=self.dimension_embed_layer,
+                                              W=self.w_o,
+                                              b=self.b_o,
+                                              nonlinearity=self.f_o,
+                                              num_leading_axes=3,
+                                              name='o-layer')
+                assert utils.match(layer_o.output_shape,
+                                   (self.num_node, None, self.length_sequence_input, self.dimension_embed_layer))
+
+                layer_embed = L.layers.ConcatLayer([layer_e, layer_o], axis=-1, name='embed-e&o-layer')
+                assert utils.match(layer_embed.output_shape,
+                                   (self.num_node, None, self.length_sequence_input, 2 * self.dimension_embed_layer))
+
             # Share reshaped embedded inputs of all the nodes
+            # , when using share scheme 'input'
             if self.share_scheme == 'input':
-                _reshaped_embed = L.layers.ReshapeLayer(layer_e,
+                _reshaped_embed = L.layers.ReshapeLayer(layer_embed,
                                                         shape=([1], [2], -1),
                                                         name='reshaped-embed-layer')
                 for inode in xrange(0, self.num_node):
                     list_inputs_hidden += [_reshaped_embed]
 
             # Slice its own embedded input for each node
+            # , when using the other share schemes
             else:
                 for inode in xrange(0, self.num_node):
-                    list_inputs_hidden += [L.layers.SliceLayer(layer_e,
+                    list_inputs_hidden += [L.layers.SliceLayer(layer_embed,
                                                                name='sliced-embed-layer[%d]' % inode,
                                                                indices=inode,
                                                                axis=0)]
@@ -342,13 +568,18 @@ class SocialLSTM:
                        for _each_input_hidden in list_inputs_hidden)
 
             # number of hidden layers
-            n_hid = self.dimension_hidden_layers[0]
+            n_hid = self.num_hidden_layer
             # dimension of lstm for each node in each hidden layer
-            dim_hid = self.dimension_hidden_layers[1]
+            dim_hid = self.dimension_hidden_layer
 
+            # Build unique lstm layer object for only 1 node in each hidden layer
+            # , the other nodes would copy from this node
+            # , when using share scheme 'input'
             if self.share_scheme == 'parameter':
                 n_unique_lstm = 1
                 n_shared_lstm = self.num_node - 1
+            # Build unique lstm layer objects for all nodes
+            # , when using share scheme 'social'
             else:
                 n_unique_lstm = self.num_node
                 n_shared_lstm = 0
@@ -452,10 +683,13 @@ class SocialLSTM:
             assert utils.match(layer_last_hid.output_shape,
                                (self.num_node, None, self.length_sequence_input, dim_hid))
 
+            layer_to_decode = layer_last_hid
+
             """
             Build the decoding layer
             """
-            layer_means = L.layers.DenseLayer(layer_last_hid,
+
+            layer_means = L.layers.DenseLayer(layer_to_decode,
                                               num_units=2,
                                               W=self.w_means,
                                               b=self.b_means,
@@ -464,14 +698,14 @@ class SocialLSTM:
                                               name="mean-layer")
 
             if self.decode_scheme == 'binorm':
-                layer_deviations = L.layers.DenseLayer(layer_last_hid,
+                layer_deviations = L.layers.DenseLayer(layer_to_decode,
                                                        num_units=2,
                                                        W=self.w_deviations,
                                                        b=self.b_deviations,
                                                        nonlinearity=self.f_deviations,
                                                        num_leading_axes=3,
                                                        name="deviation-layer")
-                layer_correlation = L.layers.DenseLayer(layer_last_hid,
+                layer_correlation = L.layers.DenseLayer(layer_to_decode,
                                                         num_units=1,
                                                         W=self.w_correlation,
                                                         b=self.b_correlation,
@@ -507,11 +741,13 @@ class SocialLSTM:
             Save some useful variables
             """
 
-            self.embed = L.layers.get_output(layer_e)
+            self.embed = L.layers.get_output(layer_embed)
             for ilayer in xrange(len(list2d_layers_hidden)):
-                self.hids += [[]]
-                for _lstm in list2d_layers_hidden[ilayer]:
-                    self.hids[ilayer] += [L.layers.get_output(_lstm)]
+                self.hids_all += [[]]
+                self.hids_all[ilayer] += L.layers.get_output(list2d_layers_hidden[ilayer])
+            # for inode in xrange(len(list_layer_last_hidden)):
+            #     self.hids_last += [L.layers.get_output(list_layer_last_hidden)]
+            self.hid_last = L.layers.get_output(layer_last_hid)
 
             self.network = layer_out
             self.outputs = L.layers.get_output(layer_out)
@@ -535,7 +771,7 @@ class SocialLSTM:
 
             # Assign saved parameter values to the built network
             if params is not None:
-                utils.xprint('Importing given parameters ... ')
+                utils.xprint('importing given parameters ... ')
                 self.set_params(params)
 
             # Save initial values of params for possible future restoration
@@ -597,6 +833,8 @@ class SocialLSTM:
                 """
                 NNL Bivariant normal distribution
                 """
+                utils.xprint("using decode scheme 'binorm' ... ")
+
                 # Reshape for convenience
                 facts = T.reshape(facts, shape_stacked_facts)
 
@@ -613,7 +851,6 @@ class SocialLSTM:
 
                     distribution = distribution_mat[idx, :]
                     means = distribution[0:2]
-                    # deviations = distribution[2:4]
                     stds = distribution[2:4]
                     correlation = distribution[5]
                     target = fact_mat[idx, :]
@@ -631,11 +868,10 @@ class SocialLSTM:
 
                     distribution = distribution_mat[idx, :]
                     means = distribution[0:2]
-                    # deviations = distribution[2:4]
-                    deviations = T.mul(distribution[2:4], motion_range_v)
+                    scaled_stds = T.mul(distribution[2:4], motion_range_v)
                     correlation = distribution[4]
                     target = fact_mat[idx, :]
-                    prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], deviations[0], deviations[1],
+                    prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], scaled_stds[0], scaled_stds[1],
                                                  correlation)
 
                     # Do something with the slice here.
@@ -664,6 +900,8 @@ class SocialLSTM:
                 """
                 Euclidean distance loss
                 """
+                utils.xprint("using decode scheme 'euclidean' ... ")
+
                 # Elemwise differences
                 differences = T.sub(self.predictions, facts)
                 differences = T.reshape(differences, shape_stacked_facts)
@@ -734,15 +972,19 @@ class SocialLSTM:
             # Compute updates according to given training scheme
             updates = None
             if self.train_scheme == 'rmsprop':
+                utils.xprint("using train scheme 'rmsprop' ... ")
                 updates = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate,
                                             rho=self.rho, epsilon=self.epsilon)
             elif self.train_scheme == 'adagrad':
+                utils.xprint("using train scheme 'adagrad' ... ")
                 updates = L.updates.adagrad(self.loss, self.params_trainable, learning_rate=self.learning_rate,
                                             epsilon=self.epsilon)
             elif self.train_scheme == 'momentum':
+                utils.xprint("using train scheme 'momentum' ... ")
                 updates = L.updates.momentum(self.loss, self.params_trainable, learning_rate=self.learning_rate,
                                              momentum=self.momentum)
             elif self.train_scheme == 'nesterov':
+                utils.xprint("using train scheme 'nesterov' ... ")
                 updates = L.updates.nesterov_momentum(self.loss, self.params_trainable,
                                                       learning_rate=self.learning_rate,
                                                       momentum=self.momentum)
@@ -775,11 +1017,12 @@ class SocialLSTM:
             Compile theano functions for prediction, observation & training
             """
 
-            self.func_predict = theano.function([self.inputs], self.predictions, allow_input_downcast=True)
-            self.func_compare = theano.function([self.inputs, self.targets], self.deviations, allow_input_downcast=True)
-            self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=self.updates,
+            self.func_predict = theano.function(self.network_inputs, self.predictions, allow_input_downcast=True)
+            self.func_compare = theano.function(self.network_inputs + [self.targets], self.deviations,
+                                                allow_input_downcast=True)
+            self.func_train = theano.function(self.network_inputs + [self.targets], self.loss, updates=self.updates,
                                               allow_input_downcast=True)
-            # self.func_train = theano.function([self.inputs, self.targets], self.loss, updates=updates,
+            # self.func_train = theano.function([self.samples, self.targets], self.loss, updates=updates,
             #                                   allow_input_downcast=True,
             #                                   mode=NanGuardMode(nan_is_error=True,
             #                                                     inf_is_error=True,
@@ -789,13 +1032,13 @@ class SocialLSTM:
             Compile peeking functions for debugging
             """
 
-            self.peek_embed = theano.function([self.inputs], self.embed, allow_input_downcast=True)
+            self.peek_embed = theano.function(self.network_inputs, self.embed, allow_input_downcast=True)
             self.peeks_hid = []
-            for ihid in self.hids:
-                self.peeks_hid += [theano.function([self.inputs], ihid, allow_input_downcast=True)]
-            self.peek_outputs = theano.function([self.inputs], self.outputs, allow_input_downcast=True)
+            for ihid in self.hids_all:
+                self.peeks_hid += [theano.function(self.network_inputs, ihid, allow_input_downcast=True)]
+            self.peek_outputs = theano.function(self.network_inputs, self.outputs, allow_input_downcast=True)
             self.peek_params = theano.function([], self.params_all, allow_input_downcast=True)
-            self.peek_probs = theano.function([self.inputs, self.targets], self.probabilities,
+            self.peek_probs = theano.function(self.network_inputs + [self.targets], self.probabilities,
                                               allow_input_downcast=True) if self.probabilities is not None else None
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
@@ -808,29 +1051,30 @@ class SocialLSTM:
 
         return self.peek_embed, self.peeks_hid, self.peek_outputs, self.peek_params, self.peek_probs
 
-    def _predict_single_batch_(self, inputs, targets=None):
+    def _predict_single_batch_(self, samples, targets=None):
         try:
-            predictions = self.func_predict(inputs)
-            deviations = self.func_compare(inputs, targets) if targets is not None else None
+            predictions = self.func_predict(samples)
+            deviations = self.func_compare(samples, targets) if targets is not None else None
             return predictions, deviations
         except:
             raise
 
     def _train_single_batch_(self, batch, tag_log='train'):
 
-        instants_input, inputs, instants_target, targets = batch[0], batch[1], batch[2], batch[3]
+        instants_sample, samples, instants_target, targets = batch[0], batch[1], batch[2], batch[3]
+        size_this_batch = len(instants_sample)
 
         # Prepare for training, allowing interrupt
         # Record params, flow of data & probabilities to network history BEFORE training
 
         try:
             def peek_netflow():
-                _embed = self.peek_embed(inputs)
+                _embed = self.peek_embed(samples)
                 _hids = []
                 for _ihid in xrange(len(self.peeks_hid)):
                     _peek_hid = self.peeks_hid[_ihid]
-                    _hids += [_peek_hid(inputs)]
-                _netout = self.peek_outputs(inputs)
+                    _hids += [_peek_hid(samples)]
+                _netout = self.peek_outputs(samples)
 
                 dict_netflow = {'embed': _embed, 'hiddens': _hids, 'netout': _netout}
                 return dict_netflow
@@ -838,7 +1082,7 @@ class SocialLSTM:
             if self.network_history is not None:
 
                 _netflow = peek_netflow()
-                _probs = self.peek_probs(inputs, targets) if self.peek_probs is not None else None
+                _probs = self.peek_probs(samples, targets) if self.peek_probs is not None else None
                 # note that record [i, j] contains variable values BEFORE this training
                 self.network_history[-1].append({'params': self.current_param_values,
                                                  'netflow': _netflow,
@@ -850,7 +1094,16 @@ class SocialLSTM:
                     self.network_history = \
                         self.network_history[-self.limit_network_history:]
 
-            predictions, deviations = self._predict_single_batch_(inputs, targets)
+            # def test_social_tensor():
+            #     zeros = numpy.random.rand(self.num_node, size_this_batch, self.length_sequence_input,
+            #                               self.dimension_hidden_layer)
+            #     social_tensor = self.peek_social_tensor(samples, zeros)
+            #     print "\nshape of social tensor: %s\n" % (social_tensor.shape,)
+            #     print "\nvalue of social tensor: \n%s\n" % utils.peek_matrix(social_tensor, formatted=True)
+            #
+            # # test_social_tensor()
+
+            predictions, deviations = self._predict_single_batch_(samples, targets)
 
         except:
             raise
@@ -865,7 +1118,7 @@ class SocialLSTM:
 
                 while loss is None:
                     try:
-                        loss = self.func_train(inputs, targets)
+                        loss = self.func_train(samples, targets)
                     except KeyboardInterrupt:
                         pass
 
@@ -915,7 +1168,6 @@ class SocialLSTM:
                     self.logger.register(logname_compare)
                     compare_content = ''
 
-                    size_this_batch = len(instants_input)
                     for isample in xrange(0, size_this_batch):
 
                         dict_content = {'epoch': self.entry_epoch, 'batch': self.entry_batch, 'sample': isample + 1}
@@ -1000,10 +1252,10 @@ class SocialLSTM:
                 if done_batch is None \
                         or done_batch:
                     done_batch = False
-                    instants_input, inputs, instants_target, targets = sampler.load_batch(with_target=True)
+                    instants_sample, samples, instants_target, targets = sampler.load_batch(with_target=True)
 
                 # break if cannot find a new batch
-                if inputs is None:
+                if samples is None:
                     if self.entry_batch == 0:
                         raise RuntimeError("Only %d sample pairs are found, "
                                            "not enough for one single batch of size %d."
@@ -1014,7 +1266,7 @@ class SocialLSTM:
                 utils.xprint('    Batch %d ... ' % self.entry_batch)
 
                 predictions, deviations, loss = self._train_single_batch_(
-                    batch=(instants_input, inputs, instants_target, targets), tag_log=tag_log)
+                    batch=(instants_sample, samples, instants_target, targets), tag_log=tag_log)
 
                 # consider successful if training is done and successful
                 done_batch = True
@@ -1031,7 +1283,7 @@ class SocialLSTM:
                 utils.xprint('', newline=True)
 
                 while _choice == 'peek':
-                    _netout = self.peek_outputs(inputs)
+                    _netout = self.peek_outputs(samples)
                     utils.xprint('Network Output:\n%s\n' % _netout, newline=True)
 
                     # ask again after peeking
@@ -1349,7 +1601,7 @@ class SocialLSTM:
             sampler = Sampler(nodes=nodes, keep_positive=True)
             sample_gridding = utils.get_config('sample_gridding')
             if sample_gridding is True:
-                sampler.map_to_grid(grid_system=GridSystem(utils.get_config('grain_grid')))
+                sampler.map_to_grid(grid_system=GridSystem(utils.get_config('scale_grid')))
             # Devide into train set & test set
             trainset = utils.get_config('trainset')
             trainset = int(trainset * sampler.length) if trainset < 1 else trainset
