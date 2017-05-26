@@ -144,6 +144,13 @@ config_pool = {
                 'value': .5,
                 'tags': ['train']
             },
+            # Decrease gradient clipping if training has failed
+            # , only works when gradient clipping is applied
+            # negative <int>: new = old + x
+            'adaptive_grad_clip': {
+                'value': -100,
+                'tags': ['train']
+            },
             # Learning rate for training
             # Used for any training scheme
             'learning_rate': {

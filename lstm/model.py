@@ -32,12 +32,13 @@ class SocialLSTM:
     DECODE_SCHEMES = ['binorm',
                       'euclidean']
 
-    def __init__(self, node_identifiers, motion_range, samples=None, targets=None, adaptive_learning_rate=None,
+    def __init__(self, node_identifiers, motion_range, samples=None, targets=None,
                  share_scheme=None, decode_scheme=None, train_scheme=None,
                  scale_pool=None, range_pool=None,
                  dimension_sample=None, length_sequence_input=None, length_sequence_output=None, size_batch=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
                  learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
+                 adaptive_learning_rate=None, adaptive_grad_clip=None,
                  limit_network_history=None):
         try:
             if __debug__:
@@ -113,6 +114,8 @@ class SocialLSTM:
 
             self.adaptive_learning_rate = adaptive_learning_rate if adaptive_learning_rate is not None \
                 else utils.get_config('adaptive_learning_rate')
+            self.adaptive_grad_clip = adaptive_grad_clip if adaptive_grad_clip is not None \
+                else utils.get_config('adaptive_grad_clip')
 
             # Theano tensor variables (symbolic)
 
@@ -445,10 +448,13 @@ class SocialLSTM:
             raise
 
     def reset_entry(self):
-
         self.count_batch = 0  # real time batch counter for training
         self.entry_epoch = 0
         self.entry_batch = 0
+
+    def reset_network_history(self):
+        if self.network_history is not None:
+            self.network_history = []
 
     # todo change to pure theano
     def build_network(self, params=None):
@@ -748,6 +754,7 @@ class SocialLSTM:
             """
 
             self.embed = L.layers.get_output(layer_embed)
+            self.hids_all = []
             for ilayer in xrange(len(list2d_layers_hidden)):
                 self.hids_all += [[]]
                 self.hids_all[ilayer] += L.layers.get_output(list2d_layers_hidden[ilayer])
@@ -1443,12 +1450,36 @@ class SocialLSTM:
                 done_training = True
 
             except utils.InvalidTrainError, e:
-                # Update learning rate & Retrain
+                # Update training parameters & Retrain
 
-                if self.adaptive_learning_rate is not None:
+                # Update gradient clipping as 1st choice
+                # , unless grad_clip <= 100
+                if self.adaptive_grad_clip is not None \
+                        and self.grad_clip > 100:
+
+                    utils.warn(e.message)
+                    # decay the decrement if necessary
+                    if -self.adaptive_grad_clip >= self.grad_clip:
+                        self.adaptive_grad_clip /= 10
+                        utils.update_config('adaptive_grad_clip', self.adaptive_grad_clip, 'runtime',
+                                            silence=False)
+                    new_grad_clip = self.grad_clip + self.adaptive_grad_clip
+
+                    self.update_grad_clip(new_grad_clip)
+
+                    # Reinitialize related variables
+                    sampler.reset_entry()
+                    self.reset_entry()
+                    self.reset_network_history()
+
+                    continue
+
+                # Update learning rate
+                elif self.adaptive_learning_rate is not None:
+
                     utils.warn(e.message)
                     # update by decay ratio
-                    if self.learning_rate > 0:
+                    if self.adaptive_learning_rate > 0:
                         new_learning_rate = self.learning_rate * self.adaptive_learning_rate
                     # update by decrement
                     else:
@@ -1459,15 +1490,12 @@ class SocialLSTM:
                                                 silence=False)
                         new_learning_rate = self.learning_rate + self.adaptive_learning_rate
 
-
-
                     self.update_learning_rate(new_learning_rate)
 
                     # Reinitialize related variables
                     sampler.reset_entry()
                     self.reset_entry()
-                    if self.network_history is not None:
-                        self.network_history = []
+                    self.reset_network_history()
 
                     continue
 
@@ -1592,6 +1620,39 @@ class SocialLSTM:
         try:
             self.learning_rate = new_learning_rate
             utils.update_config('learning_rate', new_learning_rate, source='runtime', silence=False)
+
+            utils.xprint("Re")
+            self.compute_update()
+
+            utils.xprint("Re")
+            self.compile()
+
+            utils.assertor.assert_not_none(self.initial_param_values,
+                                           "No initial values are found for parameter restoration.")
+
+            utils.xprint("Restore parameters from initial values ... ")
+            self.reset_params(self.initial_param_values)
+            utils.xprint("done.", newline=True)
+
+        except:
+            raise
+
+    def update_grad_clip(self, new_grad_clip):
+        try:
+            self.grad_clip = new_grad_clip
+            utils.update_config('grad_clip', new_grad_clip, source='runtime', silence=False)
+
+            utils.xprint("Re")
+            self.build_network()
+
+            utils.xprint("Re")
+            self.compute_prediction()
+
+            utils.xprint("Re")
+            self.compute_loss()
+
+            utils.xprint("Re")
+            self.compute_deviation()
 
             utils.xprint("Re")
             self.compute_update()

@@ -458,9 +458,13 @@
 
 - Merge branch [master](b74812468ae3edd119c66c9d581c8a37eac68915) & [social](ea4ef886fe29bb453fae7735e1b1fda30b1e4ebb);
 
-###### 2017-05-24
+###### [2017-05-24](9d1a1fcc2251d3832955a4e692ebb8990b84e1fb)
 
 - ADD: Enable to config adaptive learning rate as decrement;
+
+###### 2017-05-24
+
+- ADD: Enable to adapt gradient clipping;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

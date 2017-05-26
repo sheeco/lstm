@@ -1047,6 +1047,11 @@ def _validate_config_():
                 or 0 < adaptive_learning_rate < 1):
             raise ValueError("Configuration 'adaptive_learning_rate' must belong to (-1, 0) or (0, 1).")
 
+        adaptive_grad_clip = get_config('adaptive_grad_clip')
+        assertor.assert_type(adaptive_grad_clip, [int])
+        if not adaptive_grad_clip < 0:
+            raise ValueError("Configuration 'adaptive_grad_clip' must be negative.")
+
     except:
         raise
     pass
