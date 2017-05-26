@@ -4,7 +4,6 @@ import numpy
 
 import theano
 import theano.tensor as T
-from theano.tensor.sharedvar import TensorSharedVariable
 import lasagne as L
 
 import utils
@@ -34,7 +33,7 @@ class SocialLSTM:
 
     def __init__(self, node_identifiers, motion_range, samples=None, targets=None,
                  share_scheme=None, decode_scheme=None, train_scheme=None,
-                 scale_pool=None, range_pool=None,
+                 scale_pool=None, range_pool=None, hit_range=None,
                  dimension_sample=None, length_sequence_input=None, length_sequence_output=None, size_batch=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
                  learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
@@ -97,6 +96,10 @@ class SocialLSTM:
                 if scale_pool is not None else utils.get_config('scale_pool')
             self.range_pool = range_pool \
                 if range_pool is not None else utils.get_config('range_pool')
+
+            # for hitrate computation
+            self.hit_range = hit_range \
+                if hit_range is not None else utils.get_config('hit_range')
 
             self.learning_rate = learning_rate \
                 if learning_rate is not None else utils.get_config('learning_rate')
@@ -162,7 +165,7 @@ class SocialLSTM:
             self.initial_param_values = None  # ..., stored for possible parameter restoration
             self.best_param_values = {  # stored for possible parameter export
                 'epoch': None,  # after n^th epoch
-                'record': None,  # best record (mean deviation value) stored for comparison
+                'record': None,  # best record (hitrate) stored for comparison
                 'value': None,  # actual param values
                 'path': None}  # path of pickled file
 
@@ -244,15 +247,16 @@ class SocialLSTM:
             self.logger.register("train-sample", columns=_columns)
             self.logger.register("train-batch", columns=['epoch', 'batch', 'loss',
                                                          'mean-deviation', 'min-deviation', 'max-deviation'])
-
             self.logger.register("train-epoch", columns=["epoch", "mean-loss",
                                                          "mean-deviation", "min-deviation", "max-deviation"])
+            self.logger.register("train-hitrate", columns=["epoch", "hitrate"])
+
             self.logger.register("test-sample", columns=_columns)
             self.logger.register("test-batch", columns=['epoch', 'batch', 'loss',
                                                         'mean-deviation', 'min-deviation', 'max-deviation'])
-
             self.logger.register("test-epoch", columns=["epoch", "mean-loss",
                                                         "mean-deviation", "min-deviation", "max-deviation"])
+            self.logger.register("test-hitrate", columns=["epoch", "hitrate"])
 
         except:
             raise
@@ -287,7 +291,7 @@ class SocialLSTM:
     def scale(x, beta=.9):
 
         try:
-            beta = T.as_tensor_variable(beta)
+            beta = T.constant(beta, name='stds-scale-ratio')
             return T.mul(beta, x)
         except:
             raise
@@ -309,6 +313,48 @@ class SocialLSTM:
             y = T.tanh(x)
             return SocialLSTM.scale(y, beta)
             # return T.clip(y, -beta, beta)
+        except:
+            raise
+
+    def compute_hitrate(self, deviations, nbin=None, formatted=False):
+        """
+
+        :param deviations: numpy array
+        :param nbin: Only returns n first bins of hitrate histogram.
+        :param formatted:
+        :return: e.g. "50: 61.2%, 100: 20.7%, ..." if `formatted` else [(50, 0.61215), (100, 0.20683), ...]
+        """
+        try:
+            step = self.hit_range
+            deviations = numpy.reshape(deviations, newshape=(-1, deviations.shape[-1]))
+            ceil = int(numpy.ceil(numpy.max(deviations) / step) * step)
+            edges = numpy.arange(start=0, stop=ceil, step=step)
+            hist, _ = numpy.histogram(deviations, bins=edges, density=True)
+            hist = numpy.nan_to_num(hist)
+
+            if nbin is not None \
+                    and nbin > 0:
+                hist = hist[:nbin]
+
+            # additive histogram
+            for ibin in xrange(len(hist)):
+                hist[ibin] = numpy.sum(hist[:ibin + 1])
+
+            if formatted:
+                hitrate = ''
+                for ibin in xrange(len(hist)):
+                    if ibin > 0:
+                        hitrate += ', '
+                    hitrange = edges[ibin + 1]
+                    hitrate += '%d: %.1f' % (hitrange, float(hist[ibin] * 100)) + '%'
+            else:
+                hitrate = []
+                for ibin in xrange(len(hist)):
+                    hitrange = edges[ibin + 1]
+                    hitrate += [(hitrange, hist[ibin])]
+
+            return hitrate
+
         except:
             raise
 
@@ -1036,11 +1082,6 @@ class SocialLSTM:
                                                 allow_input_downcast=True)
             self.func_train = theano.function(self.network_inputs + [self.targets], self.loss, updates=self.updates,
                                               allow_input_downcast=True)
-            # self.func_train = theano.function([self.samples, self.targets], self.loss, updates=updates,
-            #                                   allow_input_downcast=True,
-            #                                   mode=NanGuardMode(nan_is_error=True,
-            #                                                     inf_is_error=True,
-            #                                                     big_is_error=True))
 
             """
             Compile peeking functions for debugging
@@ -1067,9 +1108,9 @@ class SocialLSTM:
 
     def _predict_single_batch_(self, samples, targets=None):
         try:
-            predictions = self.func_predict(samples)
-            deviations = self.func_compare(samples, targets) if targets is not None else None
-            return predictions, deviations
+            predictions_batch = self.func_predict(samples)
+            deviations_batch = self.func_compare(samples, targets) if targets is not None else None
+            return predictions_batch, deviations_batch
         except:
             raise
 
@@ -1117,29 +1158,27 @@ class SocialLSTM:
             #
             # # test_social_tensor()
 
-            predictions, deviations = self._predict_single_batch_(samples, targets)
-
         except:
             raise
 
         # Disallowing interrupt once starting training
         # Keep trying until (1) done & return (2) exception caught
 
-        loss = None
+        loss_batch = None
         while True:
             try:
                 # Actually do training, & only once
 
-                while loss is None:
+                while loss_batch is None:
                     try:
-                        loss = self.func_train(samples, targets)
+                        loss_batch = self.func_train(samples, targets)
                     except KeyboardInterrupt:
                         pass
 
                 # Validate loss
 
                 try:
-                    utils.assertor.assert_finite(loss, 'loss')
+                    utils.assertor.assert_finite(loss_batch, 'loss')
 
                 except AssertionError, e:
                     raise utils.InvalidTrainError("Get loss of 'inf'.")
@@ -1157,6 +1196,7 @@ class SocialLSTM:
                                 "%s" % new_params)
                 else:
                     self.current_param_values = new_params
+                    predictions_batch, deviations_batch = self._predict_single_batch_(samples, targets)
 
                 # Done & break
                 break
@@ -1198,8 +1238,8 @@ class SocialLSTM:
                                 if inode > 0:
                                     compare_content += "\t"
 
-                                _deviation = deviations[inode, isample, iseq]
-                                _prediction = predictions[inode, isample, iseq]
+                                _deviation = deviations_batch[inode, isample, iseq]
+                                _prediction = predictions_batch[inode, isample, iseq]
                                 _target = targets[inode, isample, iseq, -2:]
                                 dict_content[self.node_identifiers[inode]] = "(%.2f\t[%.2f\t%.2f]\t[%.2f\t%.2f])" \
                                                                              % (_deviation, _prediction[0], _prediction[1],
@@ -1216,18 +1256,20 @@ class SocialLSTM:
                 log_by_sample()
 
                 # Print loss & deviation info to console
-                utils.xprint('%s; %s'
-                             % (utils.format_var(float(loss), name='loss'),
-                                utils.format_var(deviations, name='deviations')),
+                hitrate = self.compute_hitrate(deviations_batch, nbin=2, formatted=True)
+                utils.xprint('%s; %s; %s;'
+                             % (utils.format_var(float(loss_batch), name='loss'),
+                                utils.format_var(hitrate, name='hitrate'),
+                                utils.format_var(deviations_batch, name='deviations')),
                              newline=True)
 
                 # Log [loss, mean-deviation, min-deviation, max-deviation] by each batch
 
                 def log_by_batch():
-                    _peek_deviations_this_batch = utils.peek_matrix(deviations, formatted=True)
+                    _peek_deviations_this_batch = utils.peek_matrix(deviations_batch, formatted=True)
 
                     self.logger.log({'epoch': self.entry_epoch, 'batch': self.entry_batch,
-                                     'loss': utils.format_var(float(loss)),
+                                     'loss': utils.format_var(float(loss_batch)),
                                      'mean-deviation': _peek_deviations_this_batch['mean'],
                                      'min-deviation': _peek_deviations_this_batch['min'],
                                      'max-deviation': _peek_deviations_this_batch['max']},
@@ -1245,7 +1287,7 @@ class SocialLSTM:
         pass  # end of while not _done_logging
 
         self.count_batch += 1
-        return predictions, deviations, loss
+        return predictions_batch, deviations_batch, loss_batch
 
     def _train_single_epoch_(self, sampler, tag_log='train'):
 
@@ -1253,8 +1295,9 @@ class SocialLSTM:
         if self.network_history is not None:
             self.network_history.append([])
 
-        losses_by_batch = numpy.zeros((0,))
-        deviations_by_batch = numpy.zeros((0,))
+        losses_epoch = numpy.zeros((0,))
+        deviations_epoch = numpy.zeros((0,))
+        hitrates_epoch = None
 
         done_batch = None  # Whether a batch has got finished properly
         # loop for each batch in single epoch
@@ -1323,8 +1366,10 @@ class SocialLSTM:
 
                 if done_batch:
 
-                    losses_by_batch = numpy.append(losses_by_batch, loss)
-                    deviations_by_batch = numpy.append(deviations_by_batch, numpy.mean(deviations))
+                    losses_epoch = numpy.append(losses_epoch, loss)
+                    deviations_epoch = numpy.append(deviations_epoch,
+                                                    numpy.reshape(deviations, newshape=(-1, deviations.shape[-1])))
+                    hitrates_epoch = self.compute_hitrate(deviations_epoch)
 
                 else:  # skip logging if this batch is undone
                     pass
@@ -1335,12 +1380,14 @@ class SocialLSTM:
         _done_logging = False
         while not _done_logging:
             try:
-                _peek_losses_this_epoch = utils.peek_matrix(losses_by_batch, formatted=True)
-                _peek_deviations_this_epoch = utils.peek_matrix(deviations_by_batch, formatted=True)
+                _peek_losses_this_epoch = utils.peek_matrix(losses_epoch, formatted=True)
+                _peek_deviations_this_epoch = utils.peek_matrix(deviations_epoch, formatted=True)
 
                 # Print loss & deviation info to console
-                utils.xprint('  mean-loss: %s; mean-deviation: %s'
-                             % (_peek_losses_this_epoch['mean'], _peek_deviations_this_epoch['mean']),
+                utils.xprint('  mean-loss: %s; mean-deviation: %s; hitrate: %s'
+                             % (_peek_losses_this_epoch['mean'],
+                                _peek_deviations_this_epoch['mean'],
+                                self.compute_hitrate(deviations_epoch, nbin=2, formatted=True)),
                              newline=True)
 
                 # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
@@ -1354,6 +1401,13 @@ class SocialLSTM:
                                     name="%s-epoch" % tag_log)
 
                 log_by_epoch()
+
+                def log_hitrate():
+                    self.logger.log({'epoch': self.entry_epoch,
+                                     'hitrate': '%s' % hitrates_epoch},
+                                    name="%s-hitrate" % tag_log)
+
+                log_hitrate()
                 _done_logging = True
             except KeyboardInterrupt:
                 pass
@@ -1362,7 +1416,7 @@ class SocialLSTM:
             pass  # end of while not _done_logging
 
         self.entry_batch = 0
-        return losses_by_batch, deviations_by_batch
+        return losses_epoch, deviations_epoch, hitrates_epoch
 
     def tryout(self, sampler):
 
@@ -1380,7 +1434,7 @@ class SocialLSTM:
             # backup current param values
             params_original = self.current_param_values
 
-            _, deviations_by_batch = self._train_single_epoch_(sampler, tag_log='test')
+            _, deviations, hitrates = self._train_single_epoch_(sampler, tag_log='test')
             sampler.reset_entry()
             # must not change training entry
             # self.entry_epoch += 1
@@ -1392,7 +1446,7 @@ class SocialLSTM:
             # utils.xprint('  mean-deviation: %s' % numpy.mean(deviations_by_batch), newline=True)
 
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
-            return deviations_by_batch
+            return deviations, hitrates
 
         except:
             raise
@@ -1430,7 +1484,7 @@ class SocialLSTM:
                     self.entry_epoch += 1
                     utils.xprint('  Epoch %d ... ' % self.entry_epoch, newline=True)
 
-                    losses_by_batch, deviations_by_batch = self._train_single_epoch_(sampler)
+                    losses_by_batch, deviations_by_batch, hitrates_this_epoch = self._train_single_epoch_(sampler)
 
                     losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
                     deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
@@ -1440,8 +1494,8 @@ class SocialLSTM:
                     # Save as the best params if necessary
 
                     if self.best_param_values['record'] is None \
-                            or numpy.mean(deviations_by_batch) <= self.best_param_values['record']:
-                        self.update_best_params(self.entry_epoch, self.current_param_values, numpy.mean(deviations_by_batch))
+                            or hitrates_this_epoch[0] >= self.best_param_values['record']:
+                        self.update_best_params(self.entry_epoch, self.current_param_values, hitrates_this_epoch[0])
 
                     if iepoch >= num_epoch:
                         break
@@ -1611,7 +1665,10 @@ class SocialLSTM:
             # Save initial values of params for possible future restoration
             self.initial_param_values = params
             self.current_param_values = self.initial_param_values
-            self.best_param_values = {'epoch': 0, 'value': self.initial_param_values}
+            self.best_param_values['epoch'] = None
+            self.best_param_values['value'] = None
+            self.best_param_values['record'] = None
+            self.best_param_values['path'] = None
 
         except:
             raise
@@ -1731,7 +1788,7 @@ class SocialLSTM:
                         if model.stop:
                             break
 
-                        tryout_deviations = model.tryout(sampler_testset)
+                        tryout_deviations, tryout_hitrates = model.tryout(sampler_testset)
 
                         if model.entry_epoch >= model.num_epoch:
 

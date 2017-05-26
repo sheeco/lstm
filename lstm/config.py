@@ -91,6 +91,11 @@ config_pool = {
                 'value': 50,
                 'tags': []
             },
+            # Maximum deviation to be considered a hit (exclusive)
+            'hit_range': {
+                'value': 50,
+                'tags': []
+            },
             # Decoding scheme
             'decode_scheme': {
                 # Among ['binorm', 'euclidean']

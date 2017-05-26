@@ -1042,15 +1042,17 @@ def _validate_config_():
             raise ValueError("Configuration 'trainset' must be positive.")
 
         adaptive_learning_rate = get_config('adaptive_learning_rate')
-        assertor.assert_type(adaptive_learning_rate, [float])
-        if not (-1 < adaptive_learning_rate < 0
-                or 0 < adaptive_learning_rate < 1):
-            raise ValueError("Configuration 'adaptive_learning_rate' must belong to (-1, 0) or (0, 1).")
+        if adaptive_learning_rate is not None:
+            assertor.assert_type(adaptive_learning_rate, [float])
+            if not (-1 < adaptive_learning_rate < 0
+                    or 0 < adaptive_learning_rate < 1):
+                raise ValueError("Configuration 'adaptive_learning_rate' must belong to (-1, 0) or (0, 1).")
 
         adaptive_grad_clip = get_config('adaptive_grad_clip')
-        assertor.assert_type(adaptive_grad_clip, [int])
-        if not adaptive_grad_clip < 0:
-            raise ValueError("Configuration 'adaptive_grad_clip' must be negative.")
+        if adaptive_grad_clip is not None:
+            assertor.assert_type(adaptive_grad_clip, [int])
+            if not adaptive_grad_clip < 0:
+                raise ValueError("Configuration 'adaptive_grad_clip' must be negative.")
 
     except:
         raise

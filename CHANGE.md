@@ -462,9 +462,16 @@
 
 - ADD: Enable to config adaptive learning rate as decrement;
 
-###### 2017-05-24
+###### [2017-05-24](3f60184f77fb00fc8539ea76f5b0c31b3c335ead)
 
 - ADD: Enable to adapt gradient clipping;
+
+###### 2017-05-25
+
+- ADD: Hitrate calculation & logging;
+- FIX: Wrong calculation time of predictions & deviations;
+- MOD: Change from deviation to hitrate as the metric to compete best param values;
+- FIX: Bug with best param values;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
