@@ -446,9 +446,17 @@
 - FIX: Forget to reset entries after learning rate gets updated;
 - FIX: Logging with mutiple nodes;
 
-###### 2017-05-22
+###### [2017-05-22](b74812468ae3edd119c66c9d581c8a37eac68915)
 
 - OPT: for param pickling;
+
+###### [2017-05-23](ea4ef886fe29bb453fae7735e1b1fda30b1e4ebb)
+
+- ADD: Social LSTM with Occupancy Map sharing. & Some OPT;
+
+###### 2017-05-23
+
+- Merge branch [master](b74812468ae3edd119c66c9d581c8a37eac68915) & [social](ea4ef886fe29bb453fae7735e1b1fda30b1e4ebb);
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
