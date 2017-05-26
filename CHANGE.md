@@ -454,9 +454,13 @@
 
 - ADD: Social LSTM with Occupancy Map sharing. & Some OPT;
 
-###### 2017-05-23
+###### [2017-05-23](3e43fe9f57667afaa52062805905702866c89f8c)
 
 - Merge branch [master](b74812468ae3edd119c66c9d581c8a37eac68915) & [social](ea4ef886fe29bb453fae7735e1b1fda30b1e4ebb);
+
+###### 2017-05-24
+
+- ADD: Enable to config adaptive learning rate as decrement;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

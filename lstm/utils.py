@@ -1036,10 +1036,16 @@ def _validate_config_():
                     config._update_config_(key, validated, source=content['source'])
 
         # Validate numeric configs
-        assertor.assert_type(get_config('trainset'), [float, int])
-        if not get_config('trainset') > 0:
+        trainset = get_config('trainset')
+        assertor.assert_type(trainset, [float, int])
+        if not trainset > 0:
             raise ValueError("Configuration 'trainset' must be positive.")
 
+        adaptive_learning_rate = get_config('adaptive_learning_rate')
+        assertor.assert_type(adaptive_learning_rate, [float])
+        if not (-1 < adaptive_learning_rate < 0
+                or 0 < adaptive_learning_rate < 1):
+            raise ValueError("Configuration 'adaptive_learning_rate' must belong to (-1, 0) or (0, 1).")
 
     except:
         raise

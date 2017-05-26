@@ -1447,7 +1447,20 @@ class SocialLSTM:
 
                 if self.adaptive_learning_rate is not None:
                     utils.warn(e.message)
-                    new_learning_rate = self.learning_rate * self.adaptive_learning_rate
+                    # update by decay ratio
+                    if self.learning_rate > 0:
+                        new_learning_rate = self.learning_rate * self.adaptive_learning_rate
+                    # update by decrement
+                    else:
+                        # decay the decrement if necessary
+                        if -self.adaptive_learning_rate >= self.learning_rate:
+                            self.adaptive_learning_rate /= 10
+                            utils.update_config('adaptive_learning_rate', self.adaptive_learning_rate, 'runtime',
+                                                silence=False)
+                        new_learning_rate = self.learning_rate + self.adaptive_learning_rate
+
+
+
                     self.update_learning_rate(new_learning_rate)
 
                     # Reinitialize related variables

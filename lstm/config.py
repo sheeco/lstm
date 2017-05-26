@@ -137,7 +137,9 @@ config_pool = {
                 'value': 'rmsprop',
                 'tags': ['train']
             },
-            # Decay learning rate by this ratio if training has failed
+            # Decrease learning rate if training has failed
+            # <float> within (0, 1): new = old * x
+            # <float> within (-1, 0): new = old + x
             'adaptive_learning_rate': {
                 'value': .5,
                 'tags': ['train']
