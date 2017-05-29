@@ -1497,6 +1497,8 @@ class SocialLSTM:
                             or hitrates_this_epoch[0] >= self.best_param_values['record']:
                         self.update_best_params(self.entry_epoch, self.current_param_values, hitrates_this_epoch[0])
 
+                    if self.stop:
+                        break
                     if iepoch >= num_epoch:
                         break
 
@@ -1559,7 +1561,8 @@ class SocialLSTM:
             pass  # end of single training attempt
         pass  # end of while not done_training
 
-        utils.xprint('Done in %s.' % timer.stop(), newline=True)
+        if not self.stop:
+            utils.xprint('Done in %s.' % timer.stop(), newline=True)
         self.export_params()
         return losses_by_epoch, deviations_by_epoch
 

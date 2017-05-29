@@ -466,12 +466,16 @@
 
 - ADD: Enable to adapt gradient clipping;
 
-###### 2017-05-25
+###### [2017-05-25](3edd2e2d913d94419d18f11744918a73fd3b1afb)
 
 - ADD: Hitrate calculation & logging;
 - FIX: Wrong calculation time of predictions & deviations;
 - MOD: Change from deviation to hitrate as the metric to compete best param values;
 - FIX: Bug with best param values;
+
+###### 2017-05-29
+
+- FIX: Bug with stopping while training;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
