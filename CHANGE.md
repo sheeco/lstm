@@ -477,9 +477,13 @@
 
 - FIX: Bug with stopping while training;
 
-###### 2017-05-31
+###### [2017-05-31](dddfb6fd5112ae8a7236394254c853c2928d41d5)
 
 - FIX: Bug with hitrate printing;
+
+###### 2017-05-31
+
+- FIX: Bug with asking functions;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

@@ -22,6 +22,7 @@ __all__ = [
     "filer",
     "InvalidTrainError",
     "match",
+    "flush",
     "xprint",
     "warn",
     "handle",
@@ -769,6 +770,18 @@ def match(shape1, shape2):
                     for s1, s2 in zip(shape1, shape2)))
 
 
+def flush():
+    pin = sys.stdin
+    if pin is not None:
+        pin.flush()
+    pout = sys.stdout
+    if pout is not None:
+        pout.flush()
+    perr = sys.stderr
+    if perr is not None:
+        perr.flush()
+
+
 def xprint(what, newline=False, logger=None, error=False):
     try:
         # Mandatory newline for errors
@@ -782,19 +795,16 @@ def xprint(what, newline=False, logger=None, error=False):
             logger.log_console("%s\n" % what if newline else "%s" % what)
 
         # flush stdin before writing
-        p_in = sys.stdin
-        if p_in is not None:
-            p_in.flush()
+        flush()
 
+        flush()
         pstream = None
         if error:
             pstream = sys.stderr
-            pstream.flush()
             pstream.write("%s\n" % what)
             pstream.flush()
         else:
             pstream = sys.stdout
-            pstream.flush()
             pstream.write("%s\n" % what if newline else "%s" % what)
             pstream.flush()
 
@@ -840,9 +850,7 @@ def ask(message, code_quit='q', interpretor=None, **kwargs):
 
     try:
         # flush stdin before writing
-        p_in = sys.stdin
-        if p_in is not None:
-            p_in.flush()
+        flush()
 
         question = "%s\n$ " % message
         answer = raw_input(question)
@@ -865,10 +873,9 @@ def ask(message, code_quit='q', interpretor=None, **kwargs):
                 return answer
 
         except AssertionError, e:
-            return ask(e.message, code_quit=code_quit, interpretor=interpretor)
-    except:
-        pass
-    return ask("Pardon?", code_quit=code_quit, interpretor=interpretor)
+            return ask(e.message, code_quit=code_quit, interpretor=interpretor, **kwargs)
+    except Exception, e:
+        return ask("Pardon? (%s)" % e.message, code_quit=code_quit, interpretor=interpretor, **kwargs)
 
 
 def _interpret_confirm_(answer):
