@@ -473,9 +473,13 @@
 - MOD: Change from deviation to hitrate as the metric to compete best param values;
 - FIX: Bug with best param values;
 
-###### 2017-05-29
+###### [2017-05-29](575078143379eca398a7f8c12d71c4df34ab4975)
 
 - FIX: Bug with stopping while training;
+
+###### 2017-05-31
+
+- FIX: Bug with hitrate printing;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

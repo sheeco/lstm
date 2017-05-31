@@ -316,44 +316,38 @@ class SocialLSTM:
         except:
             raise
 
-    def compute_hitrate(self, deviations, nbin=None, formatted=False):
+    def compute_hitrate(self, deviations, nbin=None):
         """
 
         :param deviations: numpy array
         :param nbin: Only returns n first bins of hitrate histogram.
-        :param formatted:
         :return: e.g. "50: 61.2%, 100: 20.7%, ..." if `formatted` else [(50, 0.61215), (100, 0.20683), ...]
         """
         try:
             step = self.hit_range
             deviations = numpy.reshape(deviations, newshape=(-1, deviations.shape[-1]))
             ceil = int(numpy.ceil(numpy.max(deviations) / step) * step)
-            edges = numpy.arange(start=0, stop=ceil, step=step)
-            hist, _ = numpy.histogram(deviations, bins=edges, density=True)
-            hist = numpy.nan_to_num(hist)
+            if nbin is not None \
+                    and ceil < nbin * step:
+                ceil = nbin * step
+
+            edges = numpy.arange(start=0, stop=ceil + step, step=step)
+            hist, _ = numpy.histogram(deviations, bins=edges)
+            hist = numpy.true_divide(hist, numpy.size(deviations))
 
             if nbin is not None \
                     and nbin > 0:
                 hist = hist[:nbin]
 
-            # additive histogram
+            hitrates = ''
             for ibin in xrange(len(hist)):
-                hist[ibin] = numpy.sum(hist[:ibin + 1])
+                if ibin > 0:
+                    hitrates += ', '
+                hitrange = '%d' % edges[ibin + 1]
+                hitrate = '%.1f' % (hist[ibin] * 100) + '%'
+                hitrates += '%s: %s' % (hitrange, hitrate)
 
-            if formatted:
-                hitrate = ''
-                for ibin in xrange(len(hist)):
-                    if ibin > 0:
-                        hitrate += ', '
-                    hitrange = edges[ibin + 1]
-                    hitrate += '%d: %.1f' % (hitrange, float(hist[ibin] * 100)) + '%'
-            else:
-                hitrate = []
-                for ibin in xrange(len(hist)):
-                    hitrange = edges[ibin + 1]
-                    hitrate += [(hitrange, hist[ibin])]
-
-            return hitrate
+            return hitrates
 
         except:
             raise
@@ -1256,10 +1250,10 @@ class SocialLSTM:
                 log_by_sample()
 
                 # Print loss & deviation info to console
-                hitrate = self.compute_hitrate(deviations_batch, nbin=2, formatted=True)
+                hitrates = self.compute_hitrate(deviations_batch, nbin=2)
                 utils.xprint('%s; %s; %s;'
                              % (utils.format_var(float(loss_batch), name='loss'),
-                                utils.format_var(hitrate, name='hitrate'),
+                                utils.format_var(hitrates, name='hitrate'),
                                 utils.format_var(deviations_batch, name='deviations')),
                              newline=True)
 
@@ -1387,7 +1381,7 @@ class SocialLSTM:
                 utils.xprint('  mean-loss: %s; mean-deviation: %s; hitrate: %s'
                              % (_peek_losses_this_epoch['mean'],
                                 _peek_deviations_this_epoch['mean'],
-                                self.compute_hitrate(deviations_epoch, nbin=2, formatted=True)),
+                                self.compute_hitrate(deviations_epoch, nbin=2)),
                              newline=True)
 
                 # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
