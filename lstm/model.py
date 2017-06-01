@@ -1775,49 +1775,53 @@ class SocialLSTM:
                 train_losses = numpy.zeros((0,))
                 train_deviations = numpy.zeros((0,))
 
-                # Do training
-                try:
+                if model.num_epoch > 0:
+                    # Do training
+                    try:
 
-                    while True:
-                        _losses, _deviations = model.train(sampler_trainset, num_epoch=utils.get_config('tryout_frequency'))
-                        train_losses = numpy.append(train_losses, _losses)
-                        train_deviations = numpy.append(train_deviations, _deviations)
-                        if model.stop:
-                            break
+                        while True:
+                            _losses, _deviations = model.train(sampler_trainset, num_epoch=utils.get_config('tryout_frequency'))
+                            train_losses = numpy.append(train_losses, _losses)
+                            train_deviations = numpy.append(train_deviations, _deviations)
+                            if model.stop:
+                                break
 
-                        tryout_deviations, tryout_hitrates = model.tryout(sampler_testset)
+                            tryout_deviations, tryout_hitrates = model.tryout(sampler_testset)
 
-                        if model.entry_epoch >= model.num_epoch:
+                            if model.entry_epoch >= model.num_epoch:
 
-                            more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
+                                more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
 
-                            if more:
+                                if more:
 
-                                num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
+                                    num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
 
-                                # quit means no more epochs
-                                if num_more is not None \
-                                        and num_more > 0:
-                                    model.num_epoch += num_more
-                                    utils.update_config('num_epoch', model.num_epoch, 'runtime', silence=False)
+                                    # quit means no more epochs
+                                    if num_more is not None \
+                                            and num_more > 0:
+                                        model.num_epoch += num_more
+                                        utils.update_config('num_epoch', model.num_epoch, 'runtime', silence=False)
+                                    else:
+                                        break
                                 else:
                                     break
                             else:
-                                break
-                        else:
-                            continue
+                                continue
 
-                except Exception, e:
-                    utils.handle(e)
-                else:
-                    utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
-                                                "loss-by-epoch": '%s\n' % utils.format_var(train_losses, detail=True),
-                                                "deviation-by-epoch": '%s\n' % utils.format_var(train_deviations,
-                                                                                                detail=True)},
-                                               name="train")
+                    except Exception, e:
+                        utils.handle(e)
+                    else:
+                        utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
+                                                    "loss-by-epoch": '%s\n' % utils.format_var(train_losses, detail=True),
+                                                    "deviation-by-epoch": '%s\n' % utils.format_var(train_deviations,
+                                                                                                    detail=True)},
+                                                   name="train")
 
-                finally:
-                    model.export_history()
+                    finally:
+                        model.export_history()
+
+                else:  # tryout only
+                    pass
 
             except:
                 raise

@@ -481,9 +481,13 @@
 
 - FIX: Bug with hitrate printing;
 
-###### 2017-05-31
+###### [2017-05-31](441e262a39747445fabffa84cb61e5ec6a7a20e8)
 
 - FIX: Bug with asking functions;
+
+###### 2017-06-01
+
+- OPT: Enable to tryout without training;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
