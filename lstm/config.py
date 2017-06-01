@@ -54,11 +54,6 @@ config_pool = {
                 'value': None,
                 'tags': ['path']
             },
-            # File path that latest parameters get pickled to
-            'file_pickle': {
-                'value': None,
-                'tags': ['path']
-            },
             # File path that which parameters get unpickled & imported from
             'file_unpickle': {
                 'value': None,
@@ -159,7 +154,7 @@ config_pool = {
             # Learning rate for training
             # Used for any training scheme
             'learning_rate': {
-                'value': .001,
+                'value': .005,
                 'tags': ['train']
             },
             # All gradients above this will be clipped during training
@@ -409,11 +404,6 @@ def _import_config_(config, tag=None):
 
         for impkey, impvalue in config.iteritems():
             _update_config_(impkey, impvalue, 'imported')
-
-        # change pickle path to unpickle path if exists
-        if 'file_pickle' in config:
-            _update_config_('file_unpickle', config['file_pickle']['value'], 'imported')
-            remove_config('file_pickle')
 
     except:
         raise

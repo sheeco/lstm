@@ -208,11 +208,14 @@ class Logger:
         self.bound = bound
 
         # {'name':
-        #   content=[(tag1, [... ]),
-        #            (tag2, [... ])
-        #           ]
+        #    (overwritable,
+        #     content=[(tag1, [... ]),
+        #              (tag2, [... ])
+        #             ]
+        #    )
         # }
         self.logs = {}
+        self.logs_files = {'default': {}}
 
         self.filename_console = 'console'
 
@@ -227,7 +230,8 @@ class Logger:
             if self.log_path is None \
                     or identifier != self.identifier \
                     or tag != self.tag:
-                new_log_path = Logger._format_log_path_(self.root_path, identifier if identifier is not None else '', tag)
+                new_log_path = Logger._format_log_path_(self.root_path, identifier if identifier is not None else '',
+                                                        tag)
 
                 # Initialize log path
                 if self.log_path is None:
@@ -308,7 +312,7 @@ class Logger:
         except:
             raise
 
-    def log_pickle(self, what, filename):
+    def log_pickle(self, what, filename, replace=None, overwritable=True):
         try:
             self._validate_log_path_()
 
@@ -317,7 +321,35 @@ class Logger:
                 filer.create_path(directory)
 
             path = filer.format_subpath(directory, filename)
+            if not overwritable \
+                    and path in self.logs_files['default']:
+                pickles_to_move = []
+                for path_, overwritable_ in self.logs_files['default'].iteritems():
+                    if not overwritable_:
+                        pickles_to_move += [path_]
+                i = 1
+                while True:
+                    dir_dst = filer.format_subpath(directory, '.%d' % i, isfile=False)
+                    if dir_dst in self.logs_files:
+                        i += 1
+                        continue
+                    else:
+                        filer.create_path(dir_dst)
+                        self.logs_files[dir_dst] = {}
+                        for path_ in pickles_to_move:
+                            filer.move_file(path_, dir_dst)
+                            self.logs_files['default'].pop(path_)
+                            self.logs_files[dir_dst][path_] = False
+                        break
+
             filer.dump_to_file(what, path)
+            if replace is not None \
+                    and replace != path:
+                if filer.if_exists(replace):
+                    filer.remove_file(replace)
+                if replace in self.logs_files['default']:
+                    self.logs_files['default'].pop(replace)
+            self.logs_files['default'][path] = overwritable
             return path
 
         except:
@@ -326,24 +358,45 @@ class Logger:
     def has_log(self, name):
         return name in self.logs
 
-    def register(self, name, columns=None):
+    def register(self, name, columns=None, overwritable=True):
         try:
             self._validate_log_path_()
 
+            if self.has_log(name) and \
+                    not self.logs[name][0]:  # not overwritable
+                _dir, filename = filer.split_path(name)
+                _dir = filer.format_subpath(self.log_path, _dir, isfile=False)
+                filename = '%s.log' % filename
+                filepath = filer.format_subpath(_dir, filename)
+                if filer.if_exists(filepath):
+                    i = 1
+                    while True:
+                        newdir = filer.format_subpath(_dir, '.%d' % i, isfile=False)
+                        newfilepath = filer.format_subpath(newdir, filename)
+                        if filer.if_exists(newfilepath):
+                            i += 1
+                            continue
+                        else:
+                            if not filer.if_exists(newdir):
+                                filer.create_path(newdir)
+                            filer.move_file(filepath, newdir)
+                            self.logs.pop(name)
+                            break
+
             if not self.has_log(name):
                 # Create the sub path if necessary
-                _dir, _filename = filer.split_path(name)
+                _dir, filename = filer.split_path(name)
                 if _dir not in ('', '/'):
-                    filer.create_path(filer.format_subpath(self.log_path, _dir))
+                    filer.create_path(filer.format_subpath(self.log_path, _dir, isfile=False))
 
                 content = []
                 if columns is None:
                     columns = ['']
                 for tag in columns:
                     content += [(tag, [])]
-                self.logs[name] = content
+                self.logs[name] = (overwritable, content)
 
-                filepath = '%s%s.log' % (self.log_path, name)
+                filepath = filer.format_subpath(self.log_path, '%s.log' % name)
                 pfile = open(filepath, 'a')
                 title = '# '
                 hastag = False
@@ -355,9 +408,6 @@ class Logger:
                     pfile.write('%s\n' % title)
                 pfile.flush()
                 pfile.close()
-
-            else:
-                pass
 
         except:
             raise
@@ -382,12 +432,13 @@ class Logger:
                                  "Must `register` first." % name)
             else:
                 registry = self.logs[name]
+                columns = registry[1]
             path = '%s%s.log' % (self.log_path, name)
             pfile = open(path, 'a')
 
             if isinstance(content, dict):
                 dict_content = copy.deepcopy(content)
-                for column in registry:
+                for column in columns:
                     tag = column[0]
                     rows = column[1]
                     if tag in dict_content:
@@ -401,18 +452,18 @@ class Logger:
                 if len(dict_content) > 0:
                     raise ValueError("Cannot find tag %s in log registry. " % dict_content.keys())
 
-                for column in registry:
+                for column in columns:
                     pfile.write('%s\t' % column[1][-1])
                 pfile.write('\n')
 
             elif isinstance(content, str):
-                column0 = registry[0]
+                column0 = columns[0]
                 tag0 = column0[0]
                 rows0 = column0[1]
 
-                if len(registry) > 1 \
+                if len(columns) > 1 \
                         or tag0 != '':
-                    raise ValueError("A tag among %s is requested. " % [column[0] for column in registry])
+                    raise ValueError("A tag among %s is requested. " % [column[0] for column in columns])
 
                 rows0 += [content]
                 pfile.write(content)
@@ -555,13 +606,13 @@ class Assertor:
                     raise IOError("'%s' does not exists." % path)
                 else:
                     raise IOError("'%s' already exists." % path)
-            # else:
-                # if assertion is True:
-                #     warn("filer.assert_exists: "
-                #          "'%s' does not exists." % path)
-                # else:
-                #     warn("filer.assert_exists: "
-                #          "'%s' already exists." % path)
+                    # else:
+                    # if assertion is True:
+                    #     warn("filer.assert_exists: "
+                    #          "'%s' does not exists." % path)
+                    # else:
+                    #     warn("filer.assert_exists: "
+                    #          "'%s' already exists." % path)
             return False
         else:
             return True
@@ -699,6 +750,14 @@ class Filer:
             if filer.if_exists(path) \
                     and filer.is_file(path):
                 os.remove(path)
+        except:
+            raise
+
+    @staticmethod
+    def move_file(frompath, topath):
+        try:
+            filer.copy_file(frompath, topath)
+            filer.remove_file(frompath)
         except:
             raise
 
@@ -1292,12 +1351,26 @@ def test():
             choice = ask(_hint, code_quit='q', interpretor=interpret_menu, menu=_menu)
 
         def test_pickling():
-            temp_logger = Logger(identifier='pickle')
-            temp_logger.register('pickle')
-            temp_logger.log('content used for pickling test', name='pickle')
-            filename = Filer.format_subpath(temp_logger.log_path, 'logger.pkl')
-            Filer.dump_to_file(temp_logger, filename)
-            logger_loaded = Filer.load_from_file(filename)
+            _logger = get_sublogger()
+            if isinstance(_logger, Logger):
+                _logger.log_pickle('test', filename='test-overwritable')
+                _logger.log_pickle('test', filename='test-unoverwritable', overwritable=False)
+                _logger.log_pickle('test', filename='test1-unoverwritable', overwritable=False)
+                # should move unoverwriteable ones to '.1/'
+                _logger.log_pickle('test', filename='test-unoverwritable', overwritable=False)
+                _logger.log_pickle('test', filename='test1-unoverwritable', overwritable=False)
+                # should move unoverwriteable ones to '.2/'
+                _logger.log_pickle('test', filename='test-unoverwritable', overwritable=False)
+
+        def test_register():
+            _logger = get_sublogger()
+            if isinstance(_logger, Logger):
+                _logger.register('test/1', overwritable=True)
+                _logger.register('test/2', overwritable=False)
+                # move to '.1/'
+                _logger.register('test/2', overwritable=False)
+                # move to '.2/'
+                _logger.register('test/2', overwritable=False)
 
         def test_abstract():
             try:
@@ -1314,13 +1387,14 @@ def test():
         # test_hiding()
         # test_formatting()
         # test_ask()
-        # test_pickling()
+        test_pickling()
+        test_register()
 
         # test_warn()
         # test_args()
         # test_exception()
         # test_ask()
-        test_ask_menu()
+        # test_ask_menu()
         # Timer.test()
         # test_abstract()
         # test_unknown_config()

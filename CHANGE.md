@@ -485,9 +485,13 @@
 
 - FIX: Bug with asking functions;
 
-###### 2017-06-01
+###### [2017-06-01](82ac680f65995e95eccb577cea486fe8ae8a24a0)
 
 - OPT: Enable to tryout without training;
+
+###### 2017-06-01
+
+- OPT: Backup some of the old logs instead of overwriting when learning rate gets updated;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

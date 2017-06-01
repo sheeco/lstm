@@ -1213,7 +1213,6 @@ class SocialLSTM:
                     # log as .trace format for convenience in analyse
                     FILENAME_COMPARE = '%s-epoch%d' % (tag_log, self.entry_epoch)
                     logname_compare = utils.filer.format_subpath(utils.get_config('path_compare'), FILENAME_COMPARE)
-                    self.logger.register(logname_compare)
                     compare_content = ''
 
                     for isample in xrange(0, size_this_batch):
@@ -1288,6 +1287,10 @@ class SocialLSTM:
         # start of single epoch
         if self.network_history is not None:
             self.network_history.append([])
+
+        FILENAME_COMPARE = '%s-epoch%d' % (tag_log, self.entry_epoch)
+        logname_compare = utils.filer.format_subpath(utils.get_config('path_compare'), FILENAME_COMPARE)
+        self.logger.register(logname_compare, overwritable=False)
 
         losses_epoch = numpy.zeros((0,))
         deviations_epoch = numpy.zeros((0,))
@@ -1409,6 +1412,7 @@ class SocialLSTM:
                 raise
             pass  # end of while not _done_logging
 
+        sampler.reset_entry()
         self.entry_batch = 0
         return losses_epoch, deviations_epoch, hitrates_epoch
 
@@ -1429,7 +1433,6 @@ class SocialLSTM:
             params_original = self.current_param_values
 
             _, deviations, hitrates = self._train_single_epoch_(sampler, tag_log='test')
-            sampler.reset_entry()
             # must not change training entry
             # self.entry_epoch += 1
 
@@ -1440,6 +1443,7 @@ class SocialLSTM:
             # utils.xprint('  mean-deviation: %s' % numpy.mean(deviations_by_batch), newline=True)
 
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
+            self.export_params(overwritable=False)
             return deviations, hitrates
 
         except:
@@ -1482,7 +1486,6 @@ class SocialLSTM:
 
                     losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
                     deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
-                    sampler.reset_entry()
                     iepoch += 1
 
                     # Save as the best params if necessary
@@ -1557,7 +1560,6 @@ class SocialLSTM:
 
         if not self.stop:
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
-        self.export_params()
         return losses_by_epoch, deviations_by_epoch
 
     def export_history(self, path=None):
@@ -1580,7 +1582,7 @@ class SocialLSTM:
         except:
             raise
 
-    def export_params(self, params=None, filename=None):
+    def export_params(self, params=None, filename=None, replace=None, overwritable=True):
         """
 
         :param params: Parameter values to export. Current values are used if not specified.
@@ -1601,7 +1603,7 @@ class SocialLSTM:
             if filename is None:
                 filename = FILENAME_DEFAULT
 
-            path = self.logger.log_pickle(params, filename)
+            path = self.logger.log_pickle(params, filename, replace=replace, overwritable=overwritable)
             return path
 
         except:
@@ -1609,20 +1611,15 @@ class SocialLSTM:
 
     def update_best_params(self, epoch, value, record):
         try:
+            filename = 'params-best-epoch%d.pkl' % epoch
+
+            old_path = self.best_param_values['path']
+            path = self.export_params(params=value, filename=filename, replace=old_path, overwritable=False)
+
             self.best_param_values['epoch'] = epoch
             self.best_param_values['value'] = value
             self.best_param_values['record'] = record
-
-            filename = 'params-best-epoch%d.pkl' % epoch
-
-            path = self.export_params(params=value, filename=filename)
-
-            old_path = self.best_param_values['path']
-            if old_path is not None \
-                    and old_path != path:
-                utils.filer.remove_file(old_path)
             self.best_param_values['path'] = path
-            utils.update_config('file_pickle', path, 'runtime', tags=['path'])
 
             utils.xprint("Best parameters have been exported to '%s'." % path, newline=True)
             return path
