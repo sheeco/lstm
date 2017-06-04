@@ -150,7 +150,6 @@ class SocialLSTM:
 
             # Real values stored for printing / debugging
 
-            self.count_batch = 0  # real time batch counter for training
             self.entry_epoch = 0
             self.entry_batch = 0
             self.stop = False  # to mark for manual stop
@@ -488,7 +487,6 @@ class SocialLSTM:
             raise
 
     def reset_entry(self):
-        self.count_batch = 0  # real time batch counter for training
         self.entry_epoch = 0
         self.entry_batch = 0
 
@@ -1279,7 +1277,6 @@ class SocialLSTM:
                 raise
         pass  # end of while not _done_logging
 
-        self.count_batch += 1
         return predictions_batch, deviations_batch, loss_batch
 
     def _train_single_epoch_(self, sampler, tag_log='train'):
@@ -1356,6 +1353,11 @@ class SocialLSTM:
                     break
                 else:
                     continue
+            except utils.InvalidTrainError, e:
+                sampler.reset_entry()
+                self.entry_batch = 0
+                raise
+                
             except:
                 raise
 
@@ -1446,6 +1448,10 @@ class SocialLSTM:
             self.export_params(overwritable=False)
             return deviations, hitrates
 
+        except utils.InvalidTrainError, e:
+            utils.xprint(e.message, newline=True)
+            utils.xprint('Undone.', newline=True)
+            
         except:
             raise
 

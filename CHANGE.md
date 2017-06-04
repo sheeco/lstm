@@ -489,9 +489,13 @@
 
 - OPT: Enable to tryout without training;
 
-###### 2017-06-01
+###### [2017-06-01](774b87107395167633a5a4281b3fc952686f3161)
 
 - OPT: Backup some of the old logs instead of overwriting when learning rate gets updated;
+
+###### 2017-06-04
+
+- FIX: Bug with `InvalidTrainError` during testing;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
