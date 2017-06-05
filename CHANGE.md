@@ -493,9 +493,13 @@
 
 - OPT: Backup some of the old logs instead of overwriting when learning rate gets updated;
 
-###### 2017-06-04
+###### [2017-06-04](a764f8f2eb778d3ad54dff7e8a23021af2b9016e)
 
 - FIX: Bug with `InvalidTrainError` during testing;
+
+###### 2017-06-05
+
+- OPT: Accumulative hitrate;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

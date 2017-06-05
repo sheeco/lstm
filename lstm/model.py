@@ -338,6 +338,10 @@ class SocialLSTM:
                     and nbin > 0:
                 hist = hist[:nbin]
 
+            for ibin in range(len(hist) - 1, 0, -1):
+                # sum from x_0 to x_i
+                hist[ibin] = numpy.sum(hist[:ibin + 1])
+
             hitrates = ''
             for ibin in xrange(len(hist)):
                 if ibin > 0:
@@ -1383,10 +1387,10 @@ class SocialLSTM:
                 _peek_deviations_this_epoch = utils.peek_matrix(deviations_epoch, formatted=True)
 
                 # Print loss & deviation info to console
-                utils.xprint('  mean-loss: %s; mean-deviation: %s; hitrate: %s'
+                utils.xprint('  mean-loss: %s; hitrate: %s; mean-deviation: %s'
                              % (_peek_losses_this_epoch['mean'],
-                                _peek_deviations_this_epoch['mean'],
-                                self.compute_hitrate(deviations_epoch, nbin=2)),
+                                self.compute_hitrate(deviations_epoch, nbin=2),
+                                _peek_deviations_this_epoch['mean']),
                              newline=True)
 
                 # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
