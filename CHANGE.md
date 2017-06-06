@@ -497,9 +497,14 @@
 
 - FIX: Bug with `InvalidTrainError` during testing;
 
-###### 2017-06-05
+###### [2017-06-05](4873171177773877eaade8e40b44677be9655f14)
 
 - OPT: Accumulative hitrate;
+
+###### 2017-06-06
+
+- FIX: Reset learning rate for each tryout;
+- RFCT: for computing & compiling;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
