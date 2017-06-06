@@ -26,9 +26,6 @@ samples = np.array([[3.5010000000000000e+004, - 4.9388819984325000e+003, - 2.138
 #                     [1.8510000000000000e+004, -1.6986638996610081e+003, -3.1600899260109350e+002]])
 
 
-def recover_trace(trace, target):
-    pass
-
 imissing = np.random.random_integers(0, 9)
 missing = samples[imissing, :]
 samples = np.delete(samples, imissing, axis=0)
@@ -60,6 +57,83 @@ def spline(xs, ys, xnew):
     ans = interpolate.splev(xnew, tck, der=0)
     return ans
 
+
+import numpy
+
+slot_trace = 30
+length_sequence_input = 10
+length_sequence_output = 10
+
+
+def update(trace, samples):
+    modified = False
+    for sample in samples:
+        t = sample[0]
+
+        # delete old one
+        entry = numpy.where(trace[:, 0] == t)
+        if numpy.size(entry) != 0:
+            old = trace[entry[0]]
+            if old != sample:
+                modified = True
+            trace = numpy.delete(trace, entry, axis=0)
+
+        entry = numpy.searchsorted(trace[:, 0], t, side='left')
+        trace = numpy.insert(trace, entry, sample, axis=0)
+
+    return trace, modified
+
+
+trace_ = numpy.array([[0, 100, -100],
+                      [30, 100, -100],
+                      [60, 100, -100],
+                      [90, 100, -100],
+                      [120, 100, -100],
+                      [150, 100, -100],
+                      [180, 100, -100]])
+
+samples_ = numpy.array([[110, 100, -100],
+                        [-10, 100, -100],
+                        [60, 200, -100],
+                        [200, 100, -100],
+                        [10, 200, -100]])
+
+trace_, modified = update(trace_, samples_)
+
+
+def select_samples(trace, instant_target):
+    len_full = length_sequence_input
+    t_end_min = instant_target - length_sequence_output * slot_trace
+    t_end = numpy.maximum(trace[:, 0])
+    entry_end = numpy.searchsorted(trace[:, 0], t_end, side='right')
+    if t_end < t_end_min:
+        len_short = (t_end_min - t_end) / slot_trace
+        len_full -= len_short
+    t_start = t_end - (len_full - 1) * slot_trace
+    entry_start = numpy.searchsorted(trace[:, 0], t_start)
+    if numpy.where(trace[:, 0] == t_start).size == 0:
+        entry_start -= 1
+    samples = trace[entry_start:entry_end, :]
+
+
+def recover_trace(samples, instants):
+    interpolate = spline
+
+    for instant in instants:
+        ts = samples[:, 0]
+        xs = samples[:, 1]
+        ys = samples[:, 2]
+
+        # xnew = Lagrange(t, x, tnew)
+        # ynew = Lagrange(t, y, tnew)
+        xnew = interpolate(ts, xs, instant)
+        ynew = interpolate(ts, ys, instant)
+        entry = numpy.searchsorted(ts, instant)
+        samples = numpy.insert(samples, entry, [instant, xnew, ynew], axis=0)
+
+    pass
+
+
 # 开始插值
 tnew = missing_t
 
@@ -70,6 +144,7 @@ ynew = spline(t, y, tnew)
 
 # for i in range(len(xn)):
 #     yn[i] = Lagrange(x, y, xn[i])
+
 
 def show(m, n, mnew, nnew, description):
     plt.figure()
