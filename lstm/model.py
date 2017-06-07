@@ -786,10 +786,14 @@ class SocialLSTM:
             """
 
             # Slice x-length sequence from the last, according to <length_sequence_output>
-            layer_out = L.layers.SliceLayer(layer_decoded,
-                                            name='output-layer',
-                                            indices=slice(-self.length_sequence_output, None),
-                                            axis=2)
+            layer_sliced = L.layers.SliceLayer(layer_decoded,
+                                               name='sliced-layer',
+                                               indices=slice(-self.length_sequence_output, None),
+                                               axis=2)
+            layer_out = L.layers.ExpressionLayer(layer_sliced,
+                                                 lambda x: x[:, :, ::-1, :],
+                                                 output_shape=layer_sliced.output_shape,
+                                                 name='output-layer')
 
             """
             Save some useful variables

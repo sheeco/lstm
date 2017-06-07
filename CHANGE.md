@@ -501,9 +501,16 @@
 
 - OPT: Accumulative hitrate;
 
-###### 2017-06-07
+###### [2017-06-07](b84d12ffa3a91f594a8bae109c381a13cbbe8f2f)
 
 - OPT: Enable to apply all the samples as testset;
+- TEST: Hitrate result of full testset is worse than those of seperate trainset & testset (e.g. 27% out of 57% & 91%);
+- TEST: Hitrate result of testset is repeatable under newly compiled train function with same initial learning rate;
+
+###### 2017-06-07
+
+- FIX: Flip the sequence slicing to enable 'n-n' seq, & to maintain compatibale with previous parameters for 'n-1' seq;
+- TESTed: Hitrate result of 'n-1' seq is repeatable with flipped slicing;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
