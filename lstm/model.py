@@ -1750,9 +1750,7 @@ class SocialLSTM:
                 sampler.map_to_grid(grid_system=GridSystem(utils.get_config('scale_grid')))
             # Devide into train set & test set
             trainset = utils.get_config('trainset')
-            trainset = int(trainset * sampler.length) if trainset < 1 else trainset
-            sampler_trainset = Sampler.clip(sampler, indices=(0, trainset))
-            sampler_testset = Sampler.clip(sampler, indices=(sampler_trainset.length, None))
+            sampler_trainset, sampler_testset = sampler.devide(trainset)
             utils.xprint("Use %d samples as train set & %d samples as test set."
                          % (sampler_trainset.length, sampler_testset.length), newline=True)
 

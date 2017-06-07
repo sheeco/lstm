@@ -56,8 +56,10 @@ class Sampler:
         except:
             raise
 
-    def reset_entry(self):
+    def empty(self):
+        return not self.length > 0
 
+    def reset_entry(self):
         self.entry = 0
 
     @staticmethod
@@ -170,6 +172,25 @@ class Sampler:
             array_traces = numpy.array([trace[:length, :] for trace in dict_traces.values()], dtype=numpy.float32)
             return array_traces
 
+        except:
+            raise
+
+    def devide(self, trainset):
+        """
+        Devide this sampler into a train set & a test set, according to `trainset`.
+        :param trainset: [0, 1] means ratio of trainset / all, (1, +) means size of trainset.
+        :return: sampler_trainset, sampler_testset
+        """
+        try:
+            trainset = int(trainset * self.length) if trainset < 1 else trainset
+            sampler_trainset = Sampler.clip(self, indices=(0, trainset))
+            sampler_testset = Sampler.clip(self, indices=(sampler_trainset.length, None))
+            # if sampler_trainset.empty():
+            #     sampler_trainset = None
+            # if sampler_testset.empty():
+            #     sampler_testset = None
+
+            return sampler_trainset, sampler_testset
         except:
             raise
 

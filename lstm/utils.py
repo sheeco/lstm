@@ -1104,8 +1104,12 @@ def _validate_config_():
         # Validate numeric configs
         trainset = get_config('trainset')
         assertor.assert_type(trainset, [float, int])
-        if not trainset > 0:
-            raise ValueError("Configuration 'trainset' must be positive.")
+        if not trainset >= 0:
+            raise ValueError("Configuration 'trainset' must be positive or 0.")
+        num_epoch = get_config('num_epoch')
+        if trainset == 0 \
+                and num_epoch > 0:
+            raise ValueError("Configuration 'trainset' must be positive when 'num_epoch' > 0.")
 
         adaptive_learning_rate = get_config('adaptive_learning_rate')
         if adaptive_learning_rate is not None:
