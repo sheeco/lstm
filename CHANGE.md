@@ -507,10 +507,15 @@
 - TEST: Hitrate result of full testset is worse than those of seperate trainset & testset (e.g. 27% out of 57% & 91%);
 - TEST: Hitrate result of testset is repeatable under newly compiled train function with same initial learning rate;
 
-###### 2017-06-07
+###### [2017-06-07](d37dab258e5dccd969689f26359a48223df40505)
 
 - FIX: Flip the sequence slicing to enable 'n-n' seq, & to maintain compatibale with previous parameters for 'n-1' seq;
 - TESTed: Hitrate result of 'n-1' seq is repeatable with flipped slicing;
+
+###### 2017-06-07
+
+- OPT: Enable to exit without asking;
+- OPT: Update some default configs;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

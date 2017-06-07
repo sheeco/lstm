@@ -42,6 +42,11 @@ config_pool = {
                 'value': None,
                 'tags': []
             },
+            # Whether to ask for more epochs
+            'ask': {
+                'value': True,
+                'tags': []
+            },
             # How many epochs of latest network history to keep
             # None means no limit
             # 0 means don't save network history
@@ -104,7 +109,7 @@ config_pool = {
                 # 'input' means all the nodes share the embedded sample input with each other
                 # 'olstm' means Occupancy Map sharing
                 # 'none' means neither
-                'value': 'input',
+                'value': 'none',
                 'tags': ['build']
             },
             # Edge length of single neighborhood grid in social pooling
@@ -121,6 +126,16 @@ config_pool = {
             # If only a full size batch will be accepted
             'strict_batch_size': {
                 'value': False,
+                'tags': []
+            },
+            # Batch Size
+            'size_batch': {
+                'value': 1,
+                'tags': []
+            },
+            # Tryout after every n * epochs of training
+            'tryout_frequency': {
+                'value': 1,
                 'tags': []
             },
             # Devision of train set & test set
@@ -141,7 +156,7 @@ config_pool = {
             # <float> within (0, 1): new = old * x
             # <float> within (-1, 0): new = old + x
             'adaptive_learning_rate': {
-                'value': .5,
+                'value': -.001,
                 'tags': ['train']
             },
             # Decrease gradient clipping if training has failed
@@ -208,19 +223,9 @@ config_pool = {
                 'tags': ['build']
             },
 
-            # Batch Size
-            'size_batch': {
-                'value': 10,
-                'tags': []
-            },
             # Number of epochs to train the net
             'num_epoch': {
                 'value': 2,
-                'tags': []
-            },
-            # Tryout after every n * epochs of training
-            'tryout_frequency': {
-                'value': 1,
                 'tags': []
             },
         },
@@ -250,19 +255,9 @@ config_pool = {
                 'tags': ['build']
             },
 
-            # Batch Size
-            'size_batch': {
-                'value': 10,
-                'tags': []
-            },
             # Number of epochs to train the net
             'num_epoch': {
                 'value': 300,
-                'tags': []
-            },
-            # Tryout after every n * epochs of training
-            'tryout_frequency': {
-                'value': 10,
                 'tags': []
             },
         }

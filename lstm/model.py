@@ -1760,6 +1760,7 @@ class SocialLSTM:
 
             # Define the model
             model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range)
+            ask = utils.get_config('ask')
 
             try:
                 # Import previously pickled parameters if requested
@@ -1797,21 +1798,28 @@ class SocialLSTM:
 
                             tryout_deviations, tryout_hitrates = model.tryout(sampler_testset)
 
+                            if model.stop:
+                                break
                             if model.entry_epoch >= model.num_epoch:
+                                if ask:
 
-                                more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
+                                    more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
 
-                                if more:
+                                    if more:
 
-                                    num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
+                                        num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
 
-                                    # quit means no more epochs
-                                    if num_more is not None \
-                                            and num_more > 0:
-                                        model.num_epoch += num_more
-                                        utils.update_config('num_epoch', model.num_epoch, 'runtime', silence=False)
+                                        # quit means no more epochs
+                                        if num_more is not None \
+                                                and num_more > 0:
+                                            model.num_epoch += num_more
+                                            utils.update_config('num_epoch', model.num_epoch, 'runtime', silence=False)
+                                        else:
+                                            break
+                                    # stop if no more
                                     else:
                                         break
+                                # stop if not ask
                                 else:
                                     break
                             else:
