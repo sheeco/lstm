@@ -517,9 +517,13 @@
 - OPT: Enable to exit without asking;
 - OPT: Update some default configs;
 
-###### 2017-06-09
+###### [2017-06-09](816963178a4905ccc8a2da7ce6a27093f887e35f)
 
 - RFCT: for compute-compile & adaptive learning;
+
+###### 2017-06-09
+
+- OPT: to avoid massive hitrate computation due to gigantic deviations;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

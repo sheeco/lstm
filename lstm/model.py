@@ -329,10 +329,16 @@ class SocialLSTM:
         try:
             step = self.hit_range
             deviations = numpy.reshape(deviations, newshape=(-1, deviations.shape[-1]))
-            ceil = int(numpy.ceil(numpy.max(deviations) / step) * step)
+            ceil = int(numpy.ceil(numpy.max(deviations) / step))
+
+            # clip to avoid unnecessary computation
+            MAX_CEIL = 10
+            if ceil > MAX_CEIL:
+                ceil = MAX_CEIL
             if nbin is not None \
-                    and ceil < nbin * step:
-                ceil = nbin * step
+                    and ceil < nbin:
+                ceil = nbin
+            ceil *= step
 
             edges = numpy.arange(start=0, stop=ceil + step, step=step)
             hist, _ = numpy.histogram(deviations, bins=edges)
