@@ -512,10 +512,14 @@
 - FIX: Flip the sequence slicing to enable 'n-n' seq, & to maintain compatibale with previous parameters for 'n-1' seq;
 - TESTed: Hitrate result of 'n-1' seq is repeatable with flipped slicing;
 
-###### 2017-06-07
+###### [2017-06-07](a62ccd2c21c58c883081f2fe9853648e8719b2d9)
 
 - OPT: Enable to exit without asking;
 - OPT: Update some default configs;
+
+###### 2017-06-09
+
+- RFCT: for compute-compile & adaptive learning;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

@@ -38,7 +38,7 @@ class SocialLSTM:
                  dimension_embed_layer=None, dimension_hidden_layer=None,
                  learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
                  adaptive_learning_rate=None, adaptive_grad_clip=None,
-                 limit_network_history=None):
+                 limit_network_history=0):
         try:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
@@ -182,10 +182,14 @@ class SocialLSTM:
             self.func_compare = None
             self.func_train = None
 
-            self.peek_embed = None
-            self.peeks_hid = []
             self.peek_outputs = None
             self.peek_params = None
+
+            self.peek = self.limit_network_history is None \
+                or self.limit_network_history > 0
+
+            self.peek_embed = None
+            self.peeks_hid = None
             self.peek_probs = None
 
             """
@@ -846,124 +850,197 @@ class SocialLSTM:
         except:
             raise
 
-    def compute_prediction(self):
+    def compute_and_compile(self):
         """
-        Build computation graph from `outputs` to `predictions`.
-        :return: `predictions`
+        Would force to redo from decoding to compiling.
+        :return:
         """
         try:
-            utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
+            self.predictions = None
+            self._compute_prediction_()
 
-            timer = utils.Timer()
-            utils.xprint('Decoding ... ')
+            self.loss = None
+            self._compute_loss_()
 
-            outputs = self.network_outputs[0]
-            # Use mean(x, y) as predictions directly
-            predictions = outputs[:, :, :, 0:2]
+            self.deviations = None
+            self._compute_deviation_()
 
-            self.predictions = predictions
-            utils.xprint('done in %s.' % timer.stop(), newline=True)
-            return self.predictions
+            self.updates = None
+            self._compute_update_()
+
+            self.func_predict = None
+            self.func_compare = None
+            self.func_train = None
+            self.peek_outputs = None
+            self.peek_params = None
+            self.peek_embed = None
+            self.peeks_hid = None
+            self.peek_probs = None
+            self._compile_function_()
 
         except:
             raise
 
-    def compute_loss(self):
+    def _compute_prediction_(self):
+        """
+        Build computation graph from `outputs` to `predictions`, only if `predictions` is None.
+        :return:
+        """
+        try:
+            utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
+
+            utils.xprint('Decoding ... ')
+
+            if self.predictions is None:
+                outputs = self.network_outputs[0]
+                # Use mean(x, y) as predictions directly
+                predictions = outputs[:, :, :, 0:2]
+
+                self.predictions = predictions
+                utils.xprint('done.', newline=True)
+            else:
+                utils.xprint('skipped.', newline=True)
+
+        except:
+            raise
+
+    def _compute_loss_(self):
         """
         (NNL) bivariant normal loss of Euclidean distance loss for training.
-        Build computation graph from `predictions`, `targets` to `loss`.
-        :return: `loss`
+        Build computation graph from `predictions`, `targets` to `loss`, only if `loss` is None.
+        :return:
         """
         try:
             utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
             utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
 
-            timer = utils.Timer()
             utils.xprint('Computing loss ... ')
 
-            # Remove time column
-            facts = self.targets[:, :, :, 1:3]
-            shape_facts = facts.shape
-            shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
+            if self.loss is None:
+                # Remove time column
+                facts = self.targets[:, :, :, 1:3]
+                shape_facts = facts.shape
+                shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
 
-            # Use either (nnl) binorm or euclidean distance for loss
+                # Use either (nnl) binorm or euclidean distance for loss
 
-            loss = None
+                loss = None
 
-            if self.decode_scheme == 'binorm':
-                """
-                NNL Bivariant normal distribution
-                """
-                utils.xprint("using decode scheme 'binorm' ... ")
+                if self.decode_scheme == 'binorm':
+                    """
+                    NNL Bivariant normal distribution
+                    """
+                    utils.xprint("using decode scheme 'binorm' ... ")
 
-                # Reshape for convenience
-                facts = T.reshape(facts, shape_stacked_facts)
+                    # Reshape for convenience
+                    facts = T.reshape(facts, shape_stacked_facts)
 
-                outputs = self.network_outputs[0]
-                shape_distributions = outputs.shape
-                shape_stacked_distributions = (shape_distributions[0] * shape_distributions[1] * shape_distributions[2],
-                                               shape_distributions[3])
-                distributions = T.reshape(outputs, shape_stacked_distributions)
+                    outputs = self.network_outputs[0]
+                    shape_distributions = outputs.shape
+                    shape_stacked_distributions = (shape_distributions[0] * shape_distributions[1] * shape_distributions[2],
+                                                   shape_distributions[3])
+                    distributions = T.reshape(outputs, shape_stacked_distributions)
 
-                # Use scan to replace loop with tensors
-                def step_loss(idx, distribution_mat, fact_mat):
+                    # Use scan to replace loop with tensors
+                    def step_loss(idx, distribution_mat, fact_mat):
 
-                    # From the idx of the start of the slice, the vector and the length of
-                    # the slice, obtain the desired slice.
+                        # From the idx of the start of the slice, the vector and the length of
+                        # the slice, obtain the desired slice.
 
-                    distribution = distribution_mat[idx, :]
-                    means = distribution[0:2]
-                    stds = distribution[2:4]
-                    correlation = distribution[5]
-                    target = fact_mat[idx, :]
-                    prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], stds[0], stds[1],
-                                                 correlation)
+                        distribution = distribution_mat[idx, :]
+                        means = distribution[0:2]
+                        stds = distribution[2:4]
+                        correlation = distribution[5]
+                        target = fact_mat[idx, :]
+                        prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], stds[0], stds[1],
+                                                     correlation)
 
-                    # Do something with the slice here.
+                        # Do something with the slice here.
 
-                    return prob
+                        return prob
 
-                def step_loss_scaled(idx, distribution_mat, fact_mat, motion_range_v):
+                    def step_loss_scaled(idx, distribution_mat, fact_mat, motion_range_v):
 
-                    # From the idx of the start of the slice, the vector and the length of
-                    # the slice, obtain the desired slice.
+                        # From the idx of the start of the slice, the vector and the length of
+                        # the slice, obtain the desired slice.
 
-                    distribution = distribution_mat[idx, :]
-                    means = distribution[0:2]
-                    scaled_stds = T.mul(distribution[2:4], motion_range_v)
-                    deviations = T.mul(distribution[2:4], motion_range_v)
-                    correlation = distribution[4]
-                    target = fact_mat[idx, :]
-                    prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], scaled_stds[0], scaled_stds[1],
-                                                 correlation)
+                        distribution = distribution_mat[idx, :]
+                        means = distribution[0:2]
+                        scaled_stds = T.mul(distribution[2:4], motion_range_v)
+                        deviations = T.mul(distribution[2:4], motion_range_v)
+                        correlation = distribution[4]
+                        target = fact_mat[idx, :]
+                        prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], scaled_stds[0], scaled_stds[1],
+                                                     correlation)
 
-                    # Do something with the slice here.
+                        # Do something with the slice here.
 
-                    return prob
+                        return prob
 
-                # Make a vector containing the start idx of every slice
-                indices = T.arange(facts.shape[0])
+                    # Make a vector containing the start idx of every slice
+                    indices = T.arange(facts.shape[0])
 
-                if self.scaled_sigma:
-                    motion_range = T.constant(self.motion_range[1] - self.motion_range[0])
-                    probs, updates_loss = theano.scan(fn=step_loss_scaled, sequences=[indices],
-                                                      non_sequences=[distributions, facts, motion_range])
+                    if self.scaled_sigma:
+                        motion_range = T.constant(self.motion_range[1] - self.motion_range[0])
+                        probs, updates_loss = theano.scan(fn=step_loss_scaled, sequences=[indices],
+                                                          non_sequences=[distributions, facts, motion_range])
+                    else:
+                        probs, updates_loss = theano.scan(fn=step_loss, sequences=[indices],
+                                                          non_sequences=[distributions, facts])
+
+                    # save binorm probabilities for future peeking
+                    self.probabilities = probs
+
+                    # Normal Negative Log-likelihood
+                    nnls = T.neg(T.log(probs))
+                    loss = nnls
+
+                elif self.decode_scheme == 'euclidean':
+                    """
+                    Euclidean distance loss
+                    """
+                    utils.xprint("using decode scheme 'euclidean' ... ")
+
+                    # Elemwise differences
+                    differences = T.sub(self.predictions, facts)
+                    differences = T.reshape(differences, shape_stacked_facts)
+                    deviations = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
+                    shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2])
+                    deviations = T.reshape(deviations, shape_deviations)
+
+                    loss = deviations
+
                 else:
-                    probs, updates_loss = theano.scan(fn=step_loss, sequences=[indices],
-                                                      non_sequences=[distributions, facts])
+                    raise ValueError("No definition found for loss scheme '%s'." % self.decode_scheme)
 
-                # save binorm probabilities for future peeking
-                self.probabilities = probs
+                # Compute mean for loss
+                loss = T.mean(loss)
 
-                # Normal Negative Log-likelihood
-                nnls = T.neg(T.log(probs))
-                loss = nnls
+                self.loss = loss
+                utils.xprint('done.', newline=True)
+            else:
+                utils.xprint('skipped.', newline=True)
 
-            elif self.decode_scheme == 'euclidean':
-                """
-                Euclidean distance loss
-                """
-                utils.xprint("using decode scheme 'euclidean' ... ")
+        except:
+            raise
+
+    def _compute_deviation_(self):
+        """
+        Euclidean Distance for Observation.
+        Build computation graph from `predictions`, `targets` to `deviations`, only if `deviations` is None.
+        :return:
+        """
+        try:
+            utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
+            utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
+
+            utils.xprint('Computing deviation for observation ... ')
+
+            if self.deviations is None:
+                # Remove time column
+                facts = self.targets[:, :, :, 1:3]
+                shape_facts = facts.shape
+                shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
 
                 # Elemwise differences
                 differences = T.sub(self.predictions, facts)
@@ -972,96 +1049,61 @@ class SocialLSTM:
                 shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2])
                 deviations = T.reshape(deviations, shape_deviations)
 
-                loss = deviations
-
+                self.deviations = deviations
+                utils.xprint('done.', newline=True)
             else:
-                raise ValueError("No definition found for loss scheme '%s'." % self.decode_scheme)
-
-            # Compute mean for loss
-            loss = T.mean(loss)
-
-            self.loss = loss
-            utils.xprint('done in %s.' % timer.stop(), newline=True)
-            return self.loss
+                utils.xprint('skipped.', newline=True)
 
         except:
             raise
 
-    def compute_deviation(self):
-        """
-        Euclidean Distance for Observation.
-        Build computation graph from `predictions`, `targets` to `deviations`.
-        :return: `deviations`
-        """
-        try:
-            utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
-            utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
-
-            timer = utils.Timer()
-            utils.xprint('Computing deviation for observation ... ')
-
-            # Remove time column
-            facts = self.targets[:, :, :, 1:3]
-            shape_facts = facts.shape
-            shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
-
-            # Elemwise differences
-            differences = T.sub(self.predictions, facts)
-            differences = T.reshape(differences, shape_stacked_facts)
-            deviations = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
-            shape_deviations = (shape_facts[0], shape_facts[1], shape_facts[2])
-            deviations = T.reshape(deviations, shape_deviations)
-
-            self.deviations = deviations
-            utils.xprint('done in %s.' % timer.stop(), newline=True)
-            return self.deviations
-        except:
-            raise
-
-    def compute_update(self):
+    def _compute_update_(self):
         """
         RMSProp training.
-        Build computation graph from `loss` to `updates`.
-        :return: `updates`
+        Build computation graph from `loss` to `updates`, only if `updates` is None.
+        :return:
         """
         try:
             utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
             utils.assertor.assert_not_none(self.predictions, "Must compute the prediction first.")
             utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
 
-            timer = utils.Timer()
             utils.xprint('Computing updates ... ')
-            utils.xprint("using train scheme '%s' ... " % self.train_scheme)
 
-            # Compute updates according to given training scheme
-            updates = None
-            if self.train_scheme == 'rmsprop':
-                updates = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate,
-                                            rho=self.rho, epsilon=self.epsilon)
-            elif self.train_scheme == 'adagrad':
-                updates = L.updates.adagrad(self.loss, self.params_trainable, learning_rate=self.learning_rate,
-                                            epsilon=self.epsilon)
-            elif self.train_scheme == 'momentum':
-                updates = L.updates.momentum(self.loss, self.params_trainable, learning_rate=self.learning_rate,
-                                             momentum=self.momentum)
-            elif self.train_scheme == 'nesterov':
-                updates = L.updates.nesterov_momentum(self.loss, self.params_trainable,
-                                                      learning_rate=self.learning_rate,
-                                                      momentum=self.momentum)
+            if self.updates is None:
+                utils.xprint("using train scheme '%s' ... " % self.train_scheme)
+
+                # Compute updates according to given training scheme
+                if self.train_scheme == 'rmsprop':
+                    updates = L.updates.rmsprop(self.loss, self.params_trainable, learning_rate=self.learning_rate,
+                                                rho=self.rho, epsilon=self.epsilon)
+                elif self.train_scheme == 'adagrad':
+                    updates = L.updates.adagrad(self.loss, self.params_trainable, learning_rate=self.learning_rate,
+                                                epsilon=self.epsilon)
+                elif self.train_scheme == 'momentum':
+                    updates = L.updates.momentum(self.loss, self.params_trainable, learning_rate=self.learning_rate,
+                                                 momentum=self.momentum)
+                elif self.train_scheme == 'nesterov':
+                    updates = L.updates.nesterov_momentum(self.loss, self.params_trainable,
+                                                          learning_rate=self.learning_rate,
+                                                          momentum=self.momentum)
+                else:
+                    raise ValueError("No definition found  for training scheme '%s'." % self.train_scheme)
+
+                utils.assertor.assert_not_none(updates, "Computation of updates has failed.")
+
+                self.updates = updates
+                utils.xprint('done.', newline=True)
             else:
-                raise ValueError("No definition found  for training scheme '%s'." % self.train_scheme)
+                utils.xprint('skipped ...')
 
-            utils.assertor.assert_not_none(updates, "Computation of updates has failed.")
-            self.updates = updates
-            utils.xprint('done in %s.' % timer.stop(), newline=True)
-            return self.updates
         except:
             raise
 
-    def compile(self):
+    def _compile_function_(self):
         """
-        Compile theano functions used for prediction, observation & training.
-        :return: `func_predict`, `func_compare`, `func_train`
+        Compile theano functions used for prediction, observation & training, only for those functions who are None.
+        :return:
         """
         try:
             utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
@@ -1077,40 +1119,37 @@ class SocialLSTM:
             Compile theano functions for prediction, observation & training
             """
 
-            self.func_predict = theano.function(self.network_inputs, self.predictions, allow_input_downcast=True)
-            self.func_compare = theano.function(self.network_inputs + [self.targets], self.deviations,
-                                                allow_input_downcast=True)
-            self.func_train = theano.function(self.network_inputs + [self.targets], self.loss, updates=self.updates,
-                                              allow_input_downcast=True)
+            if self.func_predict is None:
+                self.func_predict = theano.function(self.network_inputs, self.predictions, allow_input_downcast=True)
+            if self.func_compare is None:
+                self.func_compare = theano.function(self.network_inputs + [self.targets], self.deviations,
+                                                    allow_input_downcast=True)
+            if self.func_train is None:
+                self.func_train = theano.function(self.network_inputs + [self.targets], self.loss, updates=self.updates,
+                                                  allow_input_downcast=True)
 
             """
             Compile peeking functions for debugging
             """
+            if self.peek_outputs is None:
+                self.peek_outputs = theano.function(self.network_inputs, self.network_outputs, allow_input_downcast=True)
+            if self.peek_params is None:
+                self.peek_params = theano.function([], self.params_all, allow_input_downcast=True)
 
-            self.peek_embed = theano.function(self.network_inputs, self.embed, allow_input_downcast=True)
-            self.peeks_hid = []
-            for ihid in self.hids_all:
-                self.peeks_hid += [theano.function(self.network_inputs, ihid, allow_input_downcast=True)]
-            self.peek_outputs = theano.function(self.network_inputs, self.network_outputs, allow_input_downcast=True)
-            self.peek_params = theano.function([], self.params_all, allow_input_downcast=True)
-            self.peek_probs = theano.function(self.network_inputs + [self.targets], self.probabilities,
-                                              allow_input_downcast=True) if self.probabilities is not None else None
+            if self.peek:
+                if self.peek_embed is None:
+                    self.peek_embed = theano.function(self.network_inputs, self.embed, allow_input_downcast=True)
+                if self.peeks_hid is None:
+                    self.peeks_hid = []
+                    for ihid in self.hids_all:
+                        self.peeks_hid += [theano.function(self.network_inputs, ihid, allow_input_downcast=True)]
+                if self.peek_probs is None:
+                    self.peek_probs = theano.function(self.network_inputs + [self.targets], self.probabilities,
+                                                      allow_input_downcast=True) \
+                        if self.probabilities is not None else None
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
-            return self.func_predict, self.func_compare, self.func_train
 
-        except:
-            raise
-
-    def get_peeks(self):
-
-        return self.peek_embed, self.peeks_hid, self.peek_outputs, self.peek_params, self.peek_probs
-
-    def _predict_single_batch_(self, samples, targets=None):
-        try:
-            predictions_batch = self.func_predict(samples)
-            deviations_batch = self.func_compare(samples, targets) if targets is not None else None
-            return predictions_batch, deviations_batch
         except:
             raise
 
@@ -1196,7 +1235,8 @@ class SocialLSTM:
                                 "%s" % new_params)
                 else:
                     self.current_param_values = new_params
-                    predictions_batch, deviations_batch = self._predict_single_batch_(samples, targets)
+                    predictions_batch = self.func_predict(samples)
+                    deviations_batch = self.func_compare(samples, targets) if targets is not None else None
 
                 # Done & break
                 break
@@ -1517,53 +1557,13 @@ class SocialLSTM:
                 done_training = True
 
             except utils.InvalidTrainError, e:
-                # Update training parameters & Retrain
 
-                # Update gradient clipping as 1st choice
-                # , unless grad_clip <= 100
-                if self.adaptive_grad_clip is not None \
-                        and self.grad_clip > 100:
+                utils.warn(e.message)
 
-                    utils.warn(e.message)
-                    # decay the decrement if necessary
-                    if -self.adaptive_grad_clip >= self.grad_clip:
-                        self.adaptive_grad_clip /= 10
-                        utils.update_config('adaptive_grad_clip', self.adaptive_grad_clip, 'runtime',
-                                            silence=False)
-                    new_grad_clip = self.grad_clip + self.adaptive_grad_clip
+                # Update training parameters & Retrain if possible
+                if self.adapt_train_parameter() is True:
 
-                    self.update_grad_clip(new_grad_clip)
-
-                    # Reinitialize related variables
                     sampler.reset_entry()
-                    self.reset_entry()
-                    self.reset_network_history()
-
-                    continue
-
-                # Update learning rate
-                elif self.adaptive_learning_rate is not None:
-
-                    utils.warn(e.message)
-                    # update by decay ratio
-                    if self.adaptive_learning_rate > 0:
-                        new_learning_rate = self.learning_rate * self.adaptive_learning_rate
-                    # update by decrement
-                    else:
-                        # decay the decrement if necessary
-                        if -self.adaptive_learning_rate >= self.learning_rate:
-                            self.adaptive_learning_rate /= 10
-                            utils.update_config('adaptive_learning_rate', self.adaptive_learning_rate, 'runtime',
-                                                silence=False)
-                        new_learning_rate = self.learning_rate + self.adaptive_learning_rate
-
-                    self.update_learning_rate(new_learning_rate)
-
-                    # Reinitialize related variables
-                    sampler.reset_entry()
-                    self.reset_entry()
-                    self.reset_network_history()
-
                     continue
 
                 else:
@@ -1681,16 +1681,78 @@ class SocialLSTM:
         except:
             raise
 
-    def update_learning_rate(self, new_learning_rate):
+    def adapt_train_parameter(self):
+        """
+        Adapt gradient clipping or learning rate if possible.
+        :return: True or False
+        """
+        try:
+            # Update gradient clipping as 1st choice
+            # , unless grad_clip <= 100
+            if self.adaptive_grad_clip is not None \
+                    and self.grad_clip > 100:
+
+                # decay the decrement if necessary
+                if -self.adaptive_grad_clip >= self.grad_clip:
+                    self.adaptive_grad_clip /= 10
+                    utils.update_config('adaptive_grad_clip', self.adaptive_grad_clip, 'runtime',
+                                        silence=False)
+                new_grad_clip = self.grad_clip + self.adaptive_grad_clip
+
+                self._update_grad_clip_(new_grad_clip)
+
+                # Reinitialize related variables
+                self.reset_entry()
+                self.reset_network_history()
+
+                return True
+
+            # Update learning rate
+            elif self.adaptive_learning_rate is not None:
+
+                # update by decay ratio
+                if self.adaptive_learning_rate > 0:
+                    new_learning_rate = self.learning_rate * self.adaptive_learning_rate
+                # update by decrement
+                else:
+                    # decay the decrement if necessary
+                    if -self.adaptive_learning_rate >= self.learning_rate:
+                        self.adaptive_learning_rate /= 10
+                        utils.update_config('adaptive_learning_rate', self.adaptive_learning_rate, 'runtime',
+                                            silence=False)
+                    new_learning_rate = self.learning_rate + self.adaptive_learning_rate
+
+                self._update_learning_rate_(new_learning_rate)
+
+                # Reinitialize related variables
+                self.reset_entry()
+                self.reset_network_history()
+
+                return True
+
+            else:
+                return False
+
+        except:
+            raise
+
+    def _update_learning_rate_(self, new_learning_rate):
+        """
+        1) Redo build-compute-compile if necessary. 2) Update log & config. 3) Restore initial parameters.
+        :param new_learning_rate:
+        :return:
+        """
         try:
             self.learning_rate = new_learning_rate
             utils.update_config('learning_rate', new_learning_rate, source='runtime', silence=False)
 
             utils.xprint("Re")
-            self.compute_update()
+            self.updates = None
+            self._compute_update_()
 
             utils.xprint("Re")
-            self.compile()
+            self.func_train = None
+            self._compile_function_()
 
             utils.assertor.assert_not_none(self.initial_param_values,
                                            "No initial values are found for parameter restoration.")
@@ -1702,7 +1764,12 @@ class SocialLSTM:
         except:
             raise
 
-    def update_grad_clip(self, new_grad_clip):
+    def _update_grad_clip_(self, new_grad_clip):
+        """
+        1) Redo build-compute-compile if necessary. 2) Update log & config. 3) Restore initial parameters.
+        :param new_grad_clip:
+        :return:
+        """
         try:
             self.grad_clip = new_grad_clip
             utils.update_config('grad_clip', new_grad_clip, source='runtime', silence=False)
@@ -1710,20 +1777,7 @@ class SocialLSTM:
             utils.xprint("Re")
             self.build_network()
 
-            utils.xprint("Re")
-            self.compute_prediction()
-
-            utils.xprint("Re")
-            self.compute_loss()
-
-            utils.xprint("Re")
-            self.compute_deviation()
-
-            utils.xprint("Re")
-            self.compute_update()
-
-            utils.xprint("Re")
-            self.compile()
+            self.compute_and_compile()
 
             utils.assertor.assert_not_none(self.initial_param_values,
                                            "No initial values are found for parameter restoration.")
@@ -1768,14 +1822,8 @@ class SocialLSTM:
                 params_unpickled = utils.filer.load_from_file(file_unpickle) if file_unpickle is not None else None
 
                 # Build & compile the model
-                outputs_var, params_var = model.build_network(params=params_unpickled)
-                predictions_var = model.compute_prediction()
-                loss_var = model.compute_loss()
-                deviations_var = model.compute_deviation()
-                updates_var = model.compute_update()
-                func_predict, func_compare, func_train = model.compile()
-
-                peek_e, peeks_hid, peek_outputs, peek_params, peek_probs = model.get_peeks()
+                model.build_network(params=params_unpickled)
+                model.compute_and_compile()
 
                 if params_unpickled is not None:
                     model.tryout(sampler_testset)
@@ -1845,18 +1893,6 @@ class SocialLSTM:
             finally:
                 model.complete()
                 utils.get_sublogger().log_config()
-
-            def test_importing():
-                _model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range)
-                _model.build_network()
-                _model.import_params()
-                _model.compute_prediction()
-                _model.compute_loss()
-                _model.compute_deviation()
-                _model.compute_update()
-                _model.compile()
-
-                # test_importing()
 
         except Exception, e:
             raise
