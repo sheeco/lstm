@@ -37,8 +37,7 @@ class SocialLSTM:
                  dimension_sample=None, length_sequence_input=None, length_sequence_output=None, size_batch=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
                  learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
-                 adaptive_learning_rate=None, adaptive_grad_clip=None,
-                 limit_network_history=0):
+                 adaptive_learning_rate=None, adaptive_grad_clip=None):
         try:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
@@ -168,15 +167,6 @@ class SocialLSTM:
                 'value': None,  # actual param values
                 'path': None}  # path of pickled file
 
-            # todo remove network histroy
-            self.limit_network_history = limit_network_history if limit_network_history is not None \
-                else utils.get_config('limit_network_history')
-            # 2d list (iepoch, ibatch) of dict, data flow though the network
-            if self.limit_network_history == 0:
-                self.network_history = None
-            else:
-                self.network_history = []
-
             # Theano function objects
 
             self.func_predict = None
@@ -185,13 +175,6 @@ class SocialLSTM:
 
             self.peek_outputs = None
             self.peek_params = None
-
-            self.peek = self.limit_network_history is None \
-                or self.limit_network_history > 0
-
-            self.peek_embed = None
-            self.peeks_hid = None
-            self.peek_probs = None
 
             """
             Initialization Definitions
@@ -504,10 +487,6 @@ class SocialLSTM:
     def reset_entry(self):
         self.entry_epoch = 0
         self.entry_batch = 0
-
-    def reset_network_history(self):
-        if self.network_history is not None:
-            self.network_history = []
 
     # todo change to pure theano
     def build_network(self, params=None):
@@ -880,9 +859,6 @@ class SocialLSTM:
             self.func_train = None
             self.peek_outputs = None
             self.peek_params = None
-            self.peek_embed = None
-            self.peeks_hid = None
-            self.peek_probs = None
             self._compile_function_()
 
         except:
@@ -1143,18 +1119,6 @@ class SocialLSTM:
             if self.peek_params is None:
                 self.peek_params = theano.function([], self.params_all, allow_input_downcast=True)
 
-            if self.peek:
-                if self.peek_embed is None:
-                    self.peek_embed = theano.function(self.network_inputs, self.embed, allow_input_downcast=True)
-                if self.peeks_hid is None:
-                    self.peeks_hid = []
-                    for ihid in self.hids_all:
-                        self.peeks_hid += [theano.function(self.network_inputs, ihid, allow_input_downcast=True)]
-                if self.peek_probs is None:
-                    self.peek_probs = theano.function(self.network_inputs + [self.targets], self.probabilities,
-                                                      allow_input_downcast=True) \
-                        if self.probabilities is not None else None
-
             utils.xprint('done in %s.' % timer.stop(), newline=True)
 
         except:
@@ -1164,48 +1128,6 @@ class SocialLSTM:
 
         instants_sample, samples, instants_target, targets = batch[0], batch[1], batch[2], batch[3]
         size_this_batch = len(instants_sample)
-
-        # Prepare for training, allowing interrupt
-        # Record params, flow of data & probabilities to network history BEFORE training
-
-        try:
-            def peek_netflow():
-                _embed = self.peek_embed(samples)
-                _hids = []
-                for _ihid in xrange(len(self.peeks_hid)):
-                    _peek_hid = self.peeks_hid[_ihid]
-                    _hids += [_peek_hid(samples)]
-                _netout = self.peek_outputs(samples)
-
-                dict_netflow = {'embed': _embed, 'hiddens': _hids, 'netout': _netout}
-                return dict_netflow
-
-            if self.network_history is not None:
-
-                _netflow = peek_netflow()
-                _probs = self.peek_probs(samples, targets) if self.peek_probs is not None else None
-                # note that record [i, j] contains variable values BEFORE this training
-                self.network_history[-1].append({'params': self.current_param_values,
-                                                 'netflow': _netflow,
-                                                 'probs': _probs})
-
-                # throw away overdue history
-                if self.limit_network_history is not None \
-                        and len(self.network_history) > self.limit_network_history:
-                    self.network_history = \
-                        self.network_history[-self.limit_network_history:]
-
-            # def test_social_tensor():
-            #     zeros = numpy.random.rand(self.num_node, size_this_batch, self.length_sequence_input,
-            #                               self.dimension_hidden_layer)
-            #     social_tensor = self.peek_social_tensor(samples, zeros)
-            #     print "\nshape of social tensor: %s\n" % (social_tensor.shape,)
-            #     print "\nvalue of social tensor: \n%s\n" % utils.peek_matrix(social_tensor, formatted=True)
-            #
-            # # test_social_tensor()
-
-        except:
-            raise
 
         # Disallowing interrupt once starting training
         # Keep trying until (1) done & return (2) exception caught
@@ -1337,10 +1259,6 @@ class SocialLSTM:
         return predictions_batch, deviations_batch, loss_batch
 
     def _train_single_epoch_(self, sampler, tag_log='train'):
-
-        # start of single epoch
-        if self.network_history is not None:
-            self.network_history.append([])
 
         FILENAME_COMPARE = '%s-epoch%d' % (tag_log, self.entry_epoch)
         logname_compare = utils.filer.format_subpath(utils.get_config('path_compare'), FILENAME_COMPARE)
@@ -1585,26 +1503,6 @@ class SocialLSTM:
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
         return losses_by_epoch, deviations_by_epoch
 
-    def export_history(self, path=None):
-        try:
-            if self.network_history is None \
-                    or len(self.network_history) == 0:
-                return
-
-            PICKLE_NAME = 'history.pkl'
-
-            if path is None:
-                path = PICKLE_NAME
-
-            path = self.logger.log_pickle(self.network_history, PICKLE_NAME)
-
-            utils.xprint("\nRecent network history has been exported to '%s'." % path, newline=True)
-
-            return path
-
-        except:
-            raise
-
     def export_params(self, params=None, filename=None, replace=None, overwritable=True):
         """
 
@@ -1712,7 +1610,6 @@ class SocialLSTM:
 
                 # Reinitialize related variables
                 self.reset_entry()
-                self.reset_network_history()
 
                 return True
 
@@ -1735,7 +1632,6 @@ class SocialLSTM:
 
                 # Reinitialize related variables
                 self.reset_entry()
-                self.reset_network_history()
 
                 return True
 
@@ -1892,7 +1788,7 @@ class SocialLSTM:
                                                    name="train")
 
                     finally:
-                        model.export_history()
+                        pass
 
                 else:  # tryout only
                     pass

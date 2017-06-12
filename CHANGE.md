@@ -525,11 +525,15 @@
 
 - OPT: to avoid massive hitrate computation due to gigantic deviations;
 
-###### 2017-06-09
+###### [2017-06-09](63aaa31b8d3baafa96ed494086681896e2a029fc)
 
 - FIX: Predict before actually do training;
 - FIX: for return of tryout;
 - TEST: Slightly worse than predicting after training, e.g. drop from 94% to 91.4%;
+
+###### 2017-06-09
+
+- REM: Abandone network history;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
