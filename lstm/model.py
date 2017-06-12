@@ -168,6 +168,7 @@ class SocialLSTM:
                 'value': None,  # actual param values
                 'path': None}  # path of pickled file
 
+            # todo remove network histroy
             self.limit_network_history = limit_network_history if limit_network_history is not None \
                 else utils.get_config('limit_network_history')
             # 2d list (iepoch, ibatch) of dict, data flow though the network
@@ -1212,6 +1213,10 @@ class SocialLSTM:
         loss_batch = None
         while True:
             try:
+                # Predict before training
+                predictions_batch = self.func_predict(samples)
+                deviations_batch = self.func_compare(samples, targets) if targets is not None else None
+
                 # Actually do training, & only once
 
                 while loss_batch is None:
@@ -1241,8 +1246,6 @@ class SocialLSTM:
                                 "%s" % new_params)
                 else:
                     self.current_param_values = new_params
-                    predictions_batch = self.func_predict(samples)
-                    deviations_batch = self.func_compare(samples, targets) if targets is not None else None
 
                 # Done & break
                 break
@@ -1850,7 +1853,7 @@ class SocialLSTM:
                             if model.stop:
                                 break
 
-                            tryout_deviations, tryout_hitrates = model.tryout(sampler_testset)
+                            model.tryout(sampler_testset)
 
                             if model.stop:
                                 break

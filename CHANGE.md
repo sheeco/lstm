@@ -521,9 +521,15 @@
 
 - RFCT: for compute-compile & adaptive learning;
 
-###### 2017-06-09
+###### [2017-06-09](cee61318f0883c386ce37036c697dfeb0da0ab3d)
 
 - OPT: to avoid massive hitrate computation due to gigantic deviations;
+
+###### 2017-06-09
+
+- FIX: Predict before actually do training;
+- FIX: for return of tryout;
+- TEST: Slightly worse than predicting after training, e.g. drop from 94% to 91.4%;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
