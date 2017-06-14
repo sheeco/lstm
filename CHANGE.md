@@ -531,9 +531,14 @@
 - FIX: for return of tryout;
 - TEST: Slightly worse than predicting after training, e.g. drop from 94% to 91.4%;
 
-###### 2017-06-09
+###### [2017-06-09](d40fee638d99f11643b7132c4d18a7950bcdb6ba)
 
 - REM: Abandone network history;
+
+###### 2017-06-14
+
+- OPT: Enable to use predictions as training targets if real targets are missing;
+- TEST: Use predictions as targets during tryout - get the same predictions all the way;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

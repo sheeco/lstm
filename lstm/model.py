@@ -901,7 +901,7 @@ class SocialLSTM:
 
             if self.loss is None:
                 # Remove time column
-                facts = self.targets[:, :, :, 1:3]
+                facts = self.targets[:, :, :, -2:]
                 shape_facts = facts.shape
                 shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
 
@@ -1021,7 +1021,7 @@ class SocialLSTM:
 
             if self.deviations is None:
                 # Remove time column
-                facts = self.targets[:, :, :, 1:3]
+                facts = self.targets[:, :, :, -2:]
                 shape_facts = facts.shape
                 shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
 
@@ -1124,7 +1124,14 @@ class SocialLSTM:
         except:
             raise
 
-    def _train_single_batch_(self, batch, tag_log='train'):
+    def _train_single_batch_(self, batch, tag_log='train', with_target=True):
+        """
+
+        :param batch: (instants, samples, instants, targets)
+        :param with_target: Whether to train with `targets`. Would train with predictions & use targets only for
+                            comparison if `False`.
+        :return:
+        """
 
         instants_sample, samples, instants_target, targets = batch[0], batch[1], batch[2], batch[3]
         size_this_batch = len(instants_sample)
@@ -1139,11 +1146,17 @@ class SocialLSTM:
                 predictions_batch = self.func_predict(samples)
                 deviations_batch = self.func_compare(samples, targets) if targets is not None else None
 
+                # use predictions as targets
+                if with_target:
+                    train_targets = targets
+                else:
+                    train_targets = predictions_batch
+
                 # Actually do training, & only once
 
                 while loss_batch is None:
                     try:
-                        loss_batch = self.func_train(samples, targets)
+                        loss_batch = self.func_train(samples, train_targets)
                     except KeyboardInterrupt:
                         pass
 
@@ -1208,14 +1221,18 @@ class SocialLSTM:
                                 if inode > 0:
                                     compare_content += "\t"
 
-                                _deviation = deviations_batch[inode, isample, iseq]
                                 _prediction = predictions_batch[inode, isample, iseq]
-                                _target = targets[inode, isample, iseq, -2:]
-                                dict_content[self.node_identifiers[inode]] = "(%.2f\t[%.2f\t%.2f]\t[%.2f\t%.2f])" \
-                                                                             % (_deviation, _prediction[0], _prediction[1],
-                                                                                _target[0], _target[1])
-                                compare_content += "%.2f\t%.2f\t%.2f\t%.2f" \
-                                                   % (_prediction[0], _prediction[1], _target[0], _target[1])
+                                _prediction = "%.2f\t%.2f" % (_prediction[-2], _prediction[-1])
+                                if targets is not None:
+                                    _deviation = deviations_batch[inode, isample, iseq]
+                                    _deviation = "%.2f" % _deviation
+                                    _target = targets[inode, isample, iseq, -2:]
+                                    _target = "%.2f\t%.2f" % (_target[-2], _target[-1])
+                                    dict_content[self.node_identifiers[inode]] = "(%s\t[%s]\t[%s])" % (_deviation, _prediction, _target)
+                                    compare_content += "%s\t%s" % (_prediction, _target)
+                                else:
+                                    dict_content[self.node_identifiers[inode]] = "[%s]" % _prediction
+                                    compare_content += "%s" % _prediction
 
                             logname_sample = "%s-sample" % tag_log
                             self.logger.log(dict_content, name=logname_sample)
@@ -1225,24 +1242,29 @@ class SocialLSTM:
 
                 log_by_sample()
 
-                # Print loss & deviation info to console
-                hitrates = self.compute_hitrate(deviations_batch, nbin=2)
-                utils.xprint('%s; %s; %s;'
-                             % (utils.format_var(float(loss_batch), name='loss'),
-                                utils.format_var(hitrates, name='hitrate'),
-                                utils.format_var(deviations_batch, name='deviations')),
-                             newline=True)
+                if deviations_batch is not None:
+                    # Print loss & deviation info to console
+                    hitrates = self.compute_hitrate(deviations_batch, nbin=2)
+                    utils.xprint('%s; %s; %s;'
+                                 % (utils.format_var(float(loss_batch), name='loss'),
+                                    utils.format_var(hitrates, name='hitrate'),
+                                    utils.format_var(deviations_batch, name='deviations')),
+                                 newline=True)
 
                 # Log [loss, mean-deviation, min-deviation, max-deviation] by each batch
 
                 def log_by_batch():
-                    _peek_deviations_this_batch = utils.peek_matrix(deviations_batch, formatted=True)
+                    _peek_deviations_this_batch = utils.peek_matrix(deviations_batch, formatted=True) \
+                        if deviations_batch is not None else None
 
                     self.logger.log({'epoch': self.entry_epoch, 'batch': self.entry_batch,
                                      'loss': utils.format_var(float(loss_batch)),
-                                     'mean-deviation': _peek_deviations_this_batch['mean'],
-                                     'min-deviation': _peek_deviations_this_batch['min'],
-                                     'max-deviation': _peek_deviations_this_batch['max']},
+                                     'mean-deviation': _peek_deviations_this_batch['mean']
+                                     if _peek_deviations_this_batch is not None else None,
+                                     'min-deviation': _peek_deviations_this_batch['min']
+                                     if _peek_deviations_this_batch is not None else None,
+                                     'max-deviation': _peek_deviations_this_batch['max']
+                                     if _peek_deviations_this_batch is not None else None},
                                     name="%s-batch" % tag_log)
 
                 log_by_batch()
@@ -1258,7 +1280,9 @@ class SocialLSTM:
 
         return predictions_batch, deviations_batch, loss_batch
 
-    def _train_single_epoch_(self, sampler, tag_log='train'):
+    # todo add train_some
+
+    def _train_single_epoch_(self, sampler, tag_log='train', with_target=True):
 
         FILENAME_COMPARE = '%s-epoch%d' % (tag_log, self.entry_epoch)
         logname_compare = utils.filer.format_subpath(utils.get_config('path_compare'), FILENAME_COMPARE)
@@ -1281,21 +1305,21 @@ class SocialLSTM:
                 if done_batch is None \
                         or done_batch:
                     done_batch = False
-                    instants_sample, samples, instants_target, targets = sampler.load_batch(with_target=True)
+                    instants_sample, samples, instants_target, targets = sampler.load_batch()
 
                 # break if cannot find a new batch
-                if samples is None:
+                if targets is None:
                     if self.entry_batch == 0:
                         raise RuntimeError("Only %d sample pairs are found, "
                                            "not enough for one single batch of size %d."
-                                           % (sampler.length, self.size_batch))
+                                           % (sampler.npair() - sampler.leng, self.size_batch))
                     break
 
                 self.entry_batch += 1
                 utils.xprint('    Batch %d ... ' % self.entry_batch)
 
                 predictions, deviations, loss = self._train_single_batch_(
-                    batch=(instants_sample, samples, instants_target, targets), tag_log=tag_log)
+                    batch=(instants_sample, samples, instants_target, targets), tag_log=tag_log, with_target=with_target)
 
                 # consider successful if training is done and successful
                 done_batch = True
@@ -1409,7 +1433,8 @@ class SocialLSTM:
             # backup current param values
             params_original = self.current_param_values
 
-            _, deviations, hitrates = self._train_single_epoch_(sampler, tag_log='test')
+            with_target = utils.get_config('tryout_with_target')
+            _, deviations, hitrates = self._train_single_epoch_(sampler, tag_log='test', with_target=with_target)
             # must not change training entry
             # self.entry_epoch += 1
 
@@ -1714,8 +1739,9 @@ class SocialLSTM:
             # Devide into train set & test set
             trainset = utils.get_config('trainset')
             sampler_trainset, sampler_testset = sampler.devide(trainset)
+            # sampler_testset.with_target = False
             utils.xprint("Use %d samples as train set & %d samples as test set."
-                         % (sampler_trainset.length, sampler_testset.length), newline=True)
+                         % (sampler_trainset.length(), sampler_testset.length()), newline=True)
 
             # Define the model
             model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range)
@@ -1732,8 +1758,6 @@ class SocialLSTM:
 
                 if params_unpickled is not None:
                     model.tryout(sampler_testset)
-
-                utils.get_rootlogger().register("train", columns=["identifier", "loss-by-epoch", "deviation-by-epoch"])
 
                 train_losses = numpy.zeros((0,))
                 train_deviations = numpy.zeros((0,))
@@ -1781,11 +1805,7 @@ class SocialLSTM:
                     except Exception, e:
                         utils.handle(e)
                     else:
-                        utils.get_rootlogger().log({"identifier": utils.get_sublogger().identifier,
-                                                    "loss-by-epoch": '%s\n' % utils.format_var(train_losses, detail=True),
-                                                    "deviation-by-epoch": '%s\n' % utils.format_var(train_deviations,
-                                                                                                    detail=True)},
-                                                   name="train")
+                        pass
 
                     finally:
                         pass

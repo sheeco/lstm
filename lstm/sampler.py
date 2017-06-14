@@ -21,7 +21,8 @@ class GridSystem:
 class Sampler:
 
     def __init__(self, path=None, nodes=None, length=None, dimension_sample=None, length_sequence_input=None,
-                 length_sequence_output=None, size_batch=None, strict_batch_size=None, keep_positive=True, gridding=False):
+                 length_sequence_output=None, size_batch=None, strict_batch_size=None, keep_positive=True,
+                 slot_trace=None):
 
         try:
             self.path = path if path is not None else utils.get_config('path_trace')
@@ -46,8 +47,8 @@ class Sampler:
                 if length_sequence_input is not None else utils.get_config('length_sequence_input')
             self.length_sequence_output = length_sequence_output \
                 if length_sequence_output is not None else utils.get_config('length_sequence_output')
-            # inputs without targets will de discarded
-            self.length = int(self.traces.shape[1]) - self.length_sequence_output
+            self.slot_trace = slot_trace if slot_trace is not None else utils.get_config('slot_trace')
+
             self.size_batch = size_batch if size_batch is not None else utils.get_config('size_batch')
             self.strict_batch_size = strict_batch_size if strict_batch_size is not None else utils.get_config('strict_batch_size')
             if keep_positive:
@@ -56,8 +57,18 @@ class Sampler:
         except:
             raise
 
-    def empty(self):
-        return not self.length > 0
+    def length(self):
+        """
+        Number of samples(lines).
+        """
+        return int(self.traces.shape[1])
+
+    def npair(self):
+        """
+        Number of input-target pairs computed based on `length_sequence_input`, `length_sequence_output` & `length` .
+        """
+        n = self.length() - (self.length_sequence_input + self.length_sequence_output - 1)
+        return n if n > 0 else 0
 
     def reset_entry(self):
         self.entry = 0
@@ -182,9 +193,9 @@ class Sampler:
         :return: sampler_trainset, sampler_testset
         """
         try:
-            trainset = int(trainset * self.length) if trainset < 1 else trainset
+            trainset = int(trainset * self.length()) if trainset < 1 else trainset
             sampler_trainset = Sampler.clip(self, indices=(0, trainset))
-            sampler_testset = Sampler.clip(self, indices=(sampler_trainset.length, None))
+            sampler_testset = Sampler.clip(self, indices=(sampler_trainset.length(), None))
             # if sampler_trainset.empty():
             #     sampler_trainset = None
             # if sampler_testset.empty():
@@ -218,16 +229,15 @@ class Sampler:
                 utils.assertor.assert_type(indices, [list, tuple, int])
                 return None
             if ifrom < 0 \
-                    or ito >= a.length:
+                    or ito >= a.length():
                 raise ValueError("Invalid indices (%d, %d). "
                                  "Index must be within [0, %d)."
-                                 % (ifrom, ito, a.length))
+                                 % (ifrom, ito, a.length()))
 
             ito = ito + a.length_sequence_output if ito is not None else None
             traces = a.traces
             traces = numpy.array([trace[ifrom:ito, :] for trace in traces], dtype=numpy.float32)
             out.traces = traces
-            out.length = int(out.traces.shape[1]) - a.length_sequence_output
             out.motion_range = Sampler._compute_range_(out.traces)
             return out
 
@@ -281,17 +291,19 @@ class Sampler:
         self.grid_system = grid_system
         return self.traces
 
-    def _load_sample_(self, with_target=True):
+    def _load_sample_(self):
         """
         指定起始位置，为单次训练/测试生成所有节点的输入序列（及目标序列）。
         注意：如果超出最大采样数，将返回 None，因此需要对返回值进行验证之后再使用
-        :format: instants: [length_sequence_input],
+        :returns: (instants_input, sequences_input, instants_target, sequences_target)
+        :format: instants_input: [length_sequence_input],
                  inputs: [num_node, length_sequence_input, dimension_sample],
-                 outputs: [num_node, length_sequence_output, dimension_sample]
+                 instants_target: [length_sequence_output],
+                 targets: [num_node, length_sequence_output, dimension_sample](None if not found)
         """
 
         try:
-            if self.entry >= self.length:
+            if self.entry >= self.length():
                 return None, None, None, None
 
             array_traces = self.traces
@@ -306,62 +318,70 @@ class Sampler:
 
             begin_line_input = self.entry
             end_line_input = begin_line_input + self.length_sequence_input
-            begin_line_target = end_line_input
-            end_line_target = begin_line_target + self.length_sequence_output
 
-            # 如果超出采样数，返回 None, None, None
-            if end_line_input > self.length:
+            # 如果超出采样数，返回 None, None, None, None
+            if end_line_input > self.length():
                 return None, None, None, None
 
             instants_input = instants[begin_line_input: end_line_input]
-            instants_target = instants[begin_line_target: end_line_target]
             sequences_input = array_traces[:, begin_line_input: end_line_input, :]
 
-            sequences_target = array_traces[:, begin_line_target: end_line_target, :] if with_target else None
+            instants_target = instants_input + self.slot_trace * self.length_sequence_input
+            instants_target = instants_target[:self.length_sequence_output]
+
+            # sequences_target is None if not found
+            begin_line_target = end_line_input
+            end_line_target = begin_line_target + self.length_sequence_output
+            if end_line_target > self.length():
+                sequences_target = None
+            else:
+                sequences_target = array_traces[:, begin_line_target: end_line_target, :]
 
             return instants_input, sequences_input, instants_target, sequences_target
 
         except:
             raise
 
-    def load_batch(self, size_batch=None, with_target=True):
+    def load_batch(self, size_batch=None):
         """
         为单批次的训练/测试生成所有节点的时刻、输入、目标序列。
-        注意：如果超出最大采样数，将返回 3 个 None，因此需要对返回值进行验证之后再使用
-        :format: instants: [size_batch, length_sequence_input],
-                 inputs: [num_nodes, size_batch, length_sequence_input, dimension_sample],
-                 target: [n_nodes, size_batch, length_sequence_output, dimension_sample]
+        注意：如果超出最大采样数，将返回 4 个 None，因此需要对返回值进行验证之后再使用
+        :returns: (instants_input, sequences_input, instants_target, sequences_target)
+        :format: instants_input: [size_batch, length_sequence_input],
+                 inputs: [num_node, size_batch, length_sequence_input, dimension_sample],
+                 instants_target: [size_batch, length_sequence_output],
+                 targets: [num_node, size_batch, length_sequence_output, dimension_sample] (None if not found)
         """
 
         if size_batch is None:
             size_batch = self.size_batch
         try:
-            batch_instants_input = numpy.zeros((0, 0))
-            batch_instants_target = numpy.zeros((0, 0))
+            batch_instants_input = numpy.zeros((0, self.length_sequence_input))
+            batch_instants_target = numpy.zeros((0, self.length_sequence_output))
             batch_input = numpy.zeros((0, 0, 0, 0))
             batch_target = numpy.zeros((0, 0, 0, 0))
             for i in range(size_batch):
-                sample_instant_input, sample_input, sample_instant_target, sample_target = self._load_sample_(with_target)
+                sample_instant_input, sample_input, sample_instant_target, sample_target = self._load_sample_()
                 if sample_input is not None:
                     self.entry += 1
                     shape_input = sample_input.shape
-                    shape_target = sample_target.shape
 
-                    batch_instants_input = numpy.resize(batch_instants_input, (i + 1, shape_input[1]))
-                    batch_instants_target = numpy.resize(batch_instants_target, (i + 1, shape_target[1]))
+                    batch_instants_input = numpy.append(batch_instants_input, numpy.expand_dims(sample_instant_input, axis=0), axis=0)
+                    batch_instants_target = numpy.append(batch_instants_target, numpy.expand_dims(sample_instant_target, axis=0), axis=0)
                     batch_input = numpy.resize(batch_input, (shape_input[0], i + 1, shape_input[1], shape_input[2]))
 
-                    batch_instants_input[i] = sample_instant_input
-                    batch_instants_target[i] = sample_instant_target
                     for inode in range(shape_input[0]):
                         batch_input[inode, i] = sample_input[inode]
-                        6
-                    if with_target:
+
+                    if sample_target is not None:
                         shape_target = sample_target.shape
                         batch_target = numpy.resize(batch_target,
                                                     (shape_target[0], i + 1, shape_target[1], shape_target[2]))
                         for inode in range(shape_target[0]):
                             batch_target[inode, i] = sample_target[inode]
+                    else:
+                        # return None if any one in this batch is not found
+                        batch_target = None
 
                 elif len(batch_input) == 0:
                     return None, None, None, None
@@ -377,8 +397,6 @@ class Sampler:
                     break
                 else:
                     utils.assertor.assert_unreachable()
-            if not with_target:
-                batch_target = None
             return batch_instants_input, batch_input, batch_instants_target, batch_target
 
         except:

@@ -11,6 +11,11 @@ config_pool = {
     # Group name
     'default':
         {
+            # 1 trace sample per n seconds
+            'slot_trace': {
+                'value': 30,
+                'tags': []
+            },
             # Path for trace files
             'path_trace': {
                 'value': 'res/trace/NCSU/',
@@ -129,6 +134,11 @@ config_pool = {
             # Tryout after every n * epochs of training
             'tryout_frequency': {
                 'value': 1,
+                'tags': []
+            },
+            # Tryout with targets or not
+            'tryout_with_target': {
+                'value': True,
                 'tags': []
             },
             # Devision of train set & test set
