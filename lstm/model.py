@@ -303,12 +303,13 @@ class SocialLSTM:
         except:
             raise
 
-    def compute_hitrate(self, deviations, nbin=None):
+    def compute_hitrate(self, deviations, nbin=None, formatted=False):
         """
 
         :param deviations: numpy array
         :param nbin: Only returns n first bins of hitrate histogram.
-        :return: e.g. "50: 61.2%, 100: 20.7%, ..." if `formatted` else [(50, 0.61215), (100, 0.20683), ...]
+        :param formatted: Return formatted string otherwise raw numbers.
+        :return: e.g. "50: 61.2%, 100: 20.7%, ..." if `formatted` else [(50, 61.2), (100, 20.7), ...]
         """
         try:
             step = self.hit_range
@@ -336,13 +337,20 @@ class SocialLSTM:
                 # sum from x_0 to x_i
                 hist[ibin] = numpy.sum(hist[:ibin + 1])
 
-            hitrates = ''
-            for ibin in xrange(len(hist)):
-                if ibin > 0:
-                    hitrates += ', '
-                hitrange = '%d' % edges[ibin + 1]
-                hitrate = '%.1f' % (hist[ibin] * 100) + '%'
-                hitrates += '%s: %s' % (hitrange, hitrate)
+            if formatted:
+                hitrates = ''
+                for ibin in xrange(len(hist)):
+                    if ibin > 0:
+                        hitrates += ', '
+                    hitrange = '%d' % edges[ibin + 1]
+                    hitrate = '%.1f' % (hist[ibin] * 100) + '%'
+                    hitrates += '%s: %s' % (hitrange, hitrate)
+            else:
+                hitrates = []
+                for ibin in xrange(len(hist)):
+                    hitrange = edges[ibin + 1]
+                    hitrate = round(hist[ibin] * 100, ndigits=1)
+                    hitrates += [(hitrange, hitrate)]
 
             return hitrates
 
@@ -1244,7 +1252,7 @@ class SocialLSTM:
 
                 if deviations_batch is not None:
                     # Print loss & deviation info to console
-                    hitrates = self.compute_hitrate(deviations_batch, nbin=2)
+                    hitrates = self.compute_hitrate(deviations_batch, nbin=2, formatted=True)
                     utils.xprint('%s; %s; %s;'
                                  % (utils.format_var(float(loss_batch), name='loss'),
                                     utils.format_var(hitrates, name='hitrate'),
@@ -1384,7 +1392,7 @@ class SocialLSTM:
                 # Print loss & deviation info to console
                 utils.xprint('  mean-loss: %s; hitrate: %s; mean-deviation: %s'
                              % (_peek_losses_this_epoch['mean'],
-                                self.compute_hitrate(deviations_epoch, nbin=2),
+                                self.compute_hitrate(deviations_epoch, nbin=2, formatted=True),
                                 _peek_deviations_this_epoch['mean']),
                              newline=True)
 
@@ -1437,6 +1445,13 @@ class SocialLSTM:
             _, deviations, hitrates = self._train_single_epoch_(sampler, tag_log='test', with_target=with_target)
             # must not change training entry
             # self.entry_epoch += 1
+
+            # Save as the best params if necessary
+
+            if hitrates is not None:
+                if self.best_param_values['record'] is None \
+                        or hitrates[0][1] >= self.best_param_values['record']:
+                    self.update_best_params(self.entry_epoch, self.current_param_values, hitrates[0][1])
 
             # restore original param values after testing
             self.set_params(params_original)
@@ -1493,12 +1508,6 @@ class SocialLSTM:
                     losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
                     deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
                     iepoch += 1
-
-                    # Save as the best params if necessary
-
-                    if self.best_param_values['record'] is None \
-                            or hitrates_this_epoch[0] >= self.best_param_values['record']:
-                        self.update_best_params(self.entry_epoch, self.current_param_values, hitrates_this_epoch[0])
 
                     if self.stop:
                         break

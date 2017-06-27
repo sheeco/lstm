@@ -535,10 +535,15 @@
 
 - REM: Abandone network history;
 
-###### 2017-06-14
+###### [2017-06-14](758b3ea174e4bfab28add05133958e4ce3ac5d45)
 
 - OPT: Enable to use predictions as training targets if real targets are missing;
 - TEST: Use predictions as targets during tryout - get the same predictions all the way;
+
+###### 2017-06-27
+
+- FIX: Fix hitrange comparison;
+- MOD: Change to use tryout hitrate to decide the best record;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
