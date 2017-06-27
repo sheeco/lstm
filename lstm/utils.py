@@ -273,6 +273,7 @@ class Logger:
         try:
             self._validate_log_path_()
 
+            self.remove_log('config')
             self.register(name='config')
             string = "{\n"
             configs = config.get_config()
@@ -358,7 +359,21 @@ class Logger:
     def has_log(self, name):
         return name in self.logs
 
-    def register(self, name, columns=None, overwritable=True):
+    def remove_log(self, name):
+        try:
+            if not self.has_log(name):
+                return
+
+            filepath = filer.format_subpath(self.log_path, '%s.log' % name)
+            if filer.if_exists(filepath):
+                filer.remove_file(filepath)
+
+            self.logs.pop(name)
+
+        except:
+            raise
+
+    def register(self, name, columns=None, overwritable=True, reset=False):
         try:
             self._validate_log_path_()
 

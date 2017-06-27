@@ -540,10 +540,15 @@
 - OPT: Enable to use predictions as training targets if real targets are missing;
 - TEST: Use predictions as targets during tryout - get the same predictions all the way;
 
-###### 2017-06-27
+###### [2017-06-27](33da44b337d19e58e277e70a5c75ac786da41058)
 
 - FIX: Fix hitrange comparison;
 - MOD: Change to use tryout hitrate to decide the best record;
+
+###### 2017-06-27
+
+- OPT: for config logging;
+- FIX: for exception handling in `sampler._filter_nodes_`
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;

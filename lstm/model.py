@@ -1533,6 +1533,8 @@ class SocialLSTM:
             pass  # end of single training attempt
         pass  # end of while not done_training
 
+        self.logger.log_config()
+
         if not self.stop:
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
         return losses_by_epoch, deviations_by_epoch
@@ -1826,7 +1828,6 @@ class SocialLSTM:
                 raise
             finally:
                 model.complete()
-                utils.get_sublogger().log_config()
 
         except Exception, e:
             raise

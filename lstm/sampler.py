@@ -166,8 +166,7 @@ class Sampler:
             return self._dict_traces_
 
         except KeyError, e:
-            e.message = "%s. Cannot find the node in given path '%s'." % (e.message, self.path)
-            raise e
+            raise ValueError("Cannot find node '%s' in given path '%s'." % (e.args[0], self.path))
         except:
             raise
 
