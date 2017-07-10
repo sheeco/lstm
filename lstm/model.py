@@ -1301,6 +1301,7 @@ class SocialLSTM:
         hitrates_epoch = None
 
         done_batch = None  # Whether a batch has got finished properly
+        done_epoch = None
         # loop for each batch in single epoch
         while True:
             # start of single batch
@@ -1321,6 +1322,8 @@ class SocialLSTM:
                         raise RuntimeError("Only %d sample pairs are found, "
                                            "not enough for one single batch of size %d."
                                            % (sampler.npair() - sampler.leng, self.size_batch))
+                    else:
+                        done_epoch = True
                     break
 
                 self.entry_batch += 1
@@ -1353,9 +1356,9 @@ class SocialLSTM:
                     utils.xprint('', newline=True)
 
                 if _choice == 'stop':
-                    # means n incomplete epochs
-                    self.num_epoch = self.entry_epoch
-                    utils.update_config('num_epoch', self.entry_epoch, 'runtime', silence=False)
+                    # means only n * complete epochs
+                    self.num_epoch = self.entry_epoch - 1
+                    utils.update_config('num_epoch', self.entry_epoch - 1, 'runtime', silence=False)
                     self.stop = True
                     break
                 else:
@@ -1383,47 +1386,52 @@ class SocialLSTM:
             pass  # end of single batch
         pass  # end of single epoch
 
-        _done_logging = False
-        while not _done_logging:
-            try:
-                _peek_losses_this_epoch = utils.peek_matrix(losses_epoch, formatted=True)
-                _peek_deviations_this_epoch = utils.peek_matrix(deviations_epoch, formatted=True)
+        if done_epoch:
+            _done_logging = False
+            while not _done_logging:
+                try:
+                    _peek_losses_this_epoch = utils.peek_matrix(losses_epoch, formatted=True)
+                    _peek_deviations_this_epoch = utils.peek_matrix(deviations_epoch, formatted=True)
 
-                # Print loss & deviation info to console
-                utils.xprint('  mean-loss: %s; hitrate: %s; mean-deviation: %s'
-                             % (_peek_losses_this_epoch['mean'],
-                                self.compute_hitrate(deviations_epoch, nbin=2, formatted=True),
-                                _peek_deviations_this_epoch['mean']),
-                             newline=True)
+                    # Print loss & deviation info to console
+                    utils.xprint('  mean-loss: %s; hitrate: %s; mean-deviation: %s'
+                                 % (_peek_losses_this_epoch['mean'],
+                                    self.compute_hitrate(deviations_epoch, nbin=2, formatted=True),
+                                    _peek_deviations_this_epoch['mean']),
+                                 newline=True)
 
-                # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
+                    # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
 
-                def log_by_epoch():
-                    self.logger.log({'epoch': self.entry_epoch,
-                                     'mean-loss': _peek_losses_this_epoch['mean'],
-                                     'mean-deviation': _peek_deviations_this_epoch['mean'],
-                                     'min-deviation': _peek_deviations_this_epoch['min'],
-                                     'max-deviation': _peek_deviations_this_epoch['max']},
-                                    name="%s-epoch" % tag_log)
+                    def log_by_epoch():
+                        self.logger.log({'epoch': self.entry_epoch,
+                                         'mean-loss': _peek_losses_this_epoch['mean'],
+                                         'mean-deviation': _peek_deviations_this_epoch['mean'],
+                                         'min-deviation': _peek_deviations_this_epoch['min'],
+                                         'max-deviation': _peek_deviations_this_epoch['max']},
+                                        name="%s-epoch" % tag_log)
 
-                log_by_epoch()
+                    log_by_epoch()
 
-                def log_hitrate():
-                    self.logger.log({'epoch': self.entry_epoch,
-                                     'hitrate': '%s' % hitrates_epoch},
-                                    name="%s-hitrate" % tag_log)
+                    def log_hitrate():
+                        self.logger.log({'epoch': self.entry_epoch,
+                                         'hitrate': '%s' % hitrates_epoch},
+                                        name="%s-hitrate" % tag_log)
 
-                log_hitrate()
-                _done_logging = True
-            except KeyboardInterrupt:
-                pass
-            except:
-                raise
-            pass  # end of while not _done_logging
+                    log_hitrate()
+                    _done_logging = True
+                except KeyboardInterrupt:
+                    pass
+                except:
+                    raise
+                pass  # end of while not _done_logging
+
+            ret = losses_epoch, deviations_epoch, hitrates_epoch
+        else:  # pass logging if this epoch is undone
+            ret = None, None, None
 
         sampler.reset_entry()
         self.entry_batch = 0
-        return losses_epoch, deviations_epoch, hitrates_epoch
+        return ret
 
     def tryout(self, sampler):
 
@@ -1503,10 +1511,12 @@ class SocialLSTM:
                     self.entry_epoch += 1
                     utils.xprint('  Epoch %d ... ' % self.entry_epoch, newline=True)
 
-                    losses_by_batch, deviations_by_batch, hitrates_this_epoch = self._train_single_epoch_(sampler)
+                    losses_by_batch, deviations_by_batch, _ = self._train_single_epoch_(sampler)
 
-                    losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
-                    deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
+                    if losses_by_batch is not None:
+                        losses_by_epoch = numpy.append(losses_by_epoch, numpy.mean(losses_by_batch))
+                    if deviations_by_batch is not None:
+                        deviations_by_epoch = numpy.append(deviations_by_epoch, numpy.mean(deviations_by_batch))
                     iepoch += 1
 
                     if self.stop:

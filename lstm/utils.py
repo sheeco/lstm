@@ -922,34 +922,40 @@ def ask(message, code_quit='q', interpretor=None, **kwargs):
     if not callable(interpretor):
         raise ValueError("Argument `interpret` is not callable.")
 
-    try:
-        # flush stdin before writing
-        flush()
-
-        question = "%s\n$ " % message
-        answer = raw_input(question)
-
-        # log question & answer
-        get_sublogger().log_console("%s%s\n" % (question, answer))
-
-        if code_quit is not None \
-                and answer == code_quit:
-            return None
-
+    while True:
         try:
-            if interpretor is None:
-                return answer
-            elif len(kwargs) > 0:
-                answer = interpretor(answer, **kwargs)
-                return answer
-            else:
-                answer = interpretor(answer)
-                return answer
+            # flush stdin before writing
+            flush()
 
-        except AssertionError, e:
-            return ask(e.message, code_quit=code_quit, interpretor=interpretor, **kwargs)
-    except Exception, e:
-        return ask("Pardon? (%s)" % e.message, code_quit=code_quit, interpretor=interpretor, **kwargs)
+            question = "%s\n$ " % message
+            xprint(question)
+            answer = sys.stdin.readline().strip('\n')
+
+            # log question & answer
+            get_sublogger().log_console("%s%s\n" % (question, answer))
+
+            if code_quit is not None \
+                    and answer == code_quit:
+                return None
+
+            try:
+                if interpretor is None:
+                    return answer
+                elif len(kwargs) > 0:
+                    answer = interpretor(answer, **kwargs)
+                    return answer
+                else:
+                    answer = interpretor(answer)
+                    return answer
+
+            except AssertionError, e:
+                message = e.message
+        # KeyboardInterrupt during `raw_input` would send a EOF to std.in & trigger an EOFError
+        # just ignore & redo
+        except (EOFError, KeyboardInterrupt):
+            message = "Pardon?"
+        except Exception, e:
+            message = "Pardon? (%s: %s)" % (type(e), e.message)
 
 
 def _interpret_confirm_(answer):
@@ -959,7 +965,7 @@ def _interpret_confirm_(answer):
         elif answer in ('n', 'N', 'no'):
             return False
         else:
-            raise AssertionError("Invalid Syntax. Only take 'y' / 'n' for an answer.")
+            raise AssertionError("Only take 'y' / 'n' for an answer.")
     except:
         raise
 
@@ -1405,9 +1411,9 @@ def test():
 
         # test_hiding()
         # test_formatting()
-        # test_ask()
-        test_pickling()
-        test_register()
+        test_ask()
+        # test_pickling()
+        # test_register()
 
         # test_warn()
         # test_args()

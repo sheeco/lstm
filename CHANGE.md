@@ -545,10 +545,15 @@
 - FIX: Fix hitrange comparison;
 - MOD: Change to use tryout hitrate to decide the best record;
 
-###### 2017-06-27
+###### [2017-06-27](9753ba3c3710d629ee6f548acb74cf2c929eb0d2)
 
 - OPT: for config logging;
-- FIX: for exception handling in `sampler._filter_nodes_`
+- FIX: for exception handling in `sampler._filter_nodes_`;
+
+###### 2017-07-10
+
+- FIX: Crash when asking gets interrupted finally;
+- FIX: Do not log by epoch if undone;
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
