@@ -8,10 +8,10 @@ if __name__ == '__main__':
         # lstm.utils.process_command_line_args()
         #
         # lstm.config.test()
-        # lstm.utils.test()
+        lstm.utils.test()
         # lstm.sampler.Sampler.test()
 
-        lstm.model.SocialLSTM.test()
+        # lstm.model.SocialLSTM.test()
 
         exit("Exit Successfully.")
 

@@ -12,6 +12,7 @@ import shutil
 import numpy
 import copy
 import cPickle
+import matplotlib.pyplot as plt
 
 import config
 
@@ -181,6 +182,47 @@ class Timer:
             print "Fine"
         except:
             raise
+
+
+class Figure(object):
+    def __init__(self, title, interactive=True, **kwargs):
+        self.interactive = interactive
+        plt.interactive(interactive)
+
+        self.figure = plt.figure(**kwargs)
+        # self.axis = self.figure.gca()
+        self.title = title
+        if self.title is not None:
+            plt.suptitle(self.title)
+
+    def show(self):
+        self.figure.show()
+
+
+class TraceFigure(Figure):
+    def __init__(self, title, traces, subtitles, xylimit, interactive=True):
+        """
+
+        :param title:
+        :param traces:
+        :param subtitles:
+        :param xylimit: [[x_min, y_min], [x_max, y_max]]
+        :param interactive:
+        """
+        ntrace = len(traces)
+        xlim, ylim = xylimit[:, 0], xylimit[:, 1]
+        aspect = (ylim[1] - ylim[0]) / (xlim[1] - xlim[0])
+        super(TraceFigure, self).__init__(title, interactive=interactive,
+                                          figsize=plt.figaspect(ntrace * aspect))
+        self.axes = []
+        for itrace in xrange(ntrace):
+            trace = traces[itrace]
+            axis = self.figure.add_subplot(ntrace, 1, itrace + 1)
+            self.axes += [axis]
+            axis.plot(trace[:, -2], trace[:, -1], 'o--')
+            axis.set_xlim(xlim)
+            axis.set_ylim(ylim)
+            axis.set_title(subtitles[itrace])
 
 
 class Logger:
@@ -1409,9 +1451,37 @@ def test():
             except Exception, e:
                 pass
 
+        def test_figure():
+            try:
+                trace = numpy.array([[6.2948943398178629e+000, -3.6924813395957386e+001],
+                                     [5.2265144851548200e+001, 6.1635566035743935e+001],
+                                     [1.5806463497087242e+002, 2.2145826319568081e+002],
+                                     [3.0355995312685025e+002, 1.5801947231458593e+002],
+                                     [2.4489765980144983e+002, 2.9842608370262707e+002],
+                                     [2.5084887136216307e+002, 3.8140503460574882e+002],
+                                     [2.1873910891644343e+001, 5.0335290451175507e+002],
+                                     [-3.6201744149108367e+002, 5.1114512354075794e+002],
+                                     [-4.8590726604515424e+002, 4.9527231131054214e+002],
+                                     [-6.3721230884677630e+002, 3.8218426064995657e+002],
+                                     [-6.8286738135713915e+002, 3.5619172893396399e+002],
+                                     [-8.1533683671708661e+002, 1.9768236021973928e+002],
+                                     [-8.3412388151367338e+002, 1.9303687175772649e+002],
+                                     [-8.5683662496360296e+002, 2.1392052520798458e+002],
+                                     [-8.9012748427380063e+002, 2.2691448015793648e+002]])
+                xylim = numpy.array([[numpy.min(trace[:, -2]),
+                                      numpy.min(trace[:, -1])],
+                                     [numpy.max(trace[:, -2]),
+                                      numpy.max(trace[:, -1])]])
+                fig = TraceFigure("test-fig", [trace[:5, :], trace[-5:, :]], ["train", "test"], xylim, interactive=True)
+                fig.show()
+                print ''
+
+            except Exception, e:
+                print e
+
         # test_hiding()
         # test_formatting()
-        test_ask()
+        # test_ask()
         # test_pickling()
         # test_register()
 
@@ -1423,6 +1493,8 @@ def test():
         # Timer.test()
         # test_abstract()
         # test_unknown_config()
+
+        test_figure()
 
     except:
         raise
