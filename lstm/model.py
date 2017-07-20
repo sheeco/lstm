@@ -161,11 +161,17 @@ class SocialLSTM:
             self.param_names = []  # list of str, names of all the parameters
             self.current_param_values = None  # list of ndarrays, stored for debugging or exporting
             self.initial_param_values = None  # ..., stored for possible parameter restoration
-            self.best_param_values = {  # stored for possible parameter export
-                'epoch': None,  # after n^th epoch
-                'record': None,  # best record (hitrate) stored for comparison
-                'value': None,  # actual param values
-                'path': None}  # path of pickled file
+            self.best_param_values = {
+                # 50: {  # key of hitrange
+                #     'epoch': None,  # after n^th epoch
+                #     'record': None,  # best record (hitrate) stored for comparison
+                #     'value': None,  # actual param values
+                #     'path': None
+                # },  # stored for possible parameter export
+                # 100: {
+                #     # ...
+                # }
+            }  # path of pickled file
 
             # Theano function objects
 
@@ -1456,10 +1462,23 @@ class SocialLSTM:
 
             # Save as the best params if necessary
 
+            NUM_HITRANGE_TOLERANCE = 2
             if hitrates is not None:
-                if self.best_param_values['record'] is None \
-                        or hitrates[0][1] >= self.best_param_values['record']:
-                    self.update_best_params(self.entry_epoch, self.current_param_values, hitrates[0][1])
+                for ihitrange in xrange(0, NUM_HITRANGE_TOLERANCE):
+                    hitrange = hitrates[ihitrange][0]
+                    newrecord = hitrates[ihitrange][1]
+                    if hitrange not in self.best_param_values:
+                        self.best_param_values[hitrange] = {
+                            'epoch': None,  # after n^th epoch
+                            'record': None,  # best record (hitrate) stored for comparison
+                            'value': None,  # actual param values
+                            'path': None
+                        }
+                    if self.best_param_values[hitrange]['record'] is None \
+                        or newrecord >= self.best_param_values[hitrange]['record']:
+                        self.update_best_params(hitrange, self.entry_epoch, self.current_param_values, newrecord)
+                    else:
+                        pass
 
             # restore original param values after testing
             self.set_params(params_original)
@@ -1576,19 +1595,20 @@ class SocialLSTM:
         except:
             raise
 
-    def update_best_params(self, epoch, value, record):
+    def update_best_params(self, hitrange, epoch, value, record):
         try:
-            filename = 'params-best-epoch%d.pkl' % epoch
+            filename = 'params-best-hitrange%d-hitrate%.1f-epoch%d.pkl' % (hitrange, record, epoch)
 
-            old_path = self.best_param_values['path']
+            old_path = self.best_param_values[hitrange]['path']
             path = self.export_params(params=value, filename=filename, replace=old_path, overwritable=False)
 
-            self.best_param_values['epoch'] = epoch
-            self.best_param_values['value'] = value
-            self.best_param_values['record'] = record
-            self.best_param_values['path'] = path
+            self.best_param_values[hitrange]['epoch'] = epoch
+            self.best_param_values[hitrange]['value'] = value
+            self.best_param_values[hitrange]['record'] = record
+            self.best_param_values[hitrange]['path'] = path
 
-            utils.xprint("Best parameters have been exported to '%s'." % path, newline=True)
+            utils.xprint("New best hitrate %.1f for hitrange %d(m), parameters have been exported to '%s'."
+                         % (record, hitrange, path), newline=True)
             return path
 
         except:
@@ -1626,10 +1646,7 @@ class SocialLSTM:
             # Save initial values of params for possible future restoration
             self.initial_param_values = params
             self.current_param_values = self.initial_param_values
-            self.best_param_values['epoch'] = None
-            self.best_param_values['value'] = None
-            self.best_param_values['record'] = None
-            self.best_param_values['path'] = None
+            self.best_param_values = {}
 
         except:
             raise

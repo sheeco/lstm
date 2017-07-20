@@ -10,7 +10,6 @@ import win32file
 import win32con
 import shutil
 import numpy
-import copy
 import cPickle
 
 import config
@@ -452,7 +451,7 @@ class Logger:
             pfile = open(path, 'a')
 
             if isinstance(content, dict):
-                dict_content = copy.deepcopy(content)
+                dict_content = content.copy()
                 for column in columns:
                     tag = column[0]
                     rows = column[1]

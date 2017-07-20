@@ -550,10 +550,14 @@
 - OPT: for config logging;
 - FIX: for exception handling in `sampler._filter_nodes_`;
 
-###### 2017-07-10
+###### [2017-07-10](019479f49b5fd86578c38e345febd0d72cc4a2b4)
 
 - FIX: Crash when asking gets interrupted finally;
 - FIX: Do not log by epoch if undone;
+
+###### 2017-07-20
+
+- ADD: Save best records for hitrange 50m & 100m; 
 
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
