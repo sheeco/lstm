@@ -8,41 +8,40 @@ import utils
 __all__ = [
     "Sampler",
     "GridSystem"
-    ]
+]
 
 
 class GridSystem:
-
     def __init__(self, scale, base_xy=None):
         self.scale = scale
         self.base_xy = base_xy
 
 
 class Sampler:
-
     def __init__(self, path=None, nodes=None, length=None, dimension_sample=None, length_sequence_input=None,
                  length_sequence_output=None, size_batch=None, strict_batch_size=None, keep_positive=True,
                  slot_trace=None):
 
         try:
-            self.path = path if path is not None else utils.get_config('path_trace')
-            self.path = utils.filer.validate_path_format(self.path)
+            self.path = path
 
-            self._dict_all_traces_ = {}
-            self.node_identifiers = []
-            self._read_traces_from_path_()
+            # Note: Modifications of coordinates(panning, gridding, ...) must be applied to `self.dict_traces`,
+            # and call `_update_traces_` mannually afterwards to update `self.traces`.
+            # Rather than apply modifications to `self.traces` directly
+            self.dict_traces = {}  # {inode: {time: [x, y], ...}, ...}
+            self.traces = None
 
             self.node_filter = nodes
-            self._dict_traces_ = {}
-            self._filter_nodes_()
+            self.node_identifiers = []  # by the order of `inode` in `self.dict_traces`
+            self.num_node = None
+            self.length_trace = 0  # counts of instants, minimum among all requested nodes
+            self.length_limit = length if length > 0 else None
+            self.motion_range = None
 
-            self.traces = Sampler._dict_to_array_(self._dict_traces_, length)
-            self.num_node = int(self.traces.shape[0])
-            self.motion_range = Sampler._compute_range_(self.traces)
-            self.grid_system = None
-            self.entry = 0
+            self.entry = None  # the entry (in terms of length_trace) for batch loading
 
-            self.dimension_sample = dimension_sample if dimension_sample is not None else utils.get_config('dimension_sample')
+            self.dimension_sample = dimension_sample if dimension_sample is not None else utils.get_config(
+                'dimension_sample')
             self.length_sequence_input = length_sequence_input \
                 if length_sequence_input is not None else utils.get_config('length_sequence_input')
             self.length_sequence_output = length_sequence_output \
@@ -50,49 +49,86 @@ class Sampler:
             self.slot_trace = slot_trace if slot_trace is not None else utils.get_config('slot_trace')
 
             self.size_batch = size_batch if size_batch is not None else utils.get_config('size_batch')
-            self.strict_batch_size = strict_batch_size if strict_batch_size is not None else utils.get_config('strict_batch_size')
-            if keep_positive:
-                self.pan_to_positive()
+            self.strict_batch_size = strict_batch_size if strict_batch_size is not None else utils.get_config(
+                'strict_batch_size')
+            self.grid_system = None  # for mapping to grids
+
+            # read traces from files under given path
+            if self.path is not None:
+                self.path = utils.filer.validate_path_format(self.path)
+                self._read_traces_from_path_()
+                self._update_traces_()
+                if keep_positive:
+                    self.pan_to_positive()
+
+            # create a empty sampler otherwise
 
         except:
             raise
+
+    def _update_traces_(self):
+        """
+        Must call this method mannually whenever `self.dict_traces` is changed.
+        """
+        self.traces = Sampler._dict_to_array_(self.dict_traces, self.dimension_sample, self.length_limit)
+        self.num_node = int(self.traces.shape[0])
+        self.length_trace = int(self.traces.shape[1])
+        self.motion_range = Sampler._compute_range_(self.traces)
 
     def length(self):
         """
         Number of samples(lines).
         """
-        return int(self.traces.shape[1])
+        return self.length_trace
+
+    def empty(self):
+        """
+        Considered empty if having no samples.
+        """
+        return self.length() <= 0
+
+    @staticmethod
+    def _length_to_npair_(length, length_sequence_input, length_sequence_output):
+        return length - (length_sequence_input + length_sequence_output - 1)
+
+    @staticmethod
+    def _npair_to_length(npair, length_sequence_input, length_sequence_output):
+        return npair + (length_sequence_input + length_sequence_output - 1)
 
     def npair(self):
         """
         Number of input-target pairs computed based on `length_sequence_input`, `length_sequence_output` & `length` .
         """
-        n = self.length() - (self.length_sequence_input + self.length_sequence_output - 1)
+        n = Sampler._length_to_npair_(self.length(), self.length_sequence_input, self.length_sequence_output)
         return n if n > 0 else 0
 
     def reset_entry(self):
-        self.entry = 0
+        if self.entry is not None:
+            self.entry = 0
 
     @staticmethod
-    def _read_triples_from_file_(filename):
+    def make_sample(sec, coors, dim=3):
+        return [sec, coors[0], coors[1]] if dim >= 3 else coors
+
+    @staticmethod
+    def _read_triples_from_file_(filepath):
         """
-        从单个文件读入 (time, x, y) 的三元组序列，放入返回 list。
-        注意：暂无格式检查，文件中每一行必须对应一次定位采样，格式为 'time x y'
-        :param filename: string 文件名
-        :return: list[:行数, :3]
+        Read triples of (time, x, y) from given file, put in the returned dict by the key of time(/sec).
+        Note: Format must be 'time x y'
+        :param filepath: <string>
+        :return: {time: [x, y]}
         """
 
         try:
-            lines = utils.filer.read_lines(filename)
-            triples = []  # (time, x, y) 的三元组列表
+            lines = utils.filer.read_lines(filepath)
+            triples = {}  # {time: [x, y]}
 
-            # 从每一行读入三个数值并存入列表中的一行
+            # Read a triple per line & save to dict
             for i in range(0, len(lines)):
-                triples.append([numpy.float32(x) for x in lines[i].split()][0:3])
+                sec, x, y = [numpy.float32(x) for x in lines[i].split()][0:3]
+                triples[sec] = numpy.array([x, y])
 
-            # n_triples = len(triples)
-
-            return numpy.array(triples, dtype=numpy.float32)
+            return triples
 
         except:
             raise
@@ -100,86 +136,87 @@ class Sampler:
     def _read_traces_from_path_(self):
         # todo add filename filter
         """
-        对给定目录下的所有文件，读取轨迹序列，放入返回 dict。
-        注意：暂无扩展名检查
-        :param path: string 指定路径
-        :return: dict{轨迹文件名 string: 采样三元组 list[:行数, :3]}
+        Read traces from files under given path and put into `dict_traces`, filtered by `node_filter`.
+        Note: Extension name validation is not included yet.
+        Format of dict: dict{<string>: <list>[:num_line, :3]}
+        :return: None
         """
-
-        dict_traces = {}
 
         if not utils.filer.if_exists(self.path):
             raise IOError("Invalid path '%s'" % self.path)
         else:
             try:
                 list_subdir = utils.filer.list_directory(self.path)
-                list_files = [subdir for subdir in list_subdir if utils.filer.is_file(utils.filer.format_subpath(self.path, subdir))]
+                dict_files = {utils.filer.split_extension(subdir)[0]: subdir for subdir in list_subdir if
+                              utils.filer.is_file(utils.filer.format_subpath(self.path, subdir))}
 
-                for filename in list_files:
-                    node_identifier, _ = utils.filer.split_extension(filename)
-                    temp_trace = Sampler._read_triples_from_file_(self.path + filename)
-                    # if node_name.isdigit():
-                    #     traces[int(node_name)] = temp_trace
-                    # else:
-                    #     traces[node_name] = temp_trace
-                    dict_traces[node_identifier] = temp_trace
+                # Filter nodes
+
+                nodes_filtered = dict_files.keys()
+                # by num_node
+                if self.node_filter is None:
+                    pass
+
+                elif isinstance(self.node_filter, int):
+                    if 0 < self.node_filter < len(dict_files):
+                        nodes_filtered = nodes_filtered[:self.node_filter]
+                    elif self.node_filter < 0:
+                        raise ValueError("Expect a positive integer for `node_filter`, "
+                                         "while getting %d instead." % self.node_filter)
+                    elif self.node_filter > len(dict_files):
+                        raise ValueError("%d nodes are expected, "
+                                         "while only %d nodes available under given path."
+                                         % (self.node_filter, len(dict_files)))
+
+                # by node identifiers
+                elif isinstance(self.node_filter, list) \
+                        and len(self.node_filter) > 0:
+                    for node in self.node_filter:
+                        if node not in dict_files:
+                            raise ValueError("Cannot find trace file for node '%s' under given path." % node)
+                    nodes_filtered = self.node_filter
+
+                else:
+                    raise ValueError("Expect a node filter of <int> or <list>, "
+                                     "while getting %s instead." % type(self.node_filter))
+
+                dict_files_filtered = {node_id: dict_files[node_id] for node_id in nodes_filtered}
+                self.node_identifiers = nodes_filtered
+                utils.xprint("Select node(s) %s by filter %s." % (self.node_identifiers, self.node_filter),
+                             newline=True)
+
+                # Actual reading from files
+
+                dict_traces = {}
+                for inode in xrange(len(nodes_filtered)):
+                    node_id = nodes_filtered[inode]
+                    filename = dict_files_filtered[node_id]
+                    temp_triples = Sampler._read_triples_from_file_(self.path + filename)
+                    dict_traces[inode] = temp_triples
 
             except:
                 raise
 
-        self._dict_all_traces_ = dict_traces
-        self.node_identifiers = self._dict_all_traces_.keys()
-        return self._dict_all_traces_
-
-    def _filter_nodes_(self):
-
-        try:
-            if self.node_filter is None:
-                self._dict_traces_ = self._dict_all_traces_
-                return self._dict_traces_
-
-            nodes_requested = []
-            # 指定节点个数
-            if isinstance(self.node_filter, int):
-                if 0 < self.node_filter < len(self._dict_all_traces_):
-                    nodes_requested = self._dict_all_traces_.keys()[:self.node_filter]
-                elif self.node_filter < 0:
-                    raise ValueError("Expect a positive integer for `node_filter`, "
-                                     "while getting %d instead." % self.node_filter)
-                elif self.node_filter > len(self._dict_all_traces_):
-                    raise ValueError("%d nodes are expected, "
-                                     "while only %d nodes in the given path are available."
-                                     % (self.node_filter, len(self._dict_all_traces_)))
-
-            # 指定 node identifiers
-            elif isinstance(self.node_filter, list) \
-                    and len(self.node_filter) > 0:
-                nodes_requested = self.node_filter
-            else:
-                self._dict_traces_ = self._dict_all_traces_
-                return self._dict_traces_
-
-            self._dict_traces_ = {node_id: self._dict_all_traces_[node_id] for node_id in nodes_requested}
-            self.node_identifiers = self._dict_traces_.keys()
-            utils.xprint("Select node %s according to node filter %s." % (self.node_identifiers, self.node_filter),
-                         newline=True)
-            return self._dict_traces_
-
-        except KeyError, e:
-            raise ValueError("Cannot find node '%s' in given path '%s'." % (e.args[0], self.path))
-        except:
-            raise
+        self.dict_traces = dict_traces
+        self.node_identifiers = nodes_filtered
+        self.num_node = len(self.node_identifiers)
 
     @staticmethod
-    def _dict_to_array_(dict_traces, length=None):
+    def _dict_to_array_(dict_traces, dimension_sample, length=None):
 
         try:
             # 计算不同节点轨迹长度的最小值
             if length is None:
                 length = min([len(trace) for trace in dict_traces.values()])
             # 以 length 为最后一行，对齐截断
-            # 并将选中 dict 中的 value 转换成 array，顺序由给定的 node_identifiers 决定
-            array_traces = numpy.array([trace[:length, :] for trace in dict_traces.values()], dtype=numpy.float32)
+
+            array_traces = numpy.array([
+                                           [
+                                               Sampler.make_sample(sec, dict_traces[inode][sec], dim=dimension_sample)
+                                               for sec in utils.sorted_keys(dict_traces[inode])
+                                               ][:length] if length > 0 else []
+                                           for inode in utils.sorted_keys(dict_traces)
+                                           ], dtype=numpy.float32)
             return array_traces
 
         except:
@@ -188,13 +225,13 @@ class Sampler:
     def devide(self, trainset):
         """
         Devide this sampler into a train set & a test set, according to `trainset`.
-        :param trainset: [0, 1] means ratio of trainset / all, (1, +) means size of trainset.
+        :param trainset: <float> among [0, 1] means ratio of `trainset / all`, <int> among (1, +) means size of trainset.
         :return: sampler_trainset, sampler_testset
         """
         try:
-            trainset = int(trainset * self.length()) if trainset < 1 else trainset
+            trainset = int(trainset * self.npair()) if trainset < 1 else trainset
             sampler_trainset = Sampler.clip(self, indices=(0, trainset))
-            sampler_testset = Sampler.clip(self, indices=(sampler_trainset.length(), None))
+            sampler_testset = Sampler.clip(self, indices=(sampler_trainset.npair(), None))
             # if sampler_trainset.empty():
             #     sampler_trainset = None
             # if sampler_testset.empty():
@@ -208,10 +245,11 @@ class Sampler:
     def clip(a, indices=None):
 
         """
-
-        :param a: The sampler to be clipped
-        :param indices: Slice range e.g. indices=(6, 10); or n for (0, n) e.g. indices=5
-        :return: A clipped Sampler copied from `a`
+        Get a sampler clipped from an existed sampler by given indices (in terms of input-ouput sequence pair count).
+        :param a: The sampler to be clipped from.
+        :param indices: Slice range e.g. indices=(6, 10); indices=(0, None); indices=15 same as indices=(0,15)
+                        Note: in terms of input-ouput sequence pair count
+        :return: The clipped sampler.
         """
         try:
             utils.assertor.assert_type(a, Sampler)
@@ -220,23 +258,29 @@ class Sampler:
                 return None
             elif isinstance(indices, list) \
                     or isinstance(indices, tuple):
-                assert len(indices) == 2
+                utils.assertor.assert_(len(indices) == 2, "Expect a list/tuple with length of 2, "
+                                                          "while getting %d instead." % len(indices))
                 ifrom, ito = indices[0], indices[1]
             elif isinstance(indices, int):
                 ifrom, ito = 0, indices
             else:
                 utils.assertor.assert_type(indices, [list, tuple, int])
                 return None
-            if ifrom < 0 \
-                    or ito >= a.length():
-                raise ValueError("Invalid indices (%d, %d). "
-                                 "Index must be within [0, %d)."
-                                 % (ifrom, ito, a.length()))
 
-            ito = ito + a.length_sequence_output if ito is not None else None
+            if ifrom < 0 \
+                    or (ito is not None
+                        and ito >= a.npair()):
+                raise ValueError("Invalid indices (%d, %d). "
+                                 "Index must be within [0, %d]."
+                                 % (ifrom, ito, a.npair()))
+
+            if ito is not None:
+                ito = Sampler._npair_to_length(ito, a.length_sequence_input, a.length_sequence_output)
+
             traces = a.traces
             traces = numpy.array([trace[ifrom:ito, :] for trace in traces], dtype=numpy.float32)
             out.traces = traces
+            out.length_trace = numpy.shape(traces)[1]
             out.motion_range = Sampler._compute_range_(out.traces)
             return out
 
@@ -251,6 +295,9 @@ class Sampler:
         :param array_traces:
         :return: [[x_min, y_min], [x_max, y_max]]
         """
+        if not numpy.size(array_traces):
+            return None
+
         motion_range = numpy.zeros((2, 2))
         samples = numpy.reshape(array_traces, newshape=(-1, array_traces.shape[-1]))
         motion_range[0, 0] = numpy.min(samples[:, 1])
@@ -269,26 +316,25 @@ class Sampler:
             return self.traces
 
         stride = - self.motion_range[0, :]
-        for trace in self.traces:
-            for triple in trace:
-                triple[1:3] = triple[1:3] + stride
+        for inode in self.dict_traces:
+            for sec in self.dict_traces[inode]:
+                self.dict_traces[inode][sec][-2:] = self.dict_traces[inode][sec][-2:] + stride
 
-        self.motion_range += stride
-        return self.traces
+        self._update_traces_()
 
     def map_to_grid(self, grid_system=None):
 
         if grid_system is None:
             grid_system = GridSystem(utils.get_config('scale_grid'))
         if grid_system.base_xy is None:
-            grid_system.base_xy = numpy.floor_divide(self.motion_range[0, :], grid_system.scale) * grid_system.scale
-        for trace in self.traces:
-            for triple in trace:
-                triple[1:3] = numpy.floor_divide((triple[1:3] - grid_system.base_xy), grid_system.scale)
+            grid_system.base_xy = numpy.zeros((2,))
+        for inode in self.dict_traces:
+            for sec in self.dict_traces[inode]:
+                self.dict_traces[inode][sec][-2:] = numpy.floor_divide(
+                    (self.dict_traces[inode][sec][-2:] - grid_system.base_xy), grid_system.scale)
 
-        self.motion_range = Sampler._compute_range_(self.traces)
+        self._update_traces_()
         self.grid_system = grid_system
-        return self.traces
 
     def _load_sample_(self):
         """
@@ -302,6 +348,8 @@ class Sampler:
         """
 
         try:
+            if self.entry is None:
+                self.entry = 0
             if self.entry >= self.length():
                 return None, None, None, None
 
@@ -347,9 +395,9 @@ class Sampler:
         注意：如果超出最大采样数，将返回 4 个 None，因此需要对返回值进行验证之后再使用
         :returns: (instants_input, sequences_input, instants_target, sequences_target)
         :format: instants_input: [size_batch, length_sequence_input],
-                 inputs: [num_node, size_batch, length_sequence_input, dimension_sample],
+                 sequences_inputs: [num_node, size_batch, length_sequence_input, dimension_sample],
                  instants_target: [size_batch, length_sequence_output],
-                 targets: [num_node, size_batch, length_sequence_output, dimension_sample] (None if not found)
+                 sequences_targets: [num_node, size_batch, length_sequence_output, dimension_sample] (None if not found)
         """
 
         if size_batch is None:
@@ -365,8 +413,10 @@ class Sampler:
                     self.entry += 1
                     shape_input = sample_input.shape
 
-                    batch_instants_input = numpy.append(batch_instants_input, numpy.expand_dims(sample_instant_input, axis=0), axis=0)
-                    batch_instants_target = numpy.append(batch_instants_target, numpy.expand_dims(sample_instant_target, axis=0), axis=0)
+                    batch_instants_input = numpy.append(batch_instants_input,
+                                                        numpy.expand_dims(sample_instant_input, axis=0), axis=0)
+                    batch_instants_target = numpy.append(batch_instants_target,
+                                                         numpy.expand_dims(sample_instant_target, axis=0), axis=0)
                     batch_input = numpy.resize(batch_input, (shape_input[0], i + 1, shape_input[1], shape_input[2]))
 
                     for inode in range(shape_input[0]):
@@ -405,61 +455,65 @@ class Sampler:
     def test():
 
         try:
-            utils.xprint('Testing Sampler... ')
+            utils.xprint('Testing Sampler... ', newline=True)
 
-            demo_list_triples = Sampler._read_triples_from_file_('res/trace/2.trace')
+            def test_init():
+                dict_triples = Sampler._read_triples_from_file_('res/trace/NCSU/2.trace')
 
-            sampler = Sampler(utils.get_config('path_trace'), nodes=1)
-            sampler = Sampler(utils.get_config('path_trace'), length=18)
-            sampler = Sampler(utils.get_config('path_trace'), nodes=['2'])
+                sampler = Sampler(utils.get_config('path_trace'), nodes=3, length=18)
+                sampler = Sampler(utils.get_config('path_trace'), nodes=['2'])
+                sampler = Sampler(utils.get_config('path_trace'))
 
-            sampler = Sampler(utils.get_config('path_trace'))
+            test_init()
 
-            def test_panning():
-                sampler.pan_to_positive()
-                sampler.pan_to_positive()
-
-            test_panning()
-
-            def test_grid():
+            def test_grid_and_pan():
+                sampler = Sampler(utils.get_config('path_trace'), nodes=3, keep_positive=False)
                 sampler.map_to_grid(GridSystem(100))
+                sampler.pan_to_positive()
+                sampler.pan_to_positive()
 
-            # test_grid()
+            test_grid_and_pan()
 
-            def test_clipping():
-                clipped = Sampler.clip(sampler, indices=20)
+            def test_clip_and_devide():
+                sampler = Sampler(utils.get_config('path_trace'), nodes=3)
+                twenty = Sampler.clip(sampler, indices=20)
                 try:
-                    invalid = Sampler.clip(clipped, indices=(-1, 19))
+                    invalid = Sampler.clip(twenty, indices=(-1, 20))
                 except Exception, e:
-                    pass
-                try:
-                    invalid = Sampler.clip(clipped, indices=(5, 20))
-                except Exception, e:
-                    pass
+                    assert isinstance(e, ValueError)
+                five = Sampler.clip(twenty, indices=(5, None))
 
-            test_clipping()
-            instants, inputs, targets = sampler.load_batch(with_target=False)
+                trainset, testset = twenty.devide(0.25)
 
-            sampler.reset_entry()
-            while True:
-                # 1 batch for each node
-                instants, inputs, targets = sampler.load_batch(with_target=True)
-                peek_entry = sampler.entry
-                if inputs is None:
-                    break
+            test_clip_and_devide()
+
+            def test_load():
+                sampler = Sampler(utils.get_config('path_trace'), nodes=3, size_batch=5)
+                instants_inputs, inputs, instants_targets, targets = sampler.load_batch()
+
+                sampler.reset_entry()
+                while True:
+                    # 1 batch for each node
+                    instants_inputs, inputs, instants_targets, targets = sampler.load_batch()
+                    peek_entry = sampler.entry
+                    if inputs is None:
+                        break
+
+            test_load()
 
             def test_loose_batch_size():
+                sampler = Sampler(utils.get_config('path_trace'), nodes=3, size_batch=5)
                 sampler.strict_batch_size = False
                 while True:
                     # 1 batch for each node
-                    instants, inputs, targets = sampler.load_batch(with_target=True)
+                    instants_inputs, inputs, instants_targets, targets = sampler.load_batch()
                     peek_entry = sampler.entry
                     if inputs is None:
                         break
 
             test_loose_batch_size()
-            utils.xprint('Fine', newline=True)
-            return True
+
+            utils.xprint('...Fine', newline=True)
 
         except:
             raise

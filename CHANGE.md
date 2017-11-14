@@ -559,6 +559,11 @@
 
 - ADD: Save best records for hitrange 50m & 100m; 
 
+###### 2017-11-13
+
+- RFCT: Major refactoring for `Sampler`;
+- [] RFCT: Seperate new class `OutputSampler` & `InputSampler` out from `Sampler`;
+
 
 - [ ] OPT: Change use of dict into OrderedDict or so;
 - [ ] RFCT: Extract weight & bias initializers;

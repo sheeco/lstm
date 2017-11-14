@@ -35,6 +35,8 @@ __all__ = [
     "peek_matrix",
     "format_var",
     "get_timestamp",
+    "sorted_keys",
+    "sorted_items",
     "format_time_string",
     "get_rootlogger",
     "get_sublogger",
@@ -126,7 +128,8 @@ class Timer:
 
     def resume(self):
         try:
-            if self.timer_pause is None or self.timer_pause.is_off():
+            if self.timer_pause is None \
+                    or self.timer_pause.is_off():
                 raise RuntimeError("The timer is not pausing.")
 
             this_pause = self.timer_pause.stop()
@@ -1078,6 +1081,22 @@ def format_var(var, name=None, detail=False):
 def get_timestamp():
     stamp = time.strftime("%Y-%m-%d-%H-%M-%S")
     return stamp
+
+
+def sorted_keys(dictionary):
+    """
+    Return a sorted list for keys of given dict.
+    """
+    assertor.assert_type(dictionary, dict)
+    return sorted(dictionary.keys())
+
+
+def sorted_items(dictionary):
+    """
+    Return a sorted map for given dict.
+    """
+    keys = sorted_keys(dictionary)
+    return map(dictionary.get, keys)
 
 
 def format_time_string(seconds):
