@@ -1163,6 +1163,13 @@ def _validate_config_():
             if not adaptive_grad_clip < 0:
                 raise ValueError("Configuration 'adaptive_grad_clip' must be negative.")
 
+        unreliable_input = get_config('unreliable_input')
+        length_sequence_input = get_config('length_sequence_input')
+        if unreliable_input is not False:
+            assertor.assert_type(unreliable_input, [int])
+            if not 0 < unreliable_input < length_sequence_input:
+                raise ValueError("Configuration 'unreliable_input' must be among (0, %d)." % length_sequence_input)
+
     except:
         raise
     pass

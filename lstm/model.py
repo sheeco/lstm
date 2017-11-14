@@ -37,7 +37,7 @@ class SocialLSTM:
                  dimension_sample=None, length_sequence_input=None, length_sequence_output=None, size_batch=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
                  learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
-                 adaptive_learning_rate=None, adaptive_grad_clip=None):
+                 adaptive_learning_rate=None, adaptive_grad_clip=None, unreliable_input=None):
         try:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
@@ -118,6 +118,8 @@ class SocialLSTM:
                 else utils.get_config('adaptive_learning_rate')
             self.adaptive_grad_clip = adaptive_grad_clip if adaptive_grad_clip is not None \
                 else utils.get_config('adaptive_grad_clip')
+            self.unreliable_input = unreliable_input if unreliable_input is not None \
+                else utils.get_config('unreliable_input')
 
             # Theano tensor variables (symbolic)
 
@@ -1306,6 +1308,9 @@ class SocialLSTM:
         deviations_epoch = numpy.zeros((0,))
         hitrates_epoch = None
 
+        # for the recording of predictions results
+        sampler_predictions = Sampler.empty_like(sampler)
+
         done_batch = None  # Whether a batch has got finished properly
         done_epoch = None
         # loop for each batch in single epoch
@@ -1320,7 +1325,9 @@ class SocialLSTM:
                 if done_batch is None \
                         or done_batch:
                     done_batch = False
-                    instants_sample, samples, instants_target, targets = sampler.load_batch()
+                    instants_input, inputs, instants_target, targets = sampler.load_batch()
+
+                    inputs = Sampler.make_unreliable_input(inputs, sampler_predictions, instants_input, self.unreliable_input)
 
                 # break if cannot find a new batch
                 if targets is None:
@@ -1336,7 +1343,10 @@ class SocialLSTM:
                 utils.xprint('    Batch %d ... ' % self.entry_batch)
 
                 predictions, deviations, loss = self._train_single_batch_(
-                    batch=(instants_sample, samples, instants_target, targets), tag_log=tag_log, with_target=with_target)
+                    batch=(instants_input, inputs, instants_target, targets), tag_log=tag_log, with_target=with_target)
+
+                # save predictions to sampler_predictions
+                sampler_predictions.save_batch_output(instants_target, predictions)
 
                 # consider successful if training is done and successful
                 done_batch = True
@@ -1353,7 +1363,7 @@ class SocialLSTM:
                 utils.xprint('', newline=True)
 
                 while _choice == 'peek':
-                    _netout = self.peek_outputs(samples)
+                    _netout = self.peek_outputs(inputs)
                     utils.xprint('Network Output:\n%s\n' % _netout, newline=True)
 
                     # ask again after peeking
@@ -1770,7 +1780,7 @@ class SocialLSTM:
             nodes = utils.get_config('num_node') if nodes is None and utils.has_config('num_node') else nodes
 
             # Build sampler
-            sampler = Sampler(nodes=nodes, keep_positive=True)
+            sampler = Sampler(path=utils.get_config('path_trace'), nodes=nodes, keep_positive=True)
             sample_gridding = utils.get_config('sample_gridding')
             if sample_gridding is True:
                 sampler.map_to_grid(grid_system=GridSystem(utils.get_config('scale_grid')))

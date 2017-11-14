@@ -66,6 +66,35 @@ class Sampler:
         except:
             raise
 
+    @staticmethod
+    def empty_like(sampler):
+        """
+        Create an empty sampler for the same set of nodes as the given sampler.
+        :param sampler: The sampler to copy the node container from.
+        :return: The newly created empty sampler.
+        """
+        try:
+            result = Sampler()
+            result._copy_node_container_(sampler)
+            return result
+        except:
+            raise
+
+    def _copy_node_container_(self, sampler):
+        """
+        Copy node identifiers and other necessary attributes from another sampler.
+        :param sampler: The sampler to copy from.
+        :return: None
+        """
+        try:
+            utils.assertor.assert_type(sampler, Sampler)
+            self.node_identifiers = sampler.node_identifiers
+            self.num_node = sampler.num_node
+            self.dict_traces = {inode: {} for inode in sampler.dict_traces}
+            self._update_traces_()
+        except:
+            raise
+
     def _update_traces_(self):
         """
         Must call this method mannually whenever `self.dict_traces` is changed.
@@ -451,6 +480,119 @@ class Sampler:
         except:
             raise
 
+    def _retrieve_by_instants_(self, instants):
+        """
+        Return <dict> of trace samples for all the given instants & all the nodes.
+        :param instants: instants to retrieve by. may contain dublicate elements.
+                                [size_batch, self.length_sequence_output * unreliable_inputs]
+        :return: <dict>{second: {node: coordinates, ...}, ...} (maybe empty, check before use)
+        """
+        result = {}
+        if not numpy.size(instants):
+            return result
+
+        size_batch, len_seq = numpy.shape(instants)
+        instants = numpy.ndarray.flatten(instants)
+        for iflattened in xrange(size_batch * len_seq):
+            sec = instants[iflattened]
+            for inode in xrange(len(self.node_identifiers)):
+                if sec in self.dict_traces[inode]:
+                    if sec not in result:
+                        result[sec] = {}
+                    result[sec][inode] = self.dict_traces[inode][sec]
+
+        return result
+
+    @staticmethod
+    def _update_batch_input_(batch_instants, batch_inputs, indicator_updates, dict_updates):
+
+        """
+        Update certain samples into given batch according to the instants entries. Return the updated batch.
+        :param batch_instants: `batch_instants_input` returned by `load_batch`,
+                               [size_batch, length_sequence_input]
+        :param batch_inputs: `batch_input` returned by `load_batch`,
+                             [num_node, size_batch, length_sequence_input, dimension_sample]
+        :param indicator_updates: indicator matrix, 1 for the elements to be updated, 0 for otherwise.
+                                  Should be the same dimension as `batch_instants`.
+        :param dict_updates: <dict> returned by `retrieve_by_instants`
+        :return: [num_node, size_batch, length_sequence_input, dimension_sample]
+        """
+        try:
+            if indicator_updates is None \
+                    or not numpy.any(indicator_updates) \
+                    or not dict_updates:
+                return batch_inputs
+
+            num_node, size_batch, len_seq, _ = numpy.shape(batch_inputs)
+            for ibatch in xrange(size_batch):
+                for iseq in xrange(len_seq):
+                    if indicator_updates[ibatch, iseq]:
+                        for inode in xrange(num_node):
+                            sec = batch_instants[ibatch, iseq]
+                            if sec in dict_updates \
+                                    and inode in dict_updates[sec]:
+                                batch_inputs[inode, ibatch, iseq, -2:] = dict_updates[sec][inode]
+                    else:
+                        pass
+
+            return batch_inputs
+
+        except:
+            raise
+
+    @staticmethod
+    def make_unreliable_input(inputs, predictions, instants, unreliability):
+        """
+        When unreliable input is enabled, update certain elements in `inputs` with `predictions`.
+        :param inputs: Original & reliable inputs of a single batch, returned by `load_batch`.
+        :param predictions: The <Sampler> that contains prediction results from previous training.
+        :param instants: Instants for `inputs`, returned by `load_batch`.
+        :param unreliability: The degree of unreliability.
+                              a) `False` means disabled,
+                              b) <int> among [1, length_sequence_input) means how many of most recent predictions
+                                 (instants) is allowed to used.
+        :return:
+        """
+        try:
+            if not unreliability \
+                    or (utils.assertor.assert_type(predictions, Sampler)
+                        and predictions.empty()):
+                return inputs
+
+            instants_update = instants[:, -unreliability:]
+            dict_updates = predictions._retrieve_by_instants_(instants_update)
+
+            indicator_updates = numpy.zeros_like(instants)
+            indicator_updates[:, -unreliability:] = 1
+            inputs = Sampler._update_batch_input_(instants, inputs, indicator_updates, dict_updates)
+            return inputs
+        except:
+            raise
+
+    def save_batch_output(self, instants_output, outputs):
+        """
+
+        :param instants_output: `batch_instants_input` returned by `load_batch`,
+                               [size_batch, length_sequence_output]
+        :param outputs: `batch_input` returned by `load_batch`,
+                             [num_node, size_batch, length_sequence_output, dimension_sample]
+        :return: None
+        """
+        try:
+            num_node, size_batch, len_seq, dim = numpy.shape(outputs)
+            instants_output = numpy.ndarray.flatten(instants_output)
+            outputs = numpy.reshape(outputs, (num_node, size_batch * len_seq, dim))
+
+            for inode in xrange(num_node):
+                for ibatch in xrange(len(instants_output)):
+                    sec, coors = instants_output[ibatch], outputs[inode, ibatch, -2:]
+                    self.dict_traces[inode][sec] = coors
+
+            self._update_traces_()
+
+        except:
+            raise
+
     @staticmethod
     def test():
 
@@ -463,6 +605,8 @@ class Sampler:
                 sampler = Sampler(utils.get_config('path_trace'), nodes=3, length=18)
                 sampler = Sampler(utils.get_config('path_trace'), nodes=['2'])
                 sampler = Sampler(utils.get_config('path_trace'))
+
+                sampler_empty = Sampler.empty_like(sampler)
 
             test_init()
 
@@ -512,6 +656,23 @@ class Sampler:
                         break
 
             test_loose_batch_size()
+
+            def test_unreliable_inputs():
+                sampler = Sampler(utils.get_config('path_trace'), nodes=['2', '3'],
+                                  length_sequence_output=2, size_batch=3)
+                sampler_predictions = Sampler()
+                sampler_predictions._copy_node_container_(sampler)
+
+                instants_input, inputs, instants_target, targets = sampler.load_batch()
+
+                targets *= 0
+                sampler_predictions.save_batch_output(instants_target, targets)
+
+                # unreliable_input = False
+                unreliable_input = 1  # 1-HOP
+                inputs = Sampler.make_unreliable_input(inputs, sampler_predictions, instants_input, unreliable_input)
+
+            test_unreliable_inputs()
 
             utils.xprint('...Fine', newline=True)
 

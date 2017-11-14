@@ -562,9 +562,14 @@
 ###### 2017-11-13
 
 - RFCT: Major refactoring for `Sampler`;
-- [] RFCT: Seperate new class `OutputSampler` & `InputSampler` out from `Sampler`;
+
+###### 2017-11-14
+
+- ADD: Enable to save samples(prediction results) to an (initially empty-like) sampler;
+- ADD: Enable to apply unreliable input (use previous prediction results as the input samples during training);
 
 
+- [ ] RFCT: Seperate new class `OutputSampler` & `InputSampler` out from `Sampler`;
 - [ ] OPT: Change use of dict into OrderedDict or so;
 - [ ] RFCT: Extract weight & bias initializers;
 - [ ] ADD: Pre-training;

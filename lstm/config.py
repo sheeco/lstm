@@ -89,6 +89,16 @@ config_pool = {
                 'value': 50,
                 'tags': []
             },
+            # When unreliable input is enabled, predictions for some instants are used as inputs for training.
+            # a) False: use known facts for ALL the instants of inputs;
+            # b) (1, length_sequence_input): use last (x - 1) instants of predictions as unreliable inputs.
+            # e.g. unreliable_input = 2, len_seq_in = 5 means:
+            #      use [f_(t - 5), f_(t - 4), f_(t - 3), p_(t - 2), p_(t - 1)] as inputs to predict p_(t),
+            #      where f stands for known facts & p stands for prediction
+            'unreliable_input': {
+                'value': False,
+                'tags': []
+            },
             # Maximum deviation to be considered a hit (exclusive)
             'hit_range': {
                 'value': 50,
@@ -142,8 +152,8 @@ config_pool = {
                 'tags': []
             },
             # Devision of train set & test set
-            # <float> within (0, 1): x = train set size / total
-            # <int> above 1: exact size of train set (in terms of sample)
+            # a) <float> within (0, 1): x = train set size / total
+            # b) <int> above 1: exact size of train set (in terms of sample)
             'trainset': {
                 'value': .5,
                 'tags': []
