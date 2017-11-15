@@ -568,9 +568,15 @@
 - ADD: Enable to save samples(prediction results) to an (initially empty-like) sampler;
 - ADD: Enable to apply unreliable input (use previous prediction results as the input samples during training);
 
+###### 2017-11-15
+
+- OPT: for sampler;
+- [x] RFCT: Change `node_identifiers` from list to dict;
+- [ ] RFCT: Move default configuration groups into data file `default.config`;
+- [ ] RFCT: Change to built-in `logger`;
+
 
 - [ ] RFCT: Seperate new class `OutputSampler` & `InputSampler` out from `Sampler`;
-- [ ] OPT: Change use of dict into OrderedDict or so;
 - [ ] RFCT: Extract weight & bias initializers;
 - [ ] ADD: Pre-training;
 - [ ] ADD: Use `pprint` to improve printing;

@@ -32,10 +32,10 @@ class Sampler:
             self.traces = None
 
             self.node_filter = nodes
-            self.node_identifiers = []  # by the order of `inode` in `self.dict_traces`
+            self.node_identifiers = {}  # by the order of `inode` in `self.dict_traces`
             self.num_node = None
             self.length_trace = 0  # counts of instants, minimum among all requested nodes
-            self.length_limit = length if length > 0 else None
+            self.length_limit = length if length else None
             self.motion_range = None
 
             self.entry = None  # the entry (in terms of length_trace) for batch loading
@@ -74,9 +74,13 @@ class Sampler:
         :return: The newly created empty sampler.
         """
         try:
-            result = Sampler()
-            result._copy_node_container_(sampler)
-            return result
+            empty = Sampler(path=None, dimension_sample=sampler.dimension_sample,
+                            length_sequence_input=sampler.length_sequence_input,
+                            length_sequence_output=sampler.length_sequence_output, size_batch=sampler.size_batch,
+                            strict_batch_size=sampler.strict_batch_size, keep_positive=False,
+                            slot_trace=sampler.slot_trace)
+            empty._copy_node_container_(sampler)
+            return empty
         except:
             raise
 
@@ -181,7 +185,7 @@ class Sampler:
 
                 # Filter nodes
 
-                nodes_filtered = dict_files.keys()
+                nodes_filtered = utils.sorted_keys(dict_files)
                 # by num_node
                 if self.node_filter is None:
                     pass
@@ -210,9 +214,9 @@ class Sampler:
                                      "while getting %s instead." % type(self.node_filter))
 
                 dict_files_filtered = {node_id: dict_files[node_id] for node_id in nodes_filtered}
-                self.node_identifiers = nodes_filtered
-                utils.xprint("Select node(s) %s by filter %s." % (self.node_identifiers, self.node_filter),
-                             newline=True)
+                node_identifiers = {inode: nodes_filtered[inode] for inode in xrange(len(nodes_filtered))}
+                utils.xprint("Select node(s) %s by filter %s." % (utils.sorted_values(node_identifiers),
+                                                                  self.node_filter), newline=True)
 
                 # Actual reading from files
 
@@ -227,7 +231,7 @@ class Sampler:
                 raise
 
         self.dict_traces = dict_traces
-        self.node_identifiers = nodes_filtered
+        self.node_identifiers = node_identifiers
         self.num_node = len(self.node_identifiers)
 
     @staticmethod
@@ -282,7 +286,7 @@ class Sampler:
         """
         try:
             utils.assertor.assert_type(a, Sampler)
-            out = copy.deepcopy(a)
+            clipped = copy.deepcopy(a)
             if indices is None:
                 return None
             elif isinstance(indices, list) \
@@ -308,10 +312,10 @@ class Sampler:
 
             traces = a.traces
             traces = numpy.array([trace[ifrom:ito, :] for trace in traces], dtype=numpy.float32)
-            out.traces = traces
-            out.length_trace = numpy.shape(traces)[1]
-            out.motion_range = Sampler._compute_range_(out.traces)
-            return out
+            clipped.traces = traces
+            clipped.length_trace = numpy.shape(traces)[1]
+            clipped.motion_range = Sampler._compute_range_(clipped.traces)
+            return clipped
 
         except:
             raise
@@ -470,7 +474,7 @@ class Sampler:
                     return None, None, None, None
                 elif not self.strict_batch_size:
                     utils.warn("Sampler.load_batch: "
-                               "Insufficient batch. Only  %s  samples are left."
+                               "Insufficient batch. Only %s samples are left."
                                % batch_input.shape[1])
                     break
                 else:
@@ -483,19 +487,15 @@ class Sampler:
     def _retrieve_by_instants_(self, instants):
         """
         Return <dict> of trace samples for all the given instants & all the nodes.
-        :param instants: instants to retrieve by. may contain dublicate elements.
-                                [size_batch, self.length_sequence_output * unreliable_inputs]
+        :param instants: array of all the unique instants to retrieve by.
         :return: <dict>{second: {node: coordinates, ...}, ...} (maybe empty, check before use)
         """
         result = {}
-        if not numpy.size(instants):
+        if not utils.assertor.assert_type(instants, [numpy.ndarray, list]) or not numpy.size(instants):
             return result
 
-        size_batch, len_seq = numpy.shape(instants)
-        instants = numpy.ndarray.flatten(instants)
-        for iflattened in xrange(size_batch * len_seq):
-            sec = instants[iflattened]
-            for inode in xrange(len(self.node_identifiers)):
+        for inode in self.node_identifiers:
+            for sec in instants:
                 if sec in self.dict_traces[inode]:
                     if sec not in result:
                         result[sec] = {}
@@ -560,6 +560,7 @@ class Sampler:
                 return inputs
 
             instants_update = instants[:, -unreliability:]
+            instants_update = numpy.unique(instants_update)
             dict_updates = predictions._retrieve_by_instants_(instants_update)
 
             indicator_updates = numpy.zeros_like(instants)
@@ -667,6 +668,12 @@ class Sampler:
 
                 targets *= 0
                 sampler_predictions.save_batch_output(instants_target, targets)
+
+                try:
+                    sampler_predictions._retrieve_by_instants_(30)
+                except Exception, e:
+                    pass
+                sampler_predictions._retrieve_by_instants_([30])
 
                 # unreliable_input = False
                 unreliable_input = 1  # 1-HOP

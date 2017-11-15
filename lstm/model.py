@@ -238,7 +238,7 @@ class SocialLSTM:
 
             self.logger = utils.get_sublogger()
 
-            _columns = ['epoch', 'batch', 'sample', 'instant'] + self.node_identifiers
+            _columns = ['epoch', 'batch', 'sample', 'instant'] + utils.sorted_values(self.node_identifiers)
             self.logger.register("train-sample", columns=_columns)
             self.logger.register("train-batch", columns=['epoch', 'batch', 'loss',
                                                          'mean-deviation', 'min-deviation', 'max-deviation'])

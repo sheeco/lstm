@@ -36,6 +36,7 @@ __all__ = [
     "format_var",
     "get_timestamp",
     "sorted_keys",
+    "sorted_values",
     "sorted_items",
     "format_time_string",
     "get_rootlogger",
@@ -1089,6 +1090,14 @@ def sorted_keys(dictionary):
     """
     assertor.assert_type(dictionary, dict)
     return sorted(dictionary.keys())
+
+
+def sorted_values(dictionary):
+    """
+    Return a list of values sorted by keys.
+    """
+    keys = sorted_keys(dictionary)
+    return [dictionary[key] for key in keys]
 
 
 def sorted_items(dictionary):
