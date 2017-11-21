@@ -215,7 +215,7 @@ class Sampler:
 
                 dict_files_filtered = {node_id: dict_files[node_id] for node_id in nodes_filtered}
                 node_identifiers = {inode: nodes_filtered[inode] for inode in xrange(len(nodes_filtered))}
-                utils.xprint("Select node(s) %s by filter %s." % (utils.sorted_values(node_identifiers),
+                utils.xprint("Use nodes %s filtered by '%s'." % (utils.sorted_values(node_identifiers),
                                                                   self.node_filter), newline=True)
 
                 # Actual reading from files

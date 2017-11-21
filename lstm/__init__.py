@@ -53,13 +53,17 @@ def _init_config_():
     Initialize for global variables in config module.
     """
     try:
-        config.update_config_from_pool(group='default')
+        echo = config.init_config_pool()
+        utils.xprint(echo, newline=True)
+
+        echo = config.update_config_from_pool(group='default')
+        utils.xprint(echo, newline=True)
         if __debug__:
-            config.update_config_from_pool(group='debug')
-            utils.xprint("Debugging configuration loaded.", newline=True)
+            echo = config.update_config_from_pool(group='debug')
+            utils.xprint(echo, newline=True)
         else:
-            config.update_config_from_pool(group='run')
-            utils.xprint("Running configuration loaded.", newline=True)
+            echo = config.update_config_from_pool(group='run')
+            utils.xprint(echo, newline=True)
 
     except:
         raise

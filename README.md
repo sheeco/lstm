@@ -18,6 +18,7 @@
 
     README.md
     CHANGE.md
+    default.config
     test.py
     lstm/   
     |-- __init__.py   

@@ -577,8 +577,12 @@
 
 - RFCT: Fix some typos & code style problems;
 
+###### 2017-11-21
 
-- [ ] RFCT: Move default configuration groups into data file `default.config`;
+- [x] RFCT: Move default configuration groups into data file `default.config`;
+- RFCT: for config processing & echo messages;
+
+
 - [ ] RFCT: Change to built-in `logger`;
 - [ ] RFCT: Separate new class `OutputSampler` & `InputSampler` out from `Sampler`;
 - [ ] RFCT: Extract weight & bias initializers;

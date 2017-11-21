@@ -1215,10 +1215,10 @@ def update_config(key, value, source, tags=None, silence=True, strict=True):
     try:
         if strict and not has_config(key, ignore_none=False):
             raise ValueError("Unknown configuration key '%s'." % key)
-        if not silence:
-            xprint("Update '%s' from %s to %s (from %s)." % (key, config.get_config(key), value, source), newline=True)
 
-        config.update_config(key, value, source, tags)
+        echo = config.update_config(key, value, source, tags)
+        if not silence:
+            xprint(echo, newline=True)
         _validate_config_()
     except:
         raise

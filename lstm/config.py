@@ -1,5 +1,7 @@
 # coding:utf-8
 
+import ast
+
 __all__ = [
     "has_config",
     "get_config",
@@ -7,283 +9,37 @@ __all__ = [
     "test"
 ]
 
-config_pool = {
-    # Group name
-    'default':
-        {
-            # 1 trace sample per n seconds
-            'slot_trace': {
-                'value': 30,
-                'tags': []
-            },
-            # Path for trace files
-            'path_trace': {
-                'value': 'res/trace/NCSU/',
-                'tags': ['path']
-            },
-            # Path for all the logs
-            'path_log': {
-                'value': 'log/',
-                'tags': ['path']
-            },
-            # Sub log path for comparing logs
-            'path_compare': {
-                'value': 'compare/',
-                'tags': ['path']
-            },
-            # Sub log path for pickle files
-            'path_pickle': {
-                'value': 'pickle/',
-                'tags': ['path']
-            },
-            # Logging identifier
-            # for naming of the log folder
-            'identifier': {
-                'value': None,
-                'tags': []
-            },
-            # Tag for logging identifier
-            'tag': {
-                'value': None,
-                'tags': []
-            },
-            # Whether to ask for more epochs
-            'ask': {
-                'value': True,
-                'tags': []
-            },
-            # Directory path that configs & parameters get imported from
-            'path_import': {
-                'value': None,
-                'tags': ['path']
-            },
-            # File path that which parameters get unpickled & imported from
-            'file_unpickle': {
-                'value': None,
-                'tags': ['path']
-            },
-
-            # How many nodes to learn on
-            'num_node': {
-                'value': 2,
-                'tags': ['build']
-            },
-            # Selected nodes
-            # This will override 'num_node'
-            'nodes': {
-                'value': ['31'],
-                'tags': []
-            },
-            # Dimension of sample input: 2 for [x, y]; 3 for [sec, x, y]
-            'dimension_sample': {
-                'value': 3,
-                'tags': ['build']
-            },
-            # Whether to map the coordinates to certain grid
-            'sample_gridding': {
-                'value': False,
-                'tags': []
-            },
-            # Length of edge when coordinates need to be mapped to grid
-            'scale_grid': {
-                'value': 50,
-                'tags': []
-            },
-            # When unreliable input is enabled, predictions for some instants are used as inputs for training.
-            # a) False: use known facts for ALL the instants of inputs;
-            # b) (1, length_sequence_input): use last (x - 1) instants of predictions as unreliable inputs.
-            # e.g. unreliable_input = 2, len_seq_in = 5 means:
-            #      use [f_(t - 5), f_(t - 4), f_(t - 3), p_(t - 2), p_(t - 1)] as inputs to predict p_(t),
-            #      where f stands for known facts & p stands for prediction
-            'unreliable_input': {
-                'value': False,
-                'tags': []
-            },
-            # Maximum deviation to be considered a hit (exclusive)
-            'hit_range': {
-                'value': 50,
-                'tags': []
-            },
-            # Decoding scheme
-            'decode_scheme': {
-                # Among ['binorm', 'euclidean']
-                'value': 'binorm',
-                'tags': ['build']
-            },
-            # Sharing scheme for LSTMS of multiple nodes
-            'share_scheme': {
-                # Among ['parameter', 'input', 'olstm', 'none']
-                # 'parameter' means all the nodes share the same set of parameters
-                # 'input' means all the nodes share the embedded sample input with each other
-                # 'olstm' means Occupancy Map sharing
-                # 'none' means neither
-                'value': 'none',
-                'tags': ['build']
-            },
-            # Edge length of single neighborhood grid in social pooling
-            'scale_pool': {
-                'value': 100,
-                'tags': ['build']
-            },
-            # Maximum number of grids to consider in each direction in social pooling
-            # meaning pool dimension would be (2 * r, 2 * r)
-            'range_pool': {
-                'value': 5,
-                'tags': ['build']
-            },
-            # If only a full size batch will be accepted
-            'strict_batch_size': {
-                'value': False,
-                'tags': []
-            },
-            # Batch Size
-            'size_batch': {
-                'value': 1,
-                'tags': []
-            },
-            # Tryout after every n * epochs of training
-            'tryout_frequency': {
-                'value': 1,
-                'tags': []
-            },
-            # Tryout with targets or not
-            'tryout_with_target': {
-                'value': True,
-                'tags': []
-            },
-            # Division of train set & test set
-            # a) <float> within (0, 1): x = train set size / total
-            # b) <int> above 1: exact size of train set (in terms of sample)
-            'trainset': {
-                'value': .5,
-                'tags': []
-            },
-
-            # Training scheme
-            'train_scheme': {
-                # Among ['rmsprop', 'adagrad', 'momentum', 'nesterov']
-                'value': 'rmsprop',
-                'tags': ['train']
-            },
-            # Decrease learning rate if training has failed
-            # <float> within (0, 1): new = old * x
-            # <float> within (-1, 0): new = old + x
-            'adaptive_learning_rate': {
-                'value': -.001,
-                'tags': ['train']
-            },
-            # Decrease gradient clipping if training has failed
-            # , only works when gradient clipping is applied
-            # negative <int>: new = old + x
-            'adaptive_grad_clip': {
-                'value': -100,
-                'tags': ['train']
-            },
-            # Learning rate for training
-            # Used for any training scheme
-            'learning_rate': {
-                'value': .005,
-                'tags': ['train']
-            },
-            # All gradients above this will be clipped during training
-            'grad_clip': {
-                'value': 0,
-                'tags': ['train']
-            },
-
-            # Parameters for RMSProp
-            'rho': {
-                'value': .9,
-                'tags': ['train', 'rmsprop']
-            },
-            # Parameters for RMSProp / AdaGrad
-            'epsilon': {
-                'value': 1e-8,
-                'tags': ['train', 'rmsprop', 'adagrad']
-            },
-
-            # Parameters for SGD with Momentum / Nesterov Momentum
-            'momentum': {
-                'value': .9,
-                'tags': ['train', 'momentum', 'nesterov']
-            },
-
-        },
-
-    'debug':
-        # Nano-size net config for debugging
-        {
-            # Length of observed sequence
-            'length_sequence_input': {
-                'value': 4,
-                'tags': ['build']
-            },
-            # Length of predicted sequence
-            'length_sequence_output': {
-                'value': 1,
-                'tags': ['build']
-            },
-            # Number of units in embedding layer ([x, y] -> e)
-            'dimension_embed_layer': {
-                'value': 2,
-                'tags': ['build']
-            },
-            # Number of units in hidden (LSTM) layers
-            # n: single layer of n units
-            # (m, n): m * layers of n units
-            'dimension_hidden_layer': {
-                'value': (2, 2),
-                'tags': ['build']
-            },
-
-            # Number of epochs to train the net
-            'num_epoch': {
-                'value': 2,
-                'tags': []
-            },
-        },
-
-    'run':
-        {
-            # Length of observed sequence
-            'length_sequence_input': {
-                'value': 10,
-                'tags': ['build']
-            },
-            # Length of predicted sequence
-            'length_sequence_output': {
-                'value': 1,
-                'tags': ['build']
-            },
-            # Number of units in embedding layer ([x, y] -> e)
-            'dimension_embed_layer': {
-                'value': 64,
-                'tags': ['build']
-            },
-            # Number of units in hidden (LSTM) layers
-            # n: single layer of n units
-            # (m, n): m * layers of n units
-            'dimension_hidden_layer': {
-                'value': (10, 32),
-                'tags': ['build']
-            },
-
-            # Number of epochs to train the net
-            'num_epoch': {
-                'value': 300,
-                'tags': []
-            },
-        }
-}
+default_config_groups = {}
+PATH_DEFAULT_CONFIG_GROUPS = "default.config"
 
 
-def _get_config_from_pool_(group='default'):
+def init_config_pool():
+    """
+
+    :return: Echo message
+    """
     try:
-        if group not in config_pool:
-            available_keys = config_pool.keys()
+        global default_config_groups
+        pfile = open(PATH_DEFAULT_CONFIG_GROUPS, 'r')
+        content = pfile.read()
+        default_config_groups = ast.literal_eval(content)
+        return "Load default configuration groups from '%s'." % PATH_DEFAULT_CONFIG_GROUPS
+
+    except IOError:
+        raise IOError("Cannot find default configuration file '%s'." % PATH_DEFAULT_CONFIG_GROUPS)
+    except ValueError:
+        raise ValueError("Invalid configuration format in '%s'" % PATH_DEFAULT_CONFIG_GROUPS)
+    except:
+        raise
+
+
+def _get_config_group_(group='default'):
+    try:
+        if group not in default_config_groups:
+            available_keys = default_config_groups.keys()
             raise ValueError("Invalid group '%s'. Must choose from %s." % (group, available_keys))
 
-        return config_pool[group]
+        return default_config_groups[group]
 
     except:
         raise
@@ -377,9 +133,15 @@ def filter_config(tag, config=None):
 
 
 def update_config_from_pool(group='default'):
+    """
+
+    :param group: The config group key in the config pool.
+    :return: Echo message
+    """
     try:
         if group is not None:
-            _update_(_get_config_from_pool_(group=group), source=group)
+            _update_(_get_config_group_(group=group), source=group)
+            return "Update configurations in group '%s'." % group
     except:
         raise
 
@@ -389,11 +151,14 @@ def update_config(key, value, source, tags=None):
 
     :param key: Configuration key. e.g. 'nodes', 'num_epoch'
     :param value: Configuration value.
+    :param source: A tag for logging, to indicate the source of latest config overwriting.
     :param tags: List of tags. The 1st tag should be configuration source. e.g. 'command-line', 'import', 'runtime'
-    :return:
+    :return: Echo message
     """
     try:
+        original = get_config(key)
         _update_({key: value}, source, tags)
+        return "Update configuration '%s' from %s to %s (from %s)." % (key, original, value, source)
     except:
         raise
 
@@ -430,9 +195,9 @@ def test():
     try:
         print 'Testing config ... ',
 
-        debug = _get_config_from_pool_(group='debug')
+        debug = _get_config_group_(group='debug')
         try:
-            invalid = _get_config_from_pool_(group='invalid-key')
+            invalid = _get_config_group_(group='invalid-key')
         except ValueError, e:
             pass
 
