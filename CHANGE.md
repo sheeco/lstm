@@ -58,9 +58,9 @@
 
 ###### [2016-12-05](68aae71b8b1d7aacefee9bd6ec79882d960f5459)
 
-- RFCT: Move helper funcitons into `utils.py`;
-- ADD: `STRICT_BATCH` to indicate if only full-size batches are accepted, maybe mandatory to avoid indeterministic in `social_mask`;
-- ADD: Try to define `SocialLSTMCell` herited from `CustomRecurrentCell` (untested);
+- RFCT: Move helper functions into `utils.py`;
+- ADD: `STRICT_BATCH` to indicate if only full-size batches are accepted, maybe mandatory to avoid indetermination in `social_mask`;
+- ADD: Try to define `SocialLSTMCell` inherited from `CustomRecurrentCell` (untested);
 - NOTE: Maybe should give up the `ReccurentContainerLayer` approach & overwrite `CustomRecurrentLayer` directly?
 
 ###### [2016-12-12](a7ac820e2778d45190204cdfd9349843859e5a1f)
@@ -69,7 +69,7 @@
 
 ###### [2016-12-12](2aa7ec08e92780cd1c7cb86c2fe549e0f217657b)
 
-- TEST: Forwarding connections should be fine, only if passing in previous hidden states mannually;
+- TEST: Forwarding connections should be fine, only if passing in previous hidden states manually;
 - DEBUG: The overwriting in `SocialLSTMCell`, still "lack of input" for `layer_xy`. Likely has sth to do with line 291 & 551 in [recurrent.py](https://github.com/sheeco/Lasagne/blob/add565017d4636676028d16dcba1ec2b2870aa36/lasagne/layers/recurrent.py#L291);
 
 ###### [2016-12-22](b96a719c22d8ee8941e9c737b12a4597f031a30d)
@@ -126,7 +126,7 @@
 
 ###### [2017-03-27](b25784a81092e5c65d83965329575f925d1e19d7)
 
-- MNT: Seperate `CHANGE.md` from `README.md`. & Rename `main.py` as `test.py`;
+- MNT: Separate `CHANGE.md` from `README.md`. & Rename `main.py` as `test.py`;
 
 ###### [2017-03-27](9bcd618823ad3177cf0c470f5353bc615a04140d)
 
@@ -182,7 +182,7 @@
 
 ###### [2017-04-06](a16e37ceedbd1f5c200ddd675f6bc21c81343c67)
 
-- ADD: `Sampler.clip()` to enable devision of samples;
+- ADD: `Sampler.clip()` to enable division of samples;
 
 ###### [2017-04-07](aec4d7f71507754770ec21fe3e369d65b9d7eb1d)
 
@@ -210,7 +210,7 @@
 
 ###### [2017-04-11](d63fe3e0c9ba1bbc5e351b5504059bd4e1a3caa8)
 
-- RFCT: Seperate decoding, computing of loss & deviations from compiling function;
+- RFCT: Separate decoding, computing of loss & deviations from compiling function;
 
 ###### [2017-04-11](feb0fdd2abaf124e6a19277fe0d3ff762bf78adc)
 
@@ -253,7 +253,7 @@
 
 - ADD: Enable importing of configs & pickled params from command line, e.g. `-i|--import log/xx-xx-xx-xx-xx-xx/`;
 - RFCT: Redefine structure of configs, config source & tags included;
-- RFCT: Merge `filer.py` into `utils.py`. & Move mandatory initialzations into `__init__.py`;
+- RFCT: Merge `filer.py` into `utils.py`. & Move mandatory initializations into `__init__.py`;
 
 ###### [2017-04-17](84bb00b7b0103b18f6658517c8e0d4f53c0c1ed0)
 
@@ -261,7 +261,7 @@
 
 ###### [2017-04-17](170b26350e7159597916afe4e850bc7190ce60a3)
 
-- ADD: Enable to change learning rate if training failure has occured. & Validate the finite of loss;
+- ADD: Enable to change learning rate if training failure has occurred. & Validate the finite of loss;
 - RFCT: Remove useless config 'log_slot';
 - RFCT: For asking & asserting methods;
 
@@ -364,7 +364,7 @@
 
 ###### [2017-04-24](360ae3d4044f4d353fad2ae012a692e767bdc006)
 
-- ADD: Enable to choose decoding scheme between bivariant normal distribution / euclidean distance;
+- ADD: Enable to choose decoding scheme between bivariate normal distribution / euclidean distance;
 
 ###### [2017-04-25](919aa2071f0cca1c330c2f490c17545e3cf19e57)
 
@@ -384,7 +384,7 @@
 
 ###### [2017-05-04](edffd7015000e9b4b9932c7007051eb814f6798e)
 
-- RFCT: Seperate training control on different levels;
+- RFCT: Separate training control on different levels;
 
 ###### [2017-05-04](fc395728ec10576e4aae7dece6ae37d5b8f0b736)
 
@@ -444,7 +444,7 @@
 ###### [2017-05-22](e31fb48b7935339aac1934fd46e779e8353722e3)
 
 - FIX: Forget to reset entries after learning rate gets updated;
-- FIX: Logging with mutiple nodes;
+- FIX: Logging with multiple nodes;
 
 ###### [2017-05-22](b74812468ae3edd119c66c9d581c8a37eac68915)
 
@@ -504,12 +504,12 @@
 ###### [2017-06-07](b84d12ffa3a91f594a8bae109c381a13cbbe8f2f)
 
 - OPT: Enable to apply all the samples as testset;
-- TEST: Hitrate result of full testset is worse than those of seperate trainset & testset (e.g. 27% out of 57% & 91%);
+- TEST: Hitrate result of full testset is worse than those of separate trainset & testset (e.g. 27% out of 57% & 91%);
 - TEST: Hitrate result of testset is repeatable under newly compiled train function with same initial learning rate;
 
 ###### [2017-06-07](d37dab258e5dccd969689f26359a48223df40505)
 
-- FIX: Flip the sequence slicing to enable 'n-n' seq, & to maintain compatibale with previous parameters for 'n-1' seq;
+- FIX: Flip the sequence slicing to enable 'n-n' seq, & to maintain compatible with previous parameters for 'n-1' seq;
 - TESTed: Hitrate result of 'n-1' seq is repeatable with flipped slicing;
 
 ###### [2017-06-07](a62ccd2c21c58c883081f2fe9853648e8719b2d9)
@@ -533,7 +533,7 @@
 
 ###### [2017-06-09](d40fee638d99f11643b7132c4d18a7950bcdb6ba)
 
-- REM: Abandone network history;
+- REM: Abandon network history;
 
 ###### [2017-06-14](758b3ea174e4bfab28add05133958e4ce3ac5d45)
 
@@ -572,11 +572,15 @@
 
 - OPT: for sampler;
 - [x] RFCT: Change `node_identifiers` from list to dict;
+
+###### 2017-11-21
+
+- RFCT: Fix some typos & code style problems;
+
+
 - [ ] RFCT: Move default configuration groups into data file `default.config`;
 - [ ] RFCT: Change to built-in `logger`;
-
-
-- [ ] RFCT: Seperate new class `OutputSampler` & `InputSampler` out from `Sampler`;
+- [ ] RFCT: Separate new class `OutputSampler` & `InputSampler` out from `Sampler`;
 - [ ] RFCT: Extract weight & bias initializers;
 - [ ] ADD: Pre-training;
 - [ ] ADD: Use `pprint` to improve printing;

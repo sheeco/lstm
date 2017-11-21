@@ -160,7 +160,7 @@ class Timer:
             try:
                 # duplicate stop
                 elapse = timer.stop()
-            except Exception, e:
+            except RuntimeError, e:
                 pass
             timer.start()
             # duplicate start, meaning restart
@@ -169,13 +169,13 @@ class Timer:
             try:
                 # duplicate pause
                 timer.pause()
-            except Exception, e:
+            except RuntimeError, e:
                 pass
             pause = timer.resume()
             try:
                 # duplicate resume
                 timer.resume()
-            except Exception, e:
+            except RuntimeError, e:
                 pass
             timer.pause()
             pause = timer.resume()
@@ -542,18 +542,18 @@ class Logger:
 
             try:
                 logger.log('test wrong content type ... ', name='test')
-            except Exception, e:
+            except ValueError, e:
                 pass
 
             try:
                 _dict['z'] = 'test-wrong-key'
                 logger.log(_dict, name='test')
-            except Exception, e:
+            except ValueError, e:
                 pass
 
             try:
                 logger.log(_dict, name='test-unregistered')
-            except Exception, e:
+            except ValueError, e:
                 pass
 
             logger.register_console()
@@ -659,8 +659,8 @@ class Filer:
     def is_hidden(path):
         try:
             file_flag = win32file.GetFileAttributesW(path)
-            is_hiden = file_flag & win32con.FILE_ATTRIBUTE_HIDDEN
-            return is_hiden
+            is_hidden = file_flag & win32con.FILE_ATTRIBUTE_HIDDEN
+            return is_hidden
         except:
             raise
 
@@ -909,7 +909,7 @@ def handle(exception, logger=None, exiting=False):
     if not exiting:
         return
     if isinstance(exception, KeyboardInterrupt):
-        exit("Stop munually.")
+        exit("Stop manually.")
     else:
         exit("Exit Due to Failure.")
 
@@ -921,8 +921,8 @@ def sleep(seconds):
         raise
 
 
-def ask(message, code_quit='q', interpretor=None, **kwargs):
-    if not callable(interpretor):
+def ask(message, code_quit='q', interpreter=None, **kwargs):
+    if not callable(interpreter):
         raise ValueError("Argument `interpret` is not callable.")
 
     while True:
@@ -942,13 +942,13 @@ def ask(message, code_quit='q', interpretor=None, **kwargs):
                 return None
 
             try:
-                if interpretor is None:
+                if interpreter is None:
                     return answer
                 elif len(kwargs) > 0:
-                    answer = interpretor(answer, **kwargs)
+                    answer = interpreter(answer, **kwargs)
                     return answer
                 else:
-                    answer = interpretor(answer)
+                    answer = interpreter(answer)
                     return answer
 
             except AssertionError, e:
@@ -1114,9 +1114,9 @@ def format_time_string(seconds):
     elif seconds < 60 * 60:
         return "%dm %ds" % divmod(seconds, 60)
     else:
-        h, sec = divmod(seconds, 60 * 60)
-        min, sec = divmod(sec, 60)
-        return "%dh %dm %ds" % (h, min, sec)
+        hour, second = divmod(seconds, 60 * 60)
+        minute, second = divmod(second, 60)
+        return "%dh %dm %ds" % (hour, minute, second)
 
 
 def get_rootlogger():
@@ -1142,12 +1142,12 @@ def _validate_config_():
             remove_config('num_node')
 
         # Validate path formats
-        for key, content in config._filter_config_('path').iteritems():
+        for key, content in config.filter_config('path').iteritems():
             original = content['value']
             if original is not None:
                 validated = Filer.validate_path_format(original)
                 if validated != original:
-                    config._update_config_(key, validated, source=content['source'])
+                    config.update_config(key, validated, source=content['source'])
 
         # Validate numeric configs
         trainset = get_config('trainset')
@@ -1208,7 +1208,7 @@ def update_config(key, value, source, tags=None, silence=True, strict=True):
     :param value:
     :param source:
     :param tags:
-    :param silence: Print configuraiton update info only if not `silence`.
+    :param silence: Print configuration update info only if not `silence`.
     :param strict: Only allow to add new configuration if not `strict`.
     :return:
     """
@@ -1218,7 +1218,7 @@ def update_config(key, value, source, tags=None, silence=True, strict=True):
         if not silence:
             xprint("Update '%s' from %s to %s (from %s)." % (key, config.get_config(key), value, source), newline=True)
 
-        config._update_config_(key, value, source, tags)
+        config.update_config(key, value, source, tags)
         _validate_config_()
     except:
         raise
@@ -1226,7 +1226,7 @@ def update_config(key, value, source, tags=None, silence=True, strict=True):
 
 def import_config(config_imported, tag=None):
     try:
-        config._import_config_(config_imported, tag)
+        config.import_config(config_imported, tag)
         _validate_config_()
     except:
         raise
@@ -1246,8 +1246,8 @@ def process_command_line_args(args=None):
             get_sublogger().register('args')
             get_sublogger().log("%s\n" % args, name='args')
 
-        # shortopts: "ha:i" means opt '-h' & '-i' don't take arg, '-a' does take arg
-        # longopts: ["--help", "--add="] means opt '--add' does take arg
+        # short-opts: "ha:i" means opt '-h' & '-i' don't take arg, '-a' does take arg
+        # long-opts: ["--help", "--add="] means opt '--add' does take arg
         opts, unknowns = getopt.getopt(args, "c:t:i:", longopts=["config=", "tag=", "import="])
 
         # handle importing first
@@ -1256,7 +1256,7 @@ def process_command_line_args(args=None):
                 _path = argv
                 try:
                     _path = ast.literal_eval(argv)
-                except:
+                except ValueError, e:
                     pass
 
                 # Import params.pkl
@@ -1290,7 +1290,7 @@ def process_command_line_args(args=None):
             if argv != '':
                 try:
                     argv = ast.literal_eval(argv)
-                except:
+                except ValueError, e:
                     pass
 
             # Manual configs will override imported configs
@@ -1391,13 +1391,13 @@ def test():
             path = Filer.validate_path_format(path)
 
         def test_ask():
-            yes = ask('Enter yes or no:', interpretor=interpret_confirm)
-            n = ask('Enter positive integer:', interpretor=interpret_positive_int)
-            f = ask('Enter positive float:', interpretor=interpret_positive_float)
-            path = ask('Enter path:', interpretor=interpret_file_path)
+            yes = ask('Enter yes or no:', interpreter=interpret_confirm)
+            n = ask('Enter positive integer:', interpreter=interpret_positive_int)
+            f = ask('Enter positive float:', interpreter=interpret_positive_float)
+            path = ask('Enter path:', interpreter=interpret_file_path)
             try:
-                ans = ask('Test wrong interpretor.', interpretor='test')
-            except Exception, e:
+                ans = ask('Test wrong interpreter.', interpreter='test')
+            except ValueError, e:
                 pass
 
         def test_ask_menu():
@@ -1407,7 +1407,7 @@ def test():
             _hint = "0: (s)top & exit   1: (c)ontinue    2: (p)eek network output"
 
             xprint('\n', newline=True)
-            choice = ask(_hint, code_quit='q', interpretor=interpret_menu, menu=_menu)
+            choice = ask(_hint, code_quit='q', interpreter=interpret_menu, menu=_menu)
 
         def test_pickling():
             _logger = get_sublogger()
@@ -1434,13 +1434,13 @@ def test():
         def test_abstract():
             try:
                 temp = Assertor()
-            except Exception, e:
+            except TypeError, e:
                 pass
 
         def test_unknown_config():
             try:
                 process_command_line_args(args=["-c", "{'unknown-key': None, 'tag': 'x'}", "-t", "xxx"])
-            except Exception, e:
+            except ValueError, e:
                 pass
 
         # test_hiding()

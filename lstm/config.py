@@ -151,7 +151,7 @@ config_pool = {
                 'value': True,
                 'tags': []
             },
-            # Devision of train set & test set
+            # Division of train set & test set
             # a) <float> within (0, 1): x = train set size / total
             # b) <int> above 1: exact size of train set (in terms of sample)
             'trainset': {
@@ -352,7 +352,7 @@ def get_config(key=None):
         raise
 
 
-def _filter_config_(tag, config=None):
+def filter_config(tag, config=None):
     """
     Filter configs with certain tag, from `config` (global config by default).
     :param tag: <str>
@@ -376,7 +376,7 @@ def _filter_config_(tag, config=None):
         raise
 
 
-def _update_config_from_pool_(group='default'):
+def update_config_from_pool(group='default'):
     try:
         if group is not None:
             _update_(_get_config_from_pool_(group=group), source=group)
@@ -384,7 +384,7 @@ def _update_config_from_pool_(group='default'):
         raise
 
 
-def _update_config_(key, value, source, tags=None):
+def update_config(key, value, source, tags=None):
     """
 
     :param key: Configuration key. e.g. 'nodes', 'num_epoch'
@@ -398,7 +398,7 @@ def _update_config_(key, value, source, tags=None):
         raise
 
 
-def _import_config_(config, tag=None):
+def import_config(config, tag=None):
     """
 
     :param config: <Dict>
@@ -408,10 +408,10 @@ def _import_config_(config, tag=None):
     try:
         # import all keys if tag is None
         if tag is not None:
-            config = _filter_config_(tag, config=config)
+            config = filter_config(tag, config=config)
 
         for impkey, impvalue in config.iteritems():
-            _update_config_(impkey, impvalue, 'imported')
+            update_config(impkey, impvalue, 'imported')
 
     except:
         raise
@@ -433,19 +433,19 @@ def test():
         debug = _get_config_from_pool_(group='debug')
         try:
             invalid = _get_config_from_pool_(group='invalid-key')
-        except Exception, e:
+        except ValueError, e:
             pass
 
-        _update_config_from_pool_(group='run')
+        update_config_from_pool(group='run')
 
-        _update_config_('num_epoch', 0, 'test', tags=['int'])
+        update_config('num_epoch', 0, 'test', tags=['int'])
         # test arg `tags`
-        _update_config_('num_epoch', 1, 'test', tags='positive')
-        _update_config_('dimension_sample', 3, 'test', tags=['positive', 'build'])
+        update_config('num_epoch', 1, 'test', tags='positive')
+        update_config('dimension_sample', 3, 'test', tags=['positive', 'build'])
         # test duplicate tags
-        _update_config_('dimension_sample', 3, 'test', tags=['positive', 'imported'])
+        update_config('dimension_sample', 3, 'test', tags=['positive', 'imported'])
         # test arg `source`
-        _update_config_('num_epoch', 2, 'command-line')
+        update_config('num_epoch', 2, 'command-line')
 
         # test getter
         _has = has_config('num_epoch')
@@ -453,11 +453,11 @@ def test():
         _has = has_config('new-key')
         try:
             _value = get_config('new-key')
-        except Exception, e:
+        except KeyError, e:
             pass
 
         # test new key
-        _update_config_('new-key', None, 'test')
+        update_config('new-key', None, 'test')
         _value = get_config('new-key')
         print 'Fine'
 

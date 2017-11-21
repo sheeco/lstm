@@ -645,7 +645,7 @@ class SocialLSTM:
                 n_shared_lstm = 0
 
             # list of layer objects for all hidden layer
-            # each one concated from layer objects for all nodes in single hidden layer
+            # each one concatenated from layer objects for all nodes in single hidden layer
             list2d_layers_hidden = []
 
             for ihid in xrange(0, n_hid):
@@ -728,12 +728,12 @@ class SocialLSTM:
 
             pass  # end of building of multiple hidden layers
 
-            # Dimshuffle & concate lstms in the last hidden layer into single layer object
+            # Dimshuffle & concatenate lstms in the last hidden layer into single layer object
 
             _list_last_hidden = list2d_layers_hidden[-1]
             list_shuffled_lstms = []
             for inode in xrange(self.num_node):
-                # add an extra dim of 1 for concatation
+                # add an extra dim of 1 for concatenation
                 list_shuffled_lstms += [
                     L.layers.DimshuffleLayer(_list_last_hidden[inode],
                                              pattern=('x', 0, 1, 2))]
@@ -829,7 +829,7 @@ class SocialLSTM:
             self.param_names = get_names_for_params(self.params_all)
 
             """
-            Import external paratemers if given
+            Import external parameters if given
             """
 
             # Assign saved parameter values to the built network
@@ -905,7 +905,7 @@ class SocialLSTM:
 
     def _compute_loss_(self):
         """
-        (NNL) bivariant normal loss of Euclidean distance loss for training.
+        (NNL) bivariate normal loss of Euclidean distance loss for training.
         Build computation graph from `predictions`, `targets` to `loss`, only if `loss` is None.
         :return:
         """
@@ -966,7 +966,7 @@ class SocialLSTM:
                         distribution = distribution_mat[idx, :]
                         means = distribution[0:2]
                         scaled_stds = T.mul(distribution[2:4], motion_range_v)
-                        deviations = T.mul(distribution[2:4], motion_range_v)
+                        _deviations = T.mul(distribution[2:4], motion_range_v)
                         correlation = distribution[4]
                         target = fact_mat[idx, :]
                         prob = SocialLSTM.bivar_norm(target[0], target[1], means[0], means[1], scaled_stds[0], scaled_stds[1],
@@ -1000,7 +1000,7 @@ class SocialLSTM:
                     """
                     utils.xprint("using decode scheme 'euclidean' ... ")
 
-                    # Elemwise differences
+                    # Elementwise differences
                     differences = T.sub(self.predictions, facts)
                     differences = T.reshape(differences, shape_stacked_facts)
                     deviations = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
@@ -1041,7 +1041,7 @@ class SocialLSTM:
                 shape_facts = facts.shape
                 shape_stacked_facts = (shape_facts[0] * shape_facts[1] * shape_facts[2], shape_facts[3])
 
-                # Elemwise differences
+                # Elementwise differences
                 differences = T.sub(self.predictions, facts)
                 differences = T.reshape(differences, shape_stacked_facts)
                 deviations = T.add(differences[:, 0] ** 2, differences[:, 1] ** 2) ** 0.5
@@ -1359,7 +1359,7 @@ class SocialLSTM:
                 _hint = "0: (s)top & exit   1: (c)ontinue    2: (p)eek network output"
 
                 utils.xprint('\n', newline=True)
-                _choice = utils.ask(_hint, code_quit='q', interpretor=utils.interpret_menu, menu=_menu)
+                _choice = utils.ask(_hint, code_quit='q', interpreter=utils.interpret_menu, menu=_menu)
                 utils.xprint('', newline=True)
 
                 while _choice == 'peek':
@@ -1368,7 +1368,7 @@ class SocialLSTM:
 
                     # ask again after peeking
                     utils.xprint('', newline=True)
-                    _choice = utils.ask(_hint, code_quit='q', interpretor=utils.interpret_menu, menu=_menu)
+                    _choice = utils.ask(_hint, code_quit='q', interpreter=utils.interpret_menu, menu=_menu)
                     utils.xprint('', newline=True)
 
                 if _choice == 'stop':
@@ -1476,7 +1476,7 @@ class SocialLSTM:
             if hitrates is not None:
                 for ihitrange in xrange(0, NUM_HITRANGE_TOLERANCE):
                     hitrange = hitrates[ihitrange][0]
-                    newrecord = hitrates[ihitrange][1]
+                    new_record = hitrates[ihitrange][1]
                     if hitrange not in self.best_param_values:
                         self.best_param_values[hitrange] = {
                             'epoch': None,  # after n^th epoch
@@ -1485,8 +1485,8 @@ class SocialLSTM:
                             'path': None
                         }
                     if self.best_param_values[hitrange]['record'] is None \
-                        or newrecord >= self.best_param_values[hitrange]['record']:
-                        self.update_best_params(hitrange, self.entry_epoch, self.current_param_values, newrecord)
+                            or new_record >= self.best_param_values[hitrange]['record']:
+                        self.update_best_params(hitrange, self.entry_epoch, self.current_param_values, new_record)
                     else:
                         pass
 
@@ -1583,6 +1583,8 @@ class SocialLSTM:
 
         :param params: Parameter values to export. Current values are used if not specified.
         :param filename: Filename to export to. Default format is used if not specified.
+        :type replace: The path of which previous file to replace.
+        :param overwritable: Exported file would get overwritten without saving if True. Move to backup folder otherwise.
         :return: Path of the exported file.
         """
         try:
@@ -1629,7 +1631,7 @@ class SocialLSTM:
             utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
 
             if path is None:
-                path = utils.ask('Import from file path?', interpretor=utils.interpret_file_path)
+                path = utils.ask('Import from file path?', interpreter=utils.interpret_file_path)
                 if path is None:
                     return
             utils.xprint('Importing given parameters ... ')
@@ -1784,11 +1786,11 @@ class SocialLSTM:
             sample_gridding = utils.get_config('sample_gridding')
             if sample_gridding is True:
                 sampler.map_to_grid(grid_system=GridSystem(utils.get_config('scale_grid')))
-            # Devide into train set & test set
+            # Divide into train set & test set
             trainset = utils.get_config('trainset')
-            sampler_trainset, sampler_testset = sampler.devide(trainset)
+            sampler_trainset, sampler_testset = sampler.divide(trainset)
             # sampler_testset.with_target = False
-            utils.xprint("Use %d samples as train set & %d samples as test set."
+            utils.xprint("Use %d samples as train set, %d samples as test set."
                          % (sampler_trainset.length(), sampler_testset.length()), newline=True)
 
             # Define the model
@@ -1828,11 +1830,11 @@ class SocialLSTM:
                             if model.entry_epoch >= model.num_epoch:
                                 if ask:
 
-                                    more = utils.ask("Try more epochs?", code_quit=None, interpretor=utils.interpret_confirm)
+                                    more = utils.ask("Try more epochs?", code_quit=None, interpreter=utils.interpret_confirm)
 
                                     if more:
 
-                                        num_more = utils.ask("How many?", interpretor=utils.interpret_positive_int)
+                                        num_more = utils.ask("How many?", interpreter=utils.interpret_positive_int)
 
                                         # quit means no more epochs
                                         if num_more is not None \

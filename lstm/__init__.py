@@ -53,12 +53,12 @@ def _init_config_():
     Initialize for global variables in config module.
     """
     try:
-        config._update_config_from_pool_(group='default')
+        config.update_config_from_pool(group='default')
         if __debug__:
-            config._update_config_from_pool_(group='debug')
+            config.update_config_from_pool(group='debug')
             utils.xprint("Debugging configuration loaded.", newline=True)
         else:
-            config._update_config_from_pool_(group='run')
+            config.update_config_from_pool(group='run')
             utils.xprint("Running configuration loaded.", newline=True)
 
     except:

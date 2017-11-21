@@ -26,7 +26,7 @@ class Sampler:
             self.path = path
 
             # Note: Modifications of coordinates(panning, gridding, ...) must be applied to `self.dict_traces`,
-            # and call `_update_traces_` mannually afterwards to update `self.traces`.
+            # and call `_update_traces_` manually afterwards to update `self.traces`.
             # Rather than apply modifications to `self.traces` directly
             self.dict_traces = {}  # {inode: {time: [x, y], ...}, ...}
             self.traces = None
@@ -101,7 +101,7 @@ class Sampler:
 
     def _update_traces_(self):
         """
-        Must call this method mannually whenever `self.dict_traces` is changed.
+        Must call this method manually whenever `self.dict_traces` is changed.
         """
         self.traces = Sampler._dict_to_array_(self.dict_traces, self.dimension_sample, self.length_limit)
         self.num_node = int(self.traces.shape[0])
@@ -125,7 +125,7 @@ class Sampler:
         return length - (length_sequence_input + length_sequence_output - 1)
 
     @staticmethod
-    def _npair_to_length(npair, length_sequence_input, length_sequence_output):
+    def _npair_to_length_(npair, length_sequence_input, length_sequence_output):
         return npair + (length_sequence_input + length_sequence_output - 1)
 
     def npair(self):
@@ -255,9 +255,9 @@ class Sampler:
         except:
             raise
 
-    def devide(self, trainset):
+    def divide(self, trainset):
         """
-        Devide this sampler into a train set & a test set, according to `trainset`.
+        Divide this sampler into a train set & a test set, according to `trainset`.
         :param trainset: <float> among [0, 1] means ratio of `trainset / all`, <int> among (1, +) means size of trainset.
         :return: sampler_trainset, sampler_testset
         """
@@ -278,10 +278,10 @@ class Sampler:
     def clip(a, indices=None):
 
         """
-        Get a sampler clipped from an existed sampler by given indices (in terms of input-ouput sequence pair count).
+        Get a sampler clipped from an existed sampler by given indices (in terms of input-output sequence pair count).
         :param a: The sampler to be clipped from.
         :param indices: Slice range e.g. indices=(6, 10); indices=(0, None); indices=15 same as indices=(0,15)
-                        Note: in terms of input-ouput sequence pair count
+                        Note: in terms of input-output sequence pair count
         :return: The clipped sampler.
         """
         try:
@@ -308,7 +308,7 @@ class Sampler:
                                  % (ifrom, ito, a.npair()))
 
             if ito is not None:
-                ito = Sampler._npair_to_length(ito, a.length_sequence_input, a.length_sequence_output)
+                ito = Sampler._npair_to_length_(ito, a.length_sequence_input, a.length_sequence_output)
 
             traces = a.traces
             traces = numpy.array([trace[ifrom:ito, :] for trace in traces], dtype=numpy.float32)
@@ -484,24 +484,27 @@ class Sampler:
         except:
             raise
 
-    def _retrieve_by_instants_(self, instants):
+    def retrieve_by_instants(self, instants):
         """
         Return <dict> of trace samples for all the given instants & all the nodes.
         :param instants: array of all the unique instants to retrieve by.
         :return: <dict>{second: {node: coordinates, ...}, ...} (maybe empty, check before use)
         """
-        result = {}
-        if not utils.assertor.assert_type(instants, [numpy.ndarray, list]) or not numpy.size(instants):
+        try:
+            result = {}
+            if not utils.assertor.assert_type(instants, [numpy.ndarray, list]) or not numpy.size(instants):
+                return result
+
+            for inode in self.node_identifiers:
+                for sec in instants:
+                    if sec in self.dict_traces[inode]:
+                        if sec not in result:
+                            result[sec] = {}
+                        result[sec][inode] = self.dict_traces[inode][sec]
+
             return result
-
-        for inode in self.node_identifiers:
-            for sec in instants:
-                if sec in self.dict_traces[inode]:
-                    if sec not in result:
-                        result[sec] = {}
-                    result[sec][inode] = self.dict_traces[inode][sec]
-
-        return result
+        except:
+            raise
 
     @staticmethod
     def _update_batch_input_(batch_instants, batch_inputs, indicator_updates, dict_updates):
@@ -561,7 +564,7 @@ class Sampler:
 
             instants_update = instants[:, -unreliability:]
             instants_update = numpy.unique(instants_update)
-            dict_updates = predictions._retrieve_by_instants_(instants_update)
+            dict_updates = predictions.retrieve_by_instants(instants_update)
 
             indicator_updates = numpy.zeros_like(instants)
             indicator_updates[:, -unreliability:] = 1
@@ -619,7 +622,7 @@ class Sampler:
 
             test_grid_and_pan()
 
-            def test_clip_and_devide():
+            def test_clip_and_divide():
                 sampler = Sampler(utils.get_config('path_trace'), nodes=3)
                 twenty = Sampler.clip(sampler, indices=20)
                 try:
@@ -628,9 +631,9 @@ class Sampler:
                     assert isinstance(e, ValueError)
                 five = Sampler.clip(twenty, indices=(5, None))
 
-                trainset, testset = twenty.devide(0.25)
+                trainset, testset = twenty.divide(0.25)
 
-            test_clip_and_devide()
+            test_clip_and_divide()
 
             def test_load():
                 sampler = Sampler(utils.get_config('path_trace'), nodes=3, size_batch=5)
@@ -670,10 +673,10 @@ class Sampler:
                 sampler_predictions.save_batch_output(instants_target, targets)
 
                 try:
-                    sampler_predictions._retrieve_by_instants_(30)
-                except Exception, e:
+                    sampler_predictions.retrieve_by_instants(30)
+                except ValueError, e:
                     pass
-                sampler_predictions._retrieve_by_instants_([30])
+                sampler_predictions.retrieve_by_instants([30])
 
                 # unreliable_input = False
                 unreliable_input = 1  # 1-HOP
