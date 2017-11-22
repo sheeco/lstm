@@ -582,6 +582,11 @@
 - [x] RFCT: Move default configuration groups into data file `default.config`;
 - RFCT: for config processing & echo messages;
 
+###### 2017-11-22
+
+- MNT: Update readme;
+- [ ] RFCT: Move `SocialLSTM.test()` into `test.py`;
+
 
 - [ ] RFCT: Change to built-in `logger`;
 - [ ] RFCT: Separate new class `OutputSampler` & `InputSampler` out from `Sampler`;
