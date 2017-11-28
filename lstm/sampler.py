@@ -204,6 +204,7 @@ class Sampler:
                 # by node identifiers
                 elif isinstance(self.node_filter, list) \
                         and len(self.node_filter) > 0:
+                    self.node_filter = ['%s' % node for node in self.node_filter]
                     for node in self.node_filter:
                         if node not in dict_files:
                             raise ValueError("Cannot find trace file for node '%s' under given path." % node)
