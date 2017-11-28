@@ -1,37 +1,36 @@
+# lstm
 
->*Created by Eco Sun on 2016-11-23, last updated on 2017-11-22.*
+An LSTM-RNN network for multi-node trajectory predicting.
 
-
-An LSTM network for trajectory predicting.
-
-
-### Dependency
+## Dependency
 
 - python-2.7.12
-- [Theano-0.9.0](c697eeab84e5b8a74908da654b66ec9eca4f1291)
-- [*Forked* Lasagne](4cd90af6f318caf2b883a26b72feb87383a0c695)
+- [Theano-0.9.0](https://github.com/Theano/Theano/commit/c697eeab84e5b8a74908da654b66ec9eca4f1291)
+- [*Forked* Lasagne](https://github.com/sheeco/Lasagne/commit/404861b44d7849c88509117ff92e4ff6c18af8ed)
 
-### Platform
+## Platform
 
 - Windows 10, 64 bit
 - PyCharm Community Edition 2016.3
 
 
-### Files
+## Files
 
 File | Description
 ---- | -----------
 CHANGE.md | Change log by each commit.
-default.config | Default execution configurations stored as text file.
-test.py | Contains the actual execution entry.
+default.config | Default execution configurations as a `dict` string (plain text).
+test.py | A demo script running default test.
 lstm/\_\_init__.py | Init file for the `lstm` module.
-lstm/config.py | Methods involving global configuration access. (Since it's imported in each of the other files, one **MUST NOT** import any of them in this file.)
+lstm/config.py | Methods involving global configuration access. (Since it's imported in each of the other files, one **MUST NOT** import any of the other in this file.)
 lstm/utils.py | Utility methods including file operations, assertions, logging, interactions...
 lstm/sampler.py | Class `Sampler` designed for trace sample reading, loading, saving and updating.
 lstm/model.py | Class `SocialLSTM` that implemented the network.
 res/trace/* | Trajectory dataset files should be put under this directory as resources. The path could be configured with keyword 'path_trace'.
 log/* | Log files would be stored under this folder, identified by timestamp of each execution.
 
+
+## Usage
 
 ### Trajectory Format
 
@@ -42,14 +41,14 @@ e.g.
 > 1.5030000000000000e+004	 -1.2501138629672572e+004	 -6.5828068052055951e+003	
 
 - Each sample consists of a triple of `time`, `x` & `y`, separated by only whitespace strings.
-- `time`: an integer in terms of seconds, `x` and `y`: euclidean coordinates converted from 3-dim GPS coordinates, in terms of meters.
+- `time`: An integer in terms of seconds;`x` and `y`: Euclidean coordinates converted from 3-dim GPS coordinates, in terms of meters.
 - Each file contains all the trace samples from a single node, one sample per line, with no comment or description lines before or after.
-- Values of `time` does not have to start from zero, but do have to maintain a constant interval from the start to the end, without any missing or additional values in between.
+- Values of `time` does not have to start from zero, but DO have to maintain a constant interval from the start to the end, without any missing or additional values in between. (e.g. 120, 150, 180 ...)
 
 
-### Command Line Usage
+### Command Line Arguments
 
-`python test.py [-c | --config] [-t | --tag] [-i | --import`
+`python -O test.py [-c | --config] [-t | --tag] [-i | --import]`
 
 Short Opt | Long Opt | Value | Example
 --------- | -------- | ----- | -------
@@ -58,19 +57,96 @@ Short Opt | Long Opt | Value | Example
 `-i` | `--import` | A wrapped path string of the parameter pickling file to import | `-i "log\[debug]2017-11-21-16-52-29\pickle\params-init.pkl"` 
 
 
+### Configurations
+
+Configurations are pre-defined in `default.config`, with descriptions provided in the comments. 
+
+e.g.
+	{
+		# Group name
+		'default':
+			{
+				# Path for trace files
+				'path_trace': {
+					'value': 'res/trace/NCSU/',
+					'tags': ['path']
+				},
+			},
+		'debug':
+			# Nano-size net config for debugging
+			{
+				# Length of observed sequence
+				'length_sequence_input': {
+					'value': 4,
+					'tags': ['build']
+				},
+			},
+		'run':
+			{
+				# Length of observed sequence
+				'length_sequence_input': {
+					'value': 4,
+					'tags': ['build']
+				}
+			}
+	}
+
+- Configurations are defined into 3 groups. The group 'default' is loaded at first, then group 'debug'/'run', 
+at last the command line configurations. For the same configuration key, a newly loaded value would override the older one.
+- Each configuration consists of a configuration key ('path_trace'), a default value ('res/trace/NCSU/') and a list of tags (['path', 'build']). 
+The tags are only used for validation ('path' is used for format validation, 'build' is designed for parameter import validation but is not actually used at this moment).
+- Only the pre-defined configuration keys are allowed. To enable a new configuration, one must add a key entry and provide with a default value in this file first.
+- Which of the 'debug'/'run' groups actually gets loaded depends on the `__debug__` switch in python, i.e. the `-O` switch in command line. 
+(`python -O test.py` means running; `python test.py` means debugging.)
+- Some configurations (e.g. 'length_sequence_input' above) get assigned a different value to enable debugging with a nano-size network for speed-up purpose. 
+The others (e.g. 'path_trace' above) are irrelevant to debug/run, hence are defined in group 'default'.
+
+
 ### Execution Log Files
 
-Plain text files functioned as execution reports.
+Plain text files functioned as execution reports, stored under `log/`, identified by execution timestamp.
 
 File | Description
 ---- | -----------
 args.log | Backup for the command line arguments.
 console.log | Backup for console output during execution.
-(train/test)-hitrate.log | Hit rate percents (for multiple hit ranges) recorded by each epoch during training/testing. (the briefest level)
+(train/test)-hitrate.log | Hit rate percent (for multiple hit ranges) recorded by each epoch during training/testing. (the briefest level)
 (train/test)-epoch.log | Loss and deviations recorded by each epoch.
 (train/test)-batch.log | Loss and deviations recorded by each batch.
 (train/test)-sample.log | Prediction results (for multiple nodes) recorded by each sample. (the most detailed level)
 pickle/ | Pickled (binary) files for network parameters saved after each epoch. Could be used for parameter import.
-compare/ | Detailed prediction targets & results recorded by each epoch, formatted matlab-styled for matrix import.
+compare/ | Detailed prediction targets & results recorded by each epoch, formatted matlab-styled for the convenience of matrix import.
 
- 
+Also, most of the logs provide a set of column descriptions at its very first line.
+
+
+### Export & Import of Network Parameters
+
+Parameter values of the LSTM network could be exported or re-imported. They are extracted from (and could be re-assigned to) the network using interfaces provided by Lasagne, 
+and are serialized to disk files using the python serialization library `pickle`.
+
+#### Export
+
+Network parameters get automatically exported to '.pkl' files under `log/pickle/`. The pickling results are binary files that MUST NOT be temper with.
+
+e.g. Files under `log/pickle/`
+
+> params-init.pkl
+> params-epoch1.pkl
+> params-epoch2.pkl
+> params-epoch3.pkl
+> params-best-hitrange100-hitrate0.300000-epoch2.pkl
+> params-best-hitrange50-hitrate0.250000-epoch2.pkl
+
+- The initial (randomly generated) parameters as `params-init.pkl`.
+- The parameters after the `n`th epoch of training as `params-epoch$n$.pkl`.
+- Also, the parameters with the best hitrate result get an extra copy with a detailed filename for convenience. And would get updated during further training.
+
+#### Import
+
+1. Find the desired parameter file: e.g. `log/[demo]2017-07-20-22-27-03/pickle/params-best-hitrange50-hitrate0.250000-epoch2.pkl`
+2. Run with parameter importing: `python -O test.py --import 'log/[demo]2017-07-20-22-27-03/pickle/params-best-hitrange50-hitrate0.250000-epoch2.pkl' --tag 'import-from-demo'`
+Then the given parameters would be treated as initial parameters, instead of randomly generated ones.
+
+Since the parameters are dependent on the network structure, one must make sure the network building configurations (tagged with 'build') are consistent with the execution to import from. 
+(e.g. Importing parameters from a network with 10 as sequence length and assigning them to a network with 4 as sequence length is certainly not going to work.)
