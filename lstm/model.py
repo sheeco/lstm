@@ -16,8 +16,10 @@ __all__ = [
 
 class SocialLSTM:
 
-    # todo add None
     # todo add the sharing of social tensor H maybe
+
+    # Configuration options to choose among
+
     SHARE_SCHEMES = ['parameter',
                      'input',
                      'olstm',
@@ -230,9 +232,9 @@ class SocialLSTM:
             self.w_correlation = L.init.Uniform(std=0., mean=0.)
             self.b_correlation = L.init.Constant(0.)
             if self.scaled_correlation:
-                self.f_correlation = SocialLSTM.scaled_tanh
+                self.f_correlation = SocialLSTM.scaled_tanh(1.e-8)
             else:
-                self.f_correlation = SocialLSTM.safe_tanh
+                self.f_correlation = SocialLSTM.scaled_tanh(.9)
 
             # Prepare for logging
 
@@ -259,7 +261,10 @@ class SocialLSTM:
     @staticmethod
     def bivar_norm(x1, x2, mu1, mu2, sigma1, sigma2, rho):
         """
-        pdf of bivariate norm
+        bivar_norm(x1, x2, mu1, mu2, sigma1, sigma2, rho) -> probability
+
+        Return the probability of given sample [x1, x2] according to the Bivariate Normal Distribution defined by
+        [mu1, mu2, sigma1, sigma2, rho]. All the parameters as well as the return value are <Tensor>.
         """
         try:
             part1 = (x1 - mu1) ** 2 / sigma1 ** 2
@@ -275,7 +280,9 @@ class SocialLSTM:
 
     @staticmethod
     def clip(x, beta=.9):
-
+        """
+        clip(x, beta) -> clipped_tensor
+        """
         try:
             beta = T.as_tensor_variable(beta)
             return T.clip(x, -beta, beta)
@@ -284,7 +291,9 @@ class SocialLSTM:
 
     @staticmethod
     def scale(x, beta=.9):
-
+        """
+        scale(x, beta) -> scaled_tensor
+        """
         try:
             beta = T.constant(beta, name='stds-scale-ratio')
             return T.mul(beta, x)
@@ -292,27 +301,22 @@ class SocialLSTM:
             raise
 
     @staticmethod
-    def scaled_tanh(x, beta=1.e-8):
+    def scaled_tanh(beta):
+        """
+        scaled_tanh(x, beta) -> <callable(x)>
 
+        Return a callable function that takes `x`(<Tensor>) as parameter and returns the scaled result of tanh(x).
+        """
         try:
-            y = T.tanh(x)
-            return SocialLSTM.scale(y, beta)
-            # return T.clip(y, -beta, beta)
-        except:
-            raise
-
-    @staticmethod
-    def safe_tanh(x, beta=.9):
-
-        try:
-            y = T.tanh(x)
-            return SocialLSTM.scale(y, beta)
-            # return T.clip(y, -beta, beta)
+            return lambda x: SocialLSTM.scale(T.tanh(x), beta)
         except:
             raise
 
     def compute_hitrate(self, deviations, nbin=None, formatted=False):
         """
+        compute_hitrate(deviations, nbin, formatted) -> [hitrates]
+
+        Return hitrate histogram statistics results according to given conditions.
 
         :param deviations: numpy array
         :param nbin: Only returns n first bins of hitrate histogram.
@@ -365,11 +369,13 @@ class SocialLSTM:
         except:
             raise
 
-    """
-    input: samples(node, batch, seq, dim_sample)
-    output: final occupancy_map: (node, batch, seq, m, n, 1)
-    """
     def compute_occupancy_map(self, samples):
+        """
+        compute_occupancy_map(samples) -> occupancy_map
+
+        :param samples: (node, batch, seq, dim_sample) as dimensions
+        :return: "occupancy map" matrix: (node, batch, seq, m, n, 1) as dimensions
+        """
         try:
 
             # samples = T.tensor4('samples', dtype='float32')
@@ -389,11 +395,14 @@ class SocialLSTM:
         except:
             raise
 
-    """
-    input: samples(node, batch, seq, dim_sample), prev_hids (node, batch, seq, dim_hid)
-    output: final social tensor: (node, batch, seq, m, n, dim)
-    """
     def compute_social_tensors(self, samples, prev_hids):
+        """
+        compute_social_tensors(samples, prev_hids) -> social_tensors
+
+        :param samples: (node, batch, seq, dim_sample) as dimensions
+        :param prev_hids: (node, batch, seq, dim_hid) as dimensions
+        :return: "social tensor" matrix: (node, batch, seq, m, n, dim) as dimensions
+        """
         try:
 
             # samples = T.tensor4('samples', dtype='float32')
@@ -501,6 +510,9 @@ class SocialLSTM:
             raise
 
     def reset_entry(self):
+        """
+        Reset the epoch & batch entries.
+        """
         self.entry_epoch = 0
         self.entry_batch = 0
 
@@ -508,8 +520,7 @@ class SocialLSTM:
     def build_network(self, params=None):
         """
         Build computation graph from `inputs` to `outputs`, as well as `params` and so.
-        :param params: Give certain parameter values (exported previously maybe) to build the network based on.
-        :return: `outputs`, `params`
+        :param params: A certain set of parameter values (read from previously exported file) to build the network based on.
         """
         try:
             timer = utils.Timer()
@@ -847,15 +858,13 @@ class SocialLSTM:
             self.export_params(filename=picklename)
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
-            return self.network_outputs, self.params_all
 
         except:
             raise
 
     def compute_and_compile(self):
         """
-        Would force to redo from decoding to compiling.
-        :return:
+        Force to re-do from decoding to compiling.
         """
         try:
             self.predictions = None
@@ -883,7 +892,6 @@ class SocialLSTM:
     def _compute_prediction_(self):
         """
         Build computation graph from `outputs` to `predictions`, only if `predictions` is None.
-        :return:
         """
         try:
             utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
@@ -905,9 +913,8 @@ class SocialLSTM:
 
     def _compute_loss_(self):
         """
-        (NNL) bivariate normal loss of Euclidean distance loss for training.
+        NLL(Negative Log Likelihood) Bivariate Normal loss or Euclidean distance loss for training.
         Build computation graph from `predictions`, `targets` to `loss`, only if `loss` is None.
-        :return:
         """
         try:
             utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
@@ -1027,7 +1034,6 @@ class SocialLSTM:
         """
         Euclidean Distance for Observation.
         Build computation graph from `predictions`, `targets` to `deviations`, only if `deviations` is None.
-        :return:
         """
         try:
             utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
@@ -1060,7 +1066,6 @@ class SocialLSTM:
         """
         RMSProp training.
         Build computation graph from `loss` to `updates`, only if `updates` is None.
-        :return:
         """
         try:
             utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
@@ -1102,7 +1107,6 @@ class SocialLSTM:
     def _compile_function_(self):
         """
         Compile theano functions used for prediction, observation & training, only for those functions who are None.
-        :return:
         """
         try:
             utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
@@ -1143,10 +1147,10 @@ class SocialLSTM:
     def _train_single_batch_(self, batch, tag_log='train', with_target=True):
         """
 
-        :param batch: (instants, samples, instants, targets)
+        :param batch: (instants, samples, instants, targets) as dimensions
+        :param tag_log: The tag string for log file naming.
         :param with_target: Whether to train with `targets`. Would train with predictions & use targets only for
                             comparison if `False`.
-        :return:
         """
 
         instants_sample, samples, instants_target, targets = batch[0], batch[1], batch[2], batch[3]
@@ -1299,6 +1303,14 @@ class SocialLSTM:
     # todo add train_some
 
     def _train_single_epoch_(self, sampler, tag_log='train', with_target=True):
+        """
+
+        :param sampler: The `Sampler` instance for training.
+        :param tag_log: The tag string for log file naming.
+        :param with_target: Whether to train with `targets`. Would train with predictions & use targets only for
+                            comparison if `False`.
+        :return:
+        """
 
         FILENAME_COMPARE = '%s-epoch%d' % (tag_log, self.entry_epoch)
         logname_compare = utils.filer.format_subpath(utils.get_config('path_compare'), FILENAME_COMPARE)

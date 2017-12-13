@@ -590,9 +590,13 @@
 
 - MNT: Update readme & configuration descriptions;
 
-#### 2017-11-28
+#### [2017-11-28](2cf3bf5a2167eedac41cb17e999d65de733b6905)
 
 - OPT: Enable list<int> as node filter, to improve robustness;
+
+#### 2017-12-13
+
+- MNT: Update readme & docstrings;
 
 
 ## To-do List

@@ -16,18 +16,18 @@ An LSTM-RNN network for multi-node trajectory predicting.
 
 ## Files
 
-File | Description
----- | -----------
-CHANGE.md | Change log by each commit.
-default.config | Default execution configurations as a `dict` string (plain text).
-test.py | A demo script running default test.
-lstm/\_\_init__.py | Init file for the `lstm` module.
-lstm/config.py | Methods involving global configuration access. (Since it's imported in each of the other files, one **MUST NOT** import any of the other in this file.)
-lstm/utils.py | Utility methods including file operations, assertions, logging, interactions...
-lstm/sampler.py | Class `Sampler` designed for trace sample reading, loading, saving and updating.
-lstm/model.py | Class `SocialLSTM` that implemented the network.
-res/trace/* | Trajectory dataset files should be put under this directory as resources. The path could be configured with keyword 'path_trace'.
-log/* | Log files would be stored under this folder, identified by timestamp of each execution.
+File                  | Description
+----                  | -----------
+CHANGE.md             | Change log by each commit.
+default.config        | Default execution configurations as a `dict` string (plain text).
+test.py               | A demo script running default test.
+lstm/\_\_init__.py    | Init file for the `lstm` module.
+lstm/config.py        | Methods involving global configuration access. (Since it's imported in each of the other files, one **MUST NOT** import any of the other in this file.)
+lstm/utils.py         | Utility methods including file operations, assertions, logging, interactions...
+lstm/sampler.py       | Class `Sampler` designed for trace sample reading, loading, saving and updating.
+lstm/model.py         | Class `SocialLSTM` that implemented the network.
+res/trace/*           | Trajectory dataset files should be put under this directory as resources. The path could be configured with keyword 'path_trace'.
+log/*                 | Log files would be stored under this folder, identified by timestamp of each execution.
 
 
 ## Usage
@@ -50,11 +50,11 @@ e.g.
 
 `python -O test.py [-c | --config] [-t | --tag] [-i | --import]`
 
-Short Opt | Long Opt | Value | Example
---------- | -------- | ----- | -------
-`-c` | `--config` | A wrapped `dict` string of configurations to update | `-c "{'nodes': ['1', '2'], 'ask': False}"`
-`-t` | `--tag` | A string to attach to execution timestamp | `-t debug`
-`-i` | `--import` | A wrapped path string of the parameter pickling file to import | `-i "log\[debug]2017-11-21-16-52-29\pickle\params-init.pkl"` 
+Short Opt   | Long Opt   | Value                                                          | Example
+---------   | --------   | -----                                                          | -------
+`-c`        | `--config` | A wrapped `dict` string of configurations to update            | `-c "{'nodes': ['1', '2'], 'ask': False}"`
+`-t`        | `--tag`    | A string to attach to execution timestamp                      | `-t debug`
+`-i`        | `--import` | A wrapped path string of the parameter pickling file to import | `-i "log\[debug]2017-11-21-16-52-29\pickle\params-init.pkl"` 
 
 
 ### Configurations
@@ -106,16 +106,16 @@ The others (e.g. 'path_trace' above) are irrelevant to debug/run, hence are defi
 
 Plain text files functioned as execution reports, stored under `log/`, identified by execution timestamp.
 
-File | Description
----- | -----------
-args.log | Backup for the command line arguments.
-console.log | Backup for console output during execution.
-(train/test)-hitrate.log | Hit rate percent (for multiple hit ranges) recorded by each epoch during training/testing. (the briefest level)
-(train/test)-epoch.log | Loss and deviations recorded by each epoch.
-(train/test)-batch.log | Loss and deviations recorded by each batch.
-(train/test)-sample.log | Prediction results (for multiple nodes) recorded by each sample. (the most detailed level)
-pickle/ | Pickled (binary) files for network parameters saved after each epoch. Could be used for parameter import.
-compare/ | Detailed prediction targets & results recorded by each epoch, formatted matlab-styled for the convenience of matrix import.
+File                         | Description
+----                         | -----------
+args.log                     | Backup for the command line arguments.
+console.log                  | Backup for console output during execution.
+(train/test)-hitrate.log     | Hit rate percent (for multiple hit ranges) recorded by each epoch during training/testing. (the briefest level)
+(train/test)-epoch.log       | Loss and deviations recorded by each epoch.
+(train/test)-batch.log       | Loss and deviations recorded by each batch.
+(train/test)-sample.log      | Prediction results (for multiple nodes) recorded by each sample. (the most detailed level)
+pickle/                      | Pickled (binary) files for network parameters saved after each epoch. Could be used for parameter import.
+compare/                     | Detailed prediction targets & results recorded by each epoch, formatted matlab-styled for the convenience of matrix import.
 
 Also, most of the logs provide a set of column descriptions at its very first line.
 
