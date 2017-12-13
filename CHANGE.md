@@ -594,9 +594,13 @@
 
 - OPT: Enable list<int> as node filter, to improve robustness;
 
-#### 2017-12-13
+#### [2017-12-13](d6d3cbdebdd152f65136fc811925ee41d0ad2af7)
 
 - MNT: Update readme & docstrings;
+
+#### 2017-12-13
+
+- FIX: Missing `config.log` for tryout-only execution;
 
 
 ## To-do List

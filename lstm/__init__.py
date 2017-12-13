@@ -91,3 +91,5 @@ _init_logger_()
 
 
 utils.process_command_line_args()
+utils.sub_logger.log_config()
+

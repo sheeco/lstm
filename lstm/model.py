@@ -1518,6 +1518,8 @@ class SocialLSTM:
             
         except:
             raise
+            
+        self.logger.log_config()
 
     def train(self, sampler, num_epoch=None):
         """
@@ -1841,11 +1843,9 @@ class SocialLSTM:
                                 break
                             if model.entry_epoch >= model.num_epoch:
                                 if ask:
-
                                     more = utils.ask("Try more epochs?", code_quit=None, interpreter=utils.interpret_confirm)
 
                                     if more:
-
                                         num_more = utils.ask("How many?", interpreter=utils.interpret_positive_int)
 
                                         # quit means no more epochs
@@ -1855,11 +1855,9 @@ class SocialLSTM:
                                             utils.update_config('num_epoch', model.num_epoch, 'runtime', silence=False)
                                         else:
                                             break
-                                    # stop if no more
-                                    else:
+                                    else:  # stop if no more
                                         break
-                                # stop if not ask
-                                else:
+                                else:  # stop if not ask
                                     break
                             else:
                                 continue
