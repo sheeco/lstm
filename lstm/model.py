@@ -1479,8 +1479,11 @@ class SocialLSTM:
 
             with_target = utils.get_config('tryout_with_target')
             _, deviations, hitrates = self._train_single_epoch_(sampler, tag_log='test', with_target=with_target)
-            # must not change training entry
+            # MUST NOT change training entry
             # self.entry_epoch += 1
+
+            # restore original param values after testing
+            self.set_params(params_original)
 
             # Save as the best params if necessary
 
@@ -1498,12 +1501,9 @@ class SocialLSTM:
                         }
                     if self.best_param_values[hitrange]['record'] is None \
                             or new_record >= self.best_param_values[hitrange]['record']:
-                        self.update_best_params(hitrange, self.entry_epoch, self.current_param_values, new_record)
+                        self.update_best_params(hitrange, self.entry_epoch, params_original, new_record)
                     else:
                         pass
-
-            # restore original param values after testing
-            self.set_params(params_original)
 
             # Print deviation info to console
             # utils.xprint('  mean-deviation: %s' % numpy.mean(deviations_by_batch), newline=True)

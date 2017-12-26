@@ -598,14 +598,21 @@
 
 - MNT: Update readme & docstrings;
 
-#### 2017-12-13
+#### [2017-12-13](e2f4035b0161041a6e24a6b65dd24896e1439c22)
 
 - FIX: Missing `config.log` for tryout-only execution;
+
+#### 2017-12-26
+
+- FIX: Wrong(real-time instead of 'original') parameters are saved to 'params-best-hitrange%d-hitrate%.1f-epoch%d.pkl' 
+  (but parameters in 'params-epoch%d.pkl' are fine);
 
 
 ## To-do List
 
-- [ ] RFCT: Move `SocialLSTM.test()` into `test.py`;
+- [ ] REM: Disable 'num_node' configuration;
+- [ ] OPT: Keep sampler dividing compatibale with previous version?
+- [ ] RFCT: Move `SocialLSTM.test()` into `test.py`?
 - [ ] RFCT: Change to built-in `logger`;
 - [ ] RFCT: Separate new class `OutputSampler` & `InputSampler` out from `Sampler`;
 - [ ] RFCT: Extract weight & bias initializers;
