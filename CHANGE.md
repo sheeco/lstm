@@ -602,11 +602,14 @@
 
 - FIX: Missing `config.log` for tryout-only execution;
 
-#### 2017-12-26
+#### [2017-12-26](4b174cac60fc6bde5007dd1f7a988e0d88349534)
 
 - FIX: Wrong(real-time instead of 'original') parameters are saved to 'params-best-hitrange%d-hitrate%.1f-epoch%d.pkl' 
   (but parameters in 'params-epoch%d.pkl' are fine);
 
+#### 2018-01-09
+
+- MNT: Update `.gitignore` for IntelliJ project;
 
 ## To-do List
 
