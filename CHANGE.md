@@ -607,9 +607,14 @@
 - FIX: Wrong(real-time instead of 'original') parameters are saved to 'params-best-hitrange%d-hitrate%.1f-epoch%d.pkl' 
   (but parameters in 'params-epoch%d.pkl' are fine);
 
-#### 2018-01-09
+#### [2018-01-09](d03d9997eb51cb6dc5ba454f038615f9c1b92f64)
 
 - MNT: Update `.gitignore` for IntelliJ project;
+
+#### 2018-01-09
+
+- FIX: String format restriction in command line arguments;
+
 
 ## To-do List
 

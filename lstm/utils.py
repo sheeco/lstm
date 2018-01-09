@@ -1253,10 +1253,12 @@ def process_command_line_args(args=None):
         # handle importing first
         for opt, argv in opts:
             if opt in ("-i", "--import"):
-                _path = argv
+                _path = filer.validate_path_format(argv)
                 try:
-                    _path = ast.literal_eval(argv)
+                    _path = ast.literal_eval(_path)
                 except ValueError, e:
+                    pass
+                except SyntaxError, e:
                     pass
 
                 # Import params.pkl
