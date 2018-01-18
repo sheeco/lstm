@@ -611,9 +611,14 @@
 
 - MNT: Update `.gitignore` for IntelliJ project;
 
-#### 2018-01-09
+#### [2018-01-09](d41d8919a74e59873bcda45532cb0c7b2e139ff6)
 
 - FIX: String format restriction in command line arguments;
+
+#### 2018-01-18
+
+- FIX: Export values of all the `TensorSharedVariable` involved with `func_train` (using `theano.compile.Function.get_shared()`
+  instead of `Lasagne.layers.get_all_params()`) to fix the performance issue with re-imported models;
 
 
 ## To-do List

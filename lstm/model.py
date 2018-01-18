@@ -33,13 +33,18 @@ class SocialLSTM:
     DECODE_SCHEMES = ['binorm',
                       'euclidean']
 
-    def __init__(self, node_identifiers, motion_range, samples=None, targets=None,
+    def __init__(self, node_identifiers, motion_range, samples=None, targets=None, params=None,
                  share_scheme=None, decode_scheme=None, train_scheme=None,
                  scale_pool=None, range_pool=None, hit_range=None,
                  dimension_sample=None, length_sequence_input=None, length_sequence_output=None, size_batch=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
                  learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
                  adaptive_learning_rate=None, adaptive_grad_clip=None, unreliable_input=None):
+        """
+
+        :param params: A certain set of parameter values (read from previously exported file) to build the network based on.
+
+        """
         try:
             if __debug__:
                 theano.config.exception_verbosity = 'high'
@@ -134,6 +139,9 @@ class SocialLSTM:
             self.samples = samples
             self.targets = targets
 
+            # given parameter values for importing
+            self.params_import = params
+
             # list of tensors, all the necessary input tensors for network
             # , only contains sample inputs by default
             self.network_inputs = [self.samples]
@@ -163,7 +171,6 @@ class SocialLSTM:
             self.probabilities = None  # numpy ndarray, binorm probabilities before computing into NNL
 
             self.param_names = []  # list of str, names of all the parameters
-            self.current_param_values = None  # list of ndarrays, stored for debugging or exporting
             self.initial_param_values = None  # ..., stored for possible parameter restoration
             self.best_param_values = {
                 # 50: {  # key of hitrange
@@ -182,9 +189,6 @@ class SocialLSTM:
             self.func_predict = None
             self.func_compare = None
             self.func_train = None
-
-            self.peek_outputs = None
-            self.peek_params = None
 
             """
             Initialization Definitions
@@ -517,10 +521,9 @@ class SocialLSTM:
         self.entry_batch = 0
 
     # todo change to pure theano
-    def build_network(self, params=None):
+    def build_network(self):
         """
-        Build computation graph from `inputs` to `outputs`, as well as `params` and so.
-        :param params: A certain set of parameter values (read from previously exported file) to build the network based on.
+        Build computation graph from `inputs` to `outputs`.
         """
         try:
             timer = utils.Timer()
@@ -824,38 +827,10 @@ class SocialLSTM:
             self.hid_last = L.layers.get_output(layer_last_hid)
 
             self.network = layer_out
-            self.network_outputs = [L.layers.get_output(layer_out)]
-            self.params_all = L.layers.get_all_params(layer_out)
+            network_output = L.layers.get_output(layer_out)
+            network_output.name = 'outputs'
+            self.network_outputs = [network_output]
             self.params_trainable = L.layers.get_all_params(layer_out, trainable=True)
-
-            def get_names_for_params(_list_params):
-                utils.assertor.assert_type(_list_params, list)
-                param_keys = []
-                for _param in _list_params:
-                    # utils.assertor.assert_type(param, TensorSharedVariable)
-                    _name = _param.name
-                    param_keys += [_name]
-                return param_keys
-
-            self.param_names = get_names_for_params(self.params_all)
-
-            """
-            Import external parameters if given
-            """
-
-            # Assign saved parameter values to the built network
-            if params is not None:
-                utils.xprint('importing given parameters ... ')
-                self.set_params(params)
-                picklename = 'params-imported.pkl'
-            else:
-                picklename = 'params-init.pkl'
-
-            # Save initial values of params for possible future restoration
-            self.initial_param_values = L.layers.get_all_param_values(layer_out)
-            self.current_param_values = self.initial_param_values
-            # export initial param values for record
-            self.export_params(filename=picklename)
 
             utils.xprint('done in %s.' % timer.stop(), newline=True)
 
@@ -882,8 +857,6 @@ class SocialLSTM:
             self.func_predict = None
             self.func_compare = None
             self.func_train = None
-            self.peek_outputs = None
-            self.peek_params = None
             self._compile_function_()
 
         except:
@@ -1131,15 +1104,8 @@ class SocialLSTM:
                 self.func_train = theano.function(self.network_inputs + [self.targets], self.loss, updates=self.updates,
                                                   allow_input_downcast=True)
 
-            """
-            Compile peeking functions for debugging
-            """
-            if self.peek_outputs is None:
-                self.peek_outputs = theano.function(self.network_inputs, self.network_outputs, allow_input_downcast=True)
-            if self.peek_params is None:
-                self.peek_params = theano.function([], self.params_all, allow_input_downcast=True)
-
             utils.xprint('done in %s.' % timer.stop(), newline=True)
+            self._init_params_()
 
         except:
             raise
@@ -1200,7 +1166,7 @@ class SocialLSTM:
                         details="Parameters:\n"
                                 "%s" % new_params)
                 else:
-                    self.current_param_values = new_params
+                    pass
 
                 # Done & break
                 break
@@ -1274,17 +1240,17 @@ class SocialLSTM:
                 # Log [loss, mean-deviation, min-deviation, max-deviation] by each batch
 
                 def log_by_batch():
-                    _peek_deviations_this_batch = utils.peek_matrix(deviations_batch, formatted=True) \
+                    _deviations_this_batch = utils.peek_matrix(deviations_batch, formatted=True) \
                         if deviations_batch is not None else None
 
                     self.logger.log({'epoch': self.entry_epoch, 'batch': self.entry_batch,
                                      'loss': utils.format_var(float(loss_batch)),
-                                     'mean-deviation': _peek_deviations_this_batch['mean']
-                                     if _peek_deviations_this_batch is not None else None,
-                                     'min-deviation': _peek_deviations_this_batch['min']
-                                     if _peek_deviations_this_batch is not None else None,
-                                     'max-deviation': _peek_deviations_this_batch['max']
-                                     if _peek_deviations_this_batch is not None else None},
+                                     'mean-deviation': _deviations_this_batch['mean']
+                                     if _deviations_this_batch is not None else None,
+                                     'min-deviation': _deviations_this_batch['min']
+                                     if _deviations_this_batch is not None else None,
+                                     'max-deviation': _deviations_this_batch['max']
+                                     if _deviations_this_batch is not None else None},
                                     name="%s-batch" % tag_log)
 
                 log_by_batch()
@@ -1375,7 +1341,7 @@ class SocialLSTM:
                 utils.xprint('', newline=True)
 
                 while _choice == 'peek':
-                    _netout = self.peek_outputs(inputs)
+                    _netout = self.peek_outputs()
                     utils.xprint('Network Output:\n%s\n' % _netout, newline=True)
 
                     # ask again after peeking
@@ -1418,24 +1384,24 @@ class SocialLSTM:
             _done_logging = False
             while not _done_logging:
                 try:
-                    _peek_losses_this_epoch = utils.peek_matrix(losses_epoch, formatted=True)
-                    _peek_deviations_this_epoch = utils.peek_matrix(deviations_epoch, formatted=True)
+                    _losses_this_epoch = utils.peek_matrix(losses_epoch, formatted=True)
+                    _deviations_this_epoch = utils.peek_matrix(deviations_epoch, formatted=True)
 
                     # Print loss & deviation info to console
                     utils.xprint('  mean-loss: %s; hitrate: %s; mean-deviation: %s'
-                                 % (_peek_losses_this_epoch['mean'],
+                                 % (_losses_this_epoch['mean'],
                                     self.compute_hitrate(deviations_epoch, nbin=2, formatted=True),
-                                    _peek_deviations_this_epoch['mean']),
+                                    _deviations_this_epoch['mean']),
                                  newline=True)
 
                     # Log [mean-loss, mean-deviation, min-deviation, max-deviation] by each epoch
 
                     def log_by_epoch():
                         self.logger.log({'epoch': self.entry_epoch,
-                                         'mean-loss': _peek_losses_this_epoch['mean'],
-                                         'mean-deviation': _peek_deviations_this_epoch['mean'],
-                                         'min-deviation': _peek_deviations_this_epoch['min'],
-                                         'max-deviation': _peek_deviations_this_epoch['max']},
+                                         'mean-loss': _losses_this_epoch['mean'],
+                                         'mean-deviation': _deviations_this_epoch['mean'],
+                                         'min-deviation': _deviations_this_epoch['min'],
+                                         'max-deviation': _deviations_this_epoch['max']},
                                         name="%s-epoch" % tag_log)
 
                     log_by_epoch()
@@ -1475,7 +1441,7 @@ class SocialLSTM:
             timer = utils.Timer()
 
             # backup current param values
-            params_original = self.current_param_values
+            params_original = self.peek_params()
 
             with_target = utils.get_config('tryout_with_target')
             _, deviations, hitrates = self._train_single_epoch_(sampler, tag_log='test', with_target=with_target)
@@ -1483,7 +1449,7 @@ class SocialLSTM:
             # self.entry_epoch += 1
 
             # restore original param values after testing
-            self.set_params(params_original)
+            self._set_param_values_(params_original)
 
             # Save as the best params if necessary
 
@@ -1592,6 +1558,48 @@ class SocialLSTM:
             utils.xprint('Done in %s.' % timer.stop(), newline=True)
         return losses_by_epoch, deviations_by_epoch
 
+    def peek_params(self):
+        try:
+            utils.assertor.assert_not_none(self.func_train, "Must compile the functions first.")
+
+            params = [param.get_value() for param in self.params_all]
+            return params
+        except:
+            raise
+
+    def peek_outputs(self):
+        try:
+            utils.assertor.assert_not_none(self.func_train, "Must compile the functions first.")
+
+            outputs = [output.get_value() for output in self.network_outputs]
+            return outputs
+        except:
+            raise
+
+    def _init_params_(self):
+        try:
+            timer = utils.Timer()
+            if self.params_all is None:
+                self.params_all = self.func_train.get_shared()
+                self.param_names = [param.name for param in self.params_all]
+
+            if self.params_import is not None:
+                # Import given parameter values to the built network
+                self.import_params(self.params_import)
+                picklename = 'params-imported.pkl'
+            else:
+                # Save initial random generated values of params
+                utils.xprint('Saving initial parameters ... ')
+                self.initial_param_values = self.peek_params()
+                picklename = 'params-init.pkl'
+
+            # export initial param values for record
+            self.export_params(filename=picklename)
+            utils.xprint('done in %s.' % timer.stop(), newline=True)
+
+        except:
+            raise
+
     def export_params(self, params=None, filename=None, replace=None, overwritable=True):
         """
 
@@ -1604,14 +1612,14 @@ class SocialLSTM:
         try:
             FILENAME_DEFAULT = 'params-epoch%d.pkl' % self.entry_epoch
 
-            utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
+            utils.assertor.assert_not_none(self.params_all, "Must compile the functions first.")
 
             if params is not None \
                     and filename is None:
                 raise RuntimeError("A `filename` is requested with `params` given.")
 
             if params is None:
-                params = self.current_param_values
+                params = self.peek_params()
             if filename is None:
                 filename = FILENAME_DEFAULT
 
@@ -1640,38 +1648,52 @@ class SocialLSTM:
         except:
             raise
 
-    def import_params(self, path=None):
+    def import_params(self, params):
+        """
+        Reset parameters to given values as new initial values.
+        """
         try:
-            utils.assertor.assert_not_none(self.params_all, "Must build the network first.")
+            utils.assertor.assert_not_none(self.params_all, "Must compile the functions first.")
 
-            if path is None:
-                path = utils.ask('Import from file path?', interpreter=utils.interpret_file_path)
-                if path is None:
-                    return
             utils.xprint('Importing given parameters ... ')
-            params_all = utils.filer.load_from_file(path)
-            self.reset_params(params_all)
+            self._reset_params_(params)
 
             utils.xprint('done.', newline=True)
 
         except:
             raise
 
-    def set_params(self, params):
+    def _set_param_values_(self, values):
+        """
+        Set parameters to given values.
+        """
         try:
-            L.layers.set_all_param_values(self.network, params)
-            self.current_param_values = params
+            utils.assertor.assert_not_none(self.params_all, "Must compile the functions first.")
+
+            params = self.params_all
+            if len(params) != len(values):
+                raise ValueError("Expect %d parameter values while getting %d." %
+                                 (len(params), len(values)))
+
+            for p, v in zip(params, values):
+                if p.get_value().shape != v.shape:
+                    raise ValueError("Expect shape of %r for the parameter while getting %r." %
+                                     (p.get_value().shape, v.shape))
+                else:
+                    p.set_value(v)
 
         except:
             raise
 
-    def reset_params(self, params):
+    def _reset_params_(self, params):
+        """
+        Reset parameters to given values as new initial values. Reset best record as well.
+        """
         try:
-            L.layers.set_all_param_values(self.network, params)
+            self._set_param_values_(params)
 
             # Save initial values of params for possible future restoration
             self.initial_param_values = params
-            self.current_param_values = self.initial_param_values
             self.best_param_values = {}
 
         except:
@@ -1752,7 +1774,7 @@ class SocialLSTM:
                                            "No initial values are found for parameter restoration.")
 
             utils.xprint("Restore parameters from initial values ... ")
-            self.reset_params(self.initial_param_values)
+            self._reset_params_(self.initial_param_values)
             utils.xprint("done.", newline=True)
 
         except:
@@ -1777,7 +1799,7 @@ class SocialLSTM:
                                            "No initial values are found for parameter restoration.")
 
             utils.xprint("Restore parameters from initial values ... ")
-            self.reset_params(self.initial_param_values)
+            self._reset_params_(self.initial_param_values)
             utils.xprint("done.", newline=True)
 
         except:
@@ -1807,17 +1829,17 @@ class SocialLSTM:
             utils.xprint("Use %d samples as train set, %d samples as test set."
                          % (sampler_trainset.length(), sampler_testset.length()), newline=True)
 
+            # Import previously pickled parameters if requested
+            file_unpickle = utils.get_config('file_unpickle') if utils.has_config('file_unpickle') else None
+            params_unpickled = utils.filer.load_from_file(file_unpickle) if file_unpickle is not None else None
+
             # Define the model
-            model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range)
+            model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range, params=params_unpickled)
             ask = utils.get_config('ask')
 
             try:
-                # Import previously pickled parameters if requested
-                file_unpickle = utils.get_config('file_unpickle') if utils.has_config('file_unpickle') else None
-                params_unpickled = utils.filer.load_from_file(file_unpickle) if file_unpickle is not None else None
-
                 # Build & compile the model
-                model.build_network(params=params_unpickled)
+                model.build_network()
                 model.compute_and_compile()
 
                 if params_unpickled is not None:
