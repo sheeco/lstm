@@ -615,10 +615,14 @@
 
 - FIX: String format restriction in command line arguments;
 
-#### 2018-01-18
+#### [2018-01-18](91ca28f92162ba9048d4ee20c9bd999623c83d64)
 
 - FIX: Export values of all the `TensorSharedVariable` involved with `func_train` (using `theano.compile.Function.get_shared()`
   instead of `Lasagne.layers.get_all_params()`) to fix the performance issue with re-imported models;
+
+#### 2018-01-18
+
+- OPT: for timing display;
 
 
 ## To-do List

@@ -9,6 +9,7 @@ if __name__ == '__main__':
         #
         # lstm.config.test()
         # lstm.utils.test()
+        # lstm.utils.Timer.test()
         # lstm.sampler.Sampler.test()
 
         lstm.model.SocialLSTM.test()

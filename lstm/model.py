@@ -526,7 +526,7 @@ class SocialLSTM:
         Build computation graph from `inputs` to `outputs`.
         """
         try:
-            timer = utils.Timer()
+            timer = utils.Timer(prefix=' in ')
 
             utils.xprint('Building Social LSTM network ... ')
             utils.xprint("using share scheme '%s' ... " % self.share_scheme)
@@ -832,7 +832,7 @@ class SocialLSTM:
             self.network_outputs = [network_output]
             self.params_trainable = L.layers.get_all_params(layer_out, trainable=True)
 
-            utils.xprint('done in %s.' % timer.stop(), newline=True)
+            utils.xprint('done%s.' % timer.stop(), newline=True)
 
         except:
             raise
@@ -872,12 +872,13 @@ class SocialLSTM:
             utils.xprint('Decoding ... ')
 
             if self.predictions is None:
+                timer = utils.Timer(prefix=' in ')
                 outputs = self.network_outputs[0]
                 # Use mean(x, y) as predictions directly
                 predictions = outputs[:, :, :, 0:2]
 
                 self.predictions = predictions
-                utils.xprint('done.', newline=True)
+                utils.xprint('done%s.' % timer.stop(), newline=True)
             else:
                 utils.xprint('skipped.', newline=True)
 
@@ -896,6 +897,8 @@ class SocialLSTM:
             utils.xprint('Computing loss ... ')
 
             if self.loss is None:
+                timer = utils.Timer(prefix=' in ')
+
                 # Remove time column
                 facts = self.targets[:, :, :, -2:]
                 shape_facts = facts.shape
@@ -996,7 +999,7 @@ class SocialLSTM:
                 loss = T.mean(loss)
 
                 self.loss = loss
-                utils.xprint('done.', newline=True)
+                utils.xprint('done%s.' % timer.stop(), newline=True)
             else:
                 utils.xprint('skipped.', newline=True)
 
@@ -1015,6 +1018,8 @@ class SocialLSTM:
             utils.xprint('Computing deviation for observation ... ')
 
             if self.deviations is None:
+                timer = utils.Timer(prefix=' in ')
+
                 # Remove time column
                 facts = self.targets[:, :, :, -2:]
                 shape_facts = facts.shape
@@ -1028,7 +1033,7 @@ class SocialLSTM:
                 deviations = T.reshape(deviations, shape_deviations)
 
                 self.deviations = deviations
-                utils.xprint('done.', newline=True)
+                utils.xprint('done%s.' % timer.stop(), newline=True)
             else:
                 utils.xprint('skipped.', newline=True)
 
@@ -1049,6 +1054,7 @@ class SocialLSTM:
 
             if self.updates is None:
                 utils.xprint("using train scheme '%s' ... " % self.train_scheme)
+                timer = utils.Timer(prefix=' in ')
 
                 # Compute updates according to given training scheme
                 if self.train_scheme == 'rmsprop':
@@ -1070,7 +1076,7 @@ class SocialLSTM:
                 utils.assertor.assert_not_none(updates, "Computation of updates has failed.")
 
                 self.updates = updates
-                utils.xprint('done.', newline=True)
+                utils.xprint('done%s.' % timer.stop(), newline=True)
             else:
                 utils.xprint('skipped ...')
 
@@ -1088,7 +1094,7 @@ class SocialLSTM:
             utils.assertor.assert_not_none(self.deviations, "Must compute the deviation first.")
             utils.assertor.assert_not_none(self.updates, "Must compute the updates first.")
 
-            timer = utils.Timer()
+            timer = utils.Timer(prefix=' in ')
             utils.xprint('Compiling functions ... ')
 
             """
@@ -1104,7 +1110,7 @@ class SocialLSTM:
                 self.func_train = theano.function(self.network_inputs + [self.targets], self.loss, updates=self.updates,
                                                   allow_input_downcast=True)
 
-            utils.xprint('done in %s.' % timer.stop(), newline=True)
+            utils.xprint('done%s.' % timer.stop(), newline=True)
             self._init_params_()
 
         except:
@@ -1281,6 +1287,7 @@ class SocialLSTM:
         FILENAME_COMPARE = '%s-epoch%d' % (tag_log, self.entry_epoch)
         logname_compare = utils.filer.format_subpath(utils.get_config('path_compare'), FILENAME_COMPARE)
         self.logger.register(logname_compare, overwritable=False)
+        timer = utils.Timer(prefix=' in ')
 
         losses_epoch = numpy.zeros((0,))
         deviations_epoch = numpy.zeros((0,))
@@ -1337,6 +1344,7 @@ class SocialLSTM:
                 _hint = "0: (s)top & exit   1: (c)ontinue    2: (p)eek network output"
 
                 utils.xprint('\n', newline=True)
+                timer.pause()
                 _choice = utils.ask(_hint, code_quit='q', interpreter=utils.interpret_menu, menu=_menu)
                 utils.xprint('', newline=True)
 
@@ -1354,8 +1362,10 @@ class SocialLSTM:
                     self.num_epoch = self.entry_epoch - 1
                     utils.update_config('num_epoch', self.entry_epoch - 1, 'runtime', silence=False)
                     self.stop = True
+                    timer.resume()
                     break
                 else:
+                    timer.resume()
                     continue
             except utils.InvalidTrainError, e:
                 sampler.reset_entry()
@@ -1420,6 +1430,8 @@ class SocialLSTM:
                 pass  # end of while not _done_logging
 
             ret = losses_epoch, deviations_epoch, hitrates_epoch
+            utils.xprint('Done in %s.' % timer.stop(), newline=True)
+
         else:  # pass logging if this epoch is undone
             ret = None, None, None
 
@@ -1438,7 +1450,6 @@ class SocialLSTM:
 
         try:
             utils.xprint('Testing ... ', newline=True)
-            timer = utils.Timer()
 
             # backup current param values
             params_original = self.peek_params()
@@ -1474,7 +1485,6 @@ class SocialLSTM:
             # Print deviation info to console
             # utils.xprint('  mean-deviation: %s' % numpy.mean(deviations_by_batch), newline=True)
 
-            utils.xprint('Done in %s.' % timer.stop(), newline=True)
             self.export_params(overwritable=False)
             return deviations, hitrates
 
@@ -1508,7 +1518,6 @@ class SocialLSTM:
             # start of single training try
             try:
                 utils.xprint('Training ... ', newline=True)
-                timer = utils.Timer()
 
                 losses_by_epoch = numpy.zeros((0,))
                 deviations_by_epoch = numpy.zeros((0,))
@@ -1554,8 +1563,6 @@ class SocialLSTM:
 
         self.logger.log_config()
 
-        if not self.stop:
-            utils.xprint('Done in %s.' % timer.stop(), newline=True)
         return losses_by_epoch, deviations_by_epoch
 
     def peek_params(self):
@@ -1578,7 +1585,7 @@ class SocialLSTM:
 
     def _init_params_(self):
         try:
-            timer = utils.Timer()
+            timer = utils.Timer(prefix=' in ')
             if self.params_all is None:
                 self.params_all = self.func_train.get_shared()
                 self.param_names = [param.name for param in self.params_all]
@@ -1595,7 +1602,7 @@ class SocialLSTM:
 
             # export initial param values for record
             self.export_params(filename=picklename)
-            utils.xprint('done in %s.' % timer.stop(), newline=True)
+            utils.xprint('done%s.' % timer.stop(), newline=True)
 
         except:
             raise
@@ -1655,10 +1662,11 @@ class SocialLSTM:
         try:
             utils.assertor.assert_not_none(self.params_all, "Must compile the functions first.")
 
+            timer = utils.Timer(prefix=' in ')
             utils.xprint('Importing given parameters ... ')
             self._reset_params_(params)
 
-            utils.xprint('done.', newline=True)
+            utils.xprint('done%s.' % timer.stop(), newline=True)
 
         except:
             raise
@@ -1759,6 +1767,7 @@ class SocialLSTM:
         :return:
         """
         try:
+            timer = utils.Timer(prefix=' in ')
             self.learning_rate = new_learning_rate
             utils.update_config('learning_rate', new_learning_rate, source='runtime', silence=False)
 
@@ -1775,7 +1784,7 @@ class SocialLSTM:
 
             utils.xprint("Restore parameters from initial values ... ")
             self._reset_params_(self.initial_param_values)
-            utils.xprint("done.", newline=True)
+            utils.xprint('done%s.' % timer.stop(), newline=True)
 
         except:
             raise
@@ -1787,6 +1796,7 @@ class SocialLSTM:
         :return:
         """
         try:
+            timer = utils.Timer(prefix=' in ')
             self.grad_clip = new_grad_clip
             utils.update_config('grad_clip', new_grad_clip, source='runtime', silence=False)
 
@@ -1800,7 +1810,7 @@ class SocialLSTM:
 
             utils.xprint("Restore parameters from initial values ... ")
             self._reset_params_(self.initial_param_values)
-            utils.xprint("done.", newline=True)
+            utils.xprint('done%s.' % timer.stop(), newline=True)
 
         except:
             raise

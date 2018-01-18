@@ -57,13 +57,17 @@ sub_logger = None
 
 
 class Timer:
-    def __init__(self, formatted=True, start=True):
+    def __init__(self, formatted=True, prefix=None, start=True):
         self.sec_start = None
         self.sec_stop = None
         self.sec_elapse = None
         self.timer_pause = None
         self.duration_pause = 0
         self.formatted = formatted
+        self.prefix = None
+        if prefix and isinstance(prefix, str):
+            self.prefix = prefix
+            self.formatted=True
 
         if start:
             self.start()
@@ -94,7 +98,7 @@ class Timer:
 
             # Will stop pausing if it's still pausing
             if self.timer_pause is not None \
-                    and self.is_on():
+                    and self.timer_pause.is_on():
                 self.timer_pause.stop()
 
         except:
@@ -147,40 +151,76 @@ class Timer:
         self.sec_elapse = self.sec_stop - self.sec_start - self.duration_pause
         if formatted is None:
             formatted = self.formatted
-        return format_time_string(self.sec_elapse) if formatted else self.sec_elapse
+        if formatted:
+            res = (self.prefix + format_time_string(self.sec_elapse)) if self.sec_elapse >= 1 else ''
+        else:
+            res = self.sec_elapse
+        return res
 
     @staticmethod
     def test():
         try:
-            print "Testing timer ... ",
-            timer = Timer(start=False)
+            print "Testing timer ...",
+            prefix = '[prefix]'
+            timer = Timer(start=False, prefix=prefix)
             elapse = timer.get_elapse()
             timer.start()
             elapse = timer.stop()
+            if len(elapse) == 0:
+                print "empty elapse checked...",
+            else:
+                raise AssertionError("empty elapse error: %s." % elapse)
+
             try:
                 # duplicate stop
                 elapse = timer.stop()
             except RuntimeError, e:
-                pass
+                print "exception correctly caught: '%s'..." % e.message,
+            else:
+                raise AssertionError("fail to raise exception correctly.")
+
             timer.start()
             # duplicate start, meaning restart
             timer.start()
             timer.pause()
+            elapse = timer.get_elapse()
+            if elapse is None:
+                print "pausing timer's elapse checked: %s..." % elapse,
+            else:
+                raise AssertionError("pausing timer's elapse error: %s.")
+
             try:
                 # duplicate pause
                 timer.pause()
             except RuntimeError, e:
-                pass
+                print "exception correctly caught: '%s'..." % e.message,
+            else:
+                raise AssertionError("Fail to raise exception correctly.")
+
             pause = timer.resume()
             try:
                 # duplicate resume
                 timer.resume()
             except RuntimeError, e:
-                pass
-            timer.pause()
-            pause = timer.resume()
+                print "exception correctly caught: '%s'..." % e.message,
+            else:
+                raise AssertionError("Fail to raise exception correctly.")
+
             elapse = timer.stop()
-            timer.get_elapse()
+            print "timing resume checked: %s..." % elapse,
+
+            timer.start()
+            time.sleep(2)
+            timer.stop()
+            elapse = timer.get_elapse()
+            if len(elapse) > 0 and elapse.startswith(prefix):
+                print "non-empty elapse checked: %s..." % elapse,
+            else:
+                raise AssertionError("non-empty elapse error: %s." % elapse)
+
+            int_elapse = timer.get_elapse(formatted=False)
+            print "unformatted elapse checked: %d..." % int_elapse,
+
             print "Fine"
         except:
             raise
