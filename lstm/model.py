@@ -1825,7 +1825,6 @@ class SocialLSTM:
 
             # Select certain nodes if requested
             nodes = utils.get_config('nodes') if utils.has_config('nodes') else None
-            nodes = utils.get_config('num_node') if nodes is None and utils.has_config('num_node') else nodes
 
             # Build sampler
             sampler = Sampler(path=utils.get_config('path_trace'), nodes=nodes, keep_positive=True)

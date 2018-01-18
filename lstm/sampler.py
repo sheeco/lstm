@@ -190,17 +190,6 @@ class Sampler:
                 if self.node_filter is None:
                     pass
 
-                elif isinstance(self.node_filter, int):
-                    if 0 < self.node_filter < len(dict_files):
-                        nodes_filtered = nodes_filtered[:self.node_filter]
-                    elif self.node_filter < 0:
-                        raise ValueError("Expect a positive integer for `node_filter`, "
-                                         "while getting %s instead." % self.node_filter)
-                    elif self.node_filter > len(dict_files):
-                        raise ValueError("%d nodes are expected, "
-                                         "while only %d nodes available under given path."
-                                         % (self.node_filter, len(dict_files)))
-
                 # by node identifiers
                 elif isinstance(self.node_filter, list) \
                         and len(self.node_filter) > 0:
@@ -211,7 +200,7 @@ class Sampler:
                     nodes_filtered = self.node_filter
 
                 else:
-                    raise ValueError("Expect a node filter of <int> or <list>, "
+                    raise ValueError("Expect a node filter of <list>, "
                                      "while getting %s instead." % type(self.node_filter))
 
                 dict_files_filtered = {node_id: dict_files[node_id] for node_id in nodes_filtered}

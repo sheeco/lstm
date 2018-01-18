@@ -1171,16 +1171,6 @@ def get_sublogger():
 
 def _validate_config_():
     try:
-        # 'nodes' will override 'num_node'
-        if has_config('nodes') \
-                and config.get_config('nodes') is not None \
-                and has_config('num_node') \
-                and config.get_config('num_node') is not None:
-            warn("utils._validate_config_: "
-                 "Configuration 'nodes' (%s) will override 'num_node' (%s)."
-                 % (config.get_config('nodes'), config.get_config('num_node')))
-            remove_config('num_node')
-
         # Validate path formats
         for key, content in config.filter_config('path').iteritems():
             original = content['value']
@@ -1377,7 +1367,7 @@ def test():
         def test_args():
             process_command_line_args()
             process_command_line_args(args=[])
-            args = ["-c", "{'num_node': 9, 'tag': 'x'}", "-t", "xxx"]
+            args = ["-c", "{'num_epoch': 10, 'tag': 'x'}", "-t", "xxx"]
             process_command_line_args(args=args)
 
         def test_exception():
