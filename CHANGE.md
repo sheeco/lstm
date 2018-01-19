@@ -628,9 +628,13 @@
 
 - [x] REM: Disable 'num_node' configuration;
 
-#### 2018-01-19
+#### [2018-01-19](3efb2bd0c818549cd24de5b87ec28873e8723f72)
 
 - ADD: Enable to auto-exit once reaching expected hitrate configured with key 'expected_hitrate';
+
+#### 2018-01-19
+
+- RFCT: for configuration validation;
 
 
 ## To-do List

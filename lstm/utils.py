@@ -1255,15 +1255,6 @@ def update_config(key, value, source, tags=None, silence=True, strict=True):
         echo = config.update_config(key, value, source, tags)
         if not silence:
             xprint(echo, newline=True)
-        _validate_config_()
-    except:
-        raise
-
-
-def import_config(config_imported, tag=None):
-    try:
-        config.import_config(config_imported, tag)
-        _validate_config_()
     except:
         raise
 
@@ -1301,21 +1292,6 @@ def process_command_line_args(args=None):
                 if Filer.is_file(_path):
                     update_config('file_unpickle', _path, 'command-line', tags=['path'], silence=False)
 
-                # # Import config.log & params.pkl if exists
-                # elif Filer.is_directory(_path):
-                #     path_import = Filer.validate_path_format(_path)
-                #     key = 'path_import'
-                #     update_config(key, path_import, 'command-line')
-                #
-                #     path_config = Filer.format_subpath(path_import, subpath='config.log')
-                #     config_imported = Filer.read(path_config)
-                #     try:
-                #         config_imported = ast.literal_eval(config_imported)
-                #     except:
-                #         raise
-                #     import_config(config_imported, tag='build')
-                #     xprint("Import configurations from '%s'." % path_config, newline=True)
-
                 else:
                     raise ValueError("Invalid path '%s' to import." % argv)
 
@@ -1338,6 +1314,8 @@ def process_command_line_args(args=None):
                         update_config(key, value, 'command-line', silence=False)
                 else:
                     raise ValueError("The configuration must be a dictionary.")
+
+                _validate_config_()
 
             elif opt in ("-t", "--tag"):
                 key = 'tag'
