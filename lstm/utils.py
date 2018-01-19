@@ -1209,6 +1209,12 @@ def _validate_config_():
             if not 0 < unreliable_input < length_sequence_input:
                 raise ValueError("Configuration 'unreliable_input' must be among (0, %d)." % length_sequence_input)
 
+        expected_hitrate = get_config('expected_hitrate')
+        if expected_hitrate is not None and \
+                (not assertor.assert_type(expected_hitrate, [int, float], raising=False)
+                 or not 0 < expected_hitrate <= 100):
+            raise ValueError("Configuration 'expected_hitrate' must be among (0, 100].")
+
     except:
         raise
     pass

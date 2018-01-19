@@ -624,9 +624,13 @@
 
 - OPT: for timing display;
 
-#### 2018-01-19
+#### [2018-01-19](a9e9b6ee8465d26e8648841e08a0690500163127)
 
 - [x] REM: Disable 'num_node' configuration;
+
+#### 2018-01-19
+
+- ADD: Enable to auto-exit once reaching expected hitrate configured with key 'expected_hitrate';
 
 
 ## To-do List

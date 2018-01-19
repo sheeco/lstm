@@ -38,7 +38,8 @@ class SocialLSTM:
                  scale_pool=None, range_pool=None, hit_range=None,
                  dimension_sample=None, length_sequence_input=None, length_sequence_output=None, size_batch=None,
                  dimension_embed_layer=None, dimension_hidden_layer=None,
-                 learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None, num_epoch=None,
+                 learning_rate=None, rho=None, epsilon=None, momentum=None, grad_clip=None,
+                 num_epoch=None, expected_hitrate=None,
                  adaptive_learning_rate=None, adaptive_grad_clip=None, unreliable_input=None):
         """
 
@@ -120,6 +121,7 @@ class SocialLSTM:
             # Training related variables
 
             self.num_epoch = num_epoch if num_epoch is not None else utils.get_config('num_epoch')
+            self.expected_hitrate = expected_hitrate if expected_hitrate is not None else utils.get_config('expected_hitrate')
 
             self.adaptive_learning_rate = adaptive_learning_rate if adaptive_learning_rate is not None \
                 else utils.get_config('adaptive_learning_rate')
@@ -1359,9 +1361,7 @@ class SocialLSTM:
 
                 if _choice == 'stop':
                     # means only n * complete epochs
-                    self.num_epoch = self.entry_epoch - 1
-                    utils.update_config('num_epoch', self.entry_epoch - 1, 'runtime', silence=False)
-                    self.stop = True
+                    self.terminate_training(complete_epoch=False)
                     timer.resume()
                     break
                 else:
@@ -1439,6 +1439,17 @@ class SocialLSTM:
         self.entry_batch = 0
         return ret
 
+    def terminate_training(self, complete_epoch=True):
+        """
+        Terminate further training and update epoch number.
+        :param complete_epoch: Whether the current epoch is complete.
+        :return:
+        """
+        self.num_epoch = self.entry_epoch if complete_epoch else self.entry_epoch - 1
+        utils.xprint("Further training is terminated.", newline=True)
+        utils.update_config('num_epoch', self.num_epoch, 'runtime', silence=False)
+        self.stop = True
+
     def tryout(self, sampler):
 
         utils.assertor.assert_not_none(self.network_outputs, "Must build the network first.")
@@ -1460,30 +1471,16 @@ class SocialLSTM:
             # self.entry_epoch += 1
 
             # restore original param values after testing
-            self._set_param_values_(params_original)
+            self.set_param_values(params_original)
 
             # Save as the best params if necessary
+            self.update_best_params(hitrates, params_original)
 
-            NUM_HITRANGE_TOLERANCE = 2
-            if hitrates is not None:
-                for ihitrange in xrange(0, NUM_HITRANGE_TOLERANCE):
-                    hitrange = hitrates[ihitrange][0]
-                    new_record = hitrates[ihitrange][1]
-                    if hitrange not in self.best_param_values:
-                        self.best_param_values[hitrange] = {
-                            'epoch': None,  # after n^th epoch
-                            'record': None,  # best record (hitrate) stored for comparison
-                            'value': None,  # actual param values
-                            'path': None
-                        }
-                    if self.best_param_values[hitrange]['record'] is None \
-                            or new_record >= self.best_param_values[hitrange]['record']:
-                        self.update_best_params(hitrange, self.entry_epoch, params_original, new_record)
-                    else:
-                        pass
-
-            # Print deviation info to console
-            # utils.xprint('  mean-deviation: %s' % numpy.mean(deviations_by_batch), newline=True)
+            # Terminate traning if hitrate expectation is met
+            first_hitrate = hitrates[0][1]  # check for the 1st hitrange's hitrate
+            if self.meet_expected_hitrate(first_hitrate):
+                utils.xprint("Expected hitrate is met with %.1f." % first_hitrate, newline=True)
+                self.terminate_training(complete_epoch=True)
 
             self.export_params(overwritable=False)
             return deviations, hitrates
@@ -1636,22 +1633,45 @@ class SocialLSTM:
         except:
             raise
 
-    def update_best_params(self, hitrange, epoch, value, record):
+    def update_best_params(self, hitrates, params):
+        """
+        Compare given hitrate results with current best record. Update the record & export params if necessary.
+        :param hitrates: new hitrate results
+        :param params: the corresponding parameter values
+        """
         try:
-            filename = 'params-best-hitrange%d-hitrate%.1f-epoch%d.pkl' % (hitrange, record, epoch)
+            NUM_HITRANGE_TOLERANCE = 2  # only care for the first n hitranges e.g. 50m, 100m
+            if hitrates is None:
+                return
 
-            old_path = self.best_param_values[hitrange]['path']
-            path = self.export_params(params=value, filename=filename, replace=old_path, overwritable=False)
+            for ihitrange in xrange(0, NUM_HITRANGE_TOLERANCE):
+                hitrange = hitrates[ihitrange][0]
 
-            self.best_param_values[hitrange]['epoch'] = epoch
-            self.best_param_values[hitrange]['value'] = value
-            self.best_param_values[hitrange]['record'] = record
-            self.best_param_values[hitrange]['path'] = path
+                # initialize
+                if hitrange not in self.best_param_values:
+                    self.best_param_values[hitrange] = {
+                        'epoch': None,  # after n^th epoch
+                        'record': None,  # best record (hitrate) stored for comparison
+                        'value': None,  # actual param values
+                        'path': None
+                    }
 
-            utils.xprint("New best hitrate %.1f for hitrange %d(m), parameters have been exported to '%s'."
-                         % (record, hitrange, path), newline=True)
-            return path
+                new_record = hitrates[ihitrange][1]
+                if self.best_param_values[hitrange]['record'] is None \
+                        or new_record >= self.best_param_values[hitrange]['record']:
 
+                    self.best_param_values[hitrange]['epoch'] = self.entry_epoch
+                    self.best_param_values[hitrange]['value'] = params
+                    self.best_param_values[hitrange]['record'] = new_record
+
+                    # update the params-best pickle file
+                    filename = 'params-best-hitrange%d-hitrate%.1f-epoch%d.pkl' % (hitrange, new_record, self.entry_epoch)
+                    old_path = self.best_param_values[hitrange]['path']
+                    path = self.export_params(params=params, filename=filename, replace=old_path, overwritable=False)
+                    self.best_param_values[hitrange]['path'] = path
+
+                    utils.xprint("New best hitrate %.1f for hitrange %d(m), parameters have been exported to '%s'."
+                                 % (new_record, hitrange, path), newline=True)
         except:
             raise
 
@@ -1664,16 +1684,16 @@ class SocialLSTM:
 
             timer = utils.Timer(prefix=' in ')
             utils.xprint('Importing given parameters ... ')
-            self._reset_params_(params)
+            self.reset_params(params)
 
             utils.xprint('done%s.' % timer.stop(), newline=True)
 
         except:
             raise
 
-    def _set_param_values_(self, values):
+    def set_param_values(self, values):
         """
-        Set parameters to given values.
+        Set parameters to given values. Without further actions.
         """
         try:
             utils.assertor.assert_not_none(self.params_all, "Must compile the functions first.")
@@ -1693,16 +1713,30 @@ class SocialLSTM:
         except:
             raise
 
-    def _reset_params_(self, params):
+    def reset_params(self, params):
         """
         Reset parameters to given values as new initial values. Reset best record as well.
         """
         try:
-            self._set_param_values_(params)
+            self.set_param_values(params)
 
             # Save initial values of params for possible future restoration
             self.initial_param_values = params
             self.best_param_values = {}
+
+        except:
+            raise
+
+    def meet_expected_hitrate(self, hitrate):
+        """
+        Check if the given hitrates meet the expected value. Return `None` if no expectation exists.
+        :return: bool
+        """
+        try:
+            if self.expected_hitrate is None:
+                return None
+            else:
+                return True if hitrate >= self.expected_hitrate else False
 
         except:
             raise
@@ -1783,7 +1817,7 @@ class SocialLSTM:
                                            "No initial values are found for parameter restoration.")
 
             utils.xprint("Restore parameters from initial values ... ")
-            self._reset_params_(self.initial_param_values)
+            self.reset_params(self.initial_param_values)
             utils.xprint('done%s.' % timer.stop(), newline=True)
 
         except:
@@ -1809,7 +1843,7 @@ class SocialLSTM:
                                            "No initial values are found for parameter restoration.")
 
             utils.xprint("Restore parameters from initial values ... ")
-            self._reset_params_(self.initial_param_values)
+            self.reset_params(self.initial_param_values)
             utils.xprint('done%s.' % timer.stop(), newline=True)
 
         except:
