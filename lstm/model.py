@@ -1,7 +1,6 @@
 # coding:utf-8
 
 import numpy
-
 import theano
 import theano.tensor as T
 import lasagne as L
@@ -263,6 +262,124 @@ class SocialLSTM:
 
         except:
             raise
+
+    @staticmethod
+    def process_command_line_args(args):
+        """
+        e.g. test.py [-c | --config <dict-config>] [-t | --tag <tag-for-logging>] [-i | --import <import-path>]
+        :return:
+        """
+        try:
+            # log command line args to file args.log
+            utils.get_sublogger().log_args(args)
+
+            # short-opts: "ha:i" means opt '-h' & '-i' don't take arg, '-a' does take arg
+            # long-opts: ["--help", "--add="] means opt '--add' does take arg
+            opts, unknowns = utils.get_opt(args, "c:t:i:", longopts=["config=", "tag=", "import="])
+
+            # handle importing first
+            for opt, argv in opts:
+                if opt in ("-i", "--import"):
+                    _path = utils.filer.validate_path_format(argv)
+                    try:
+                        _path = utils.literal_eval(_path)
+                    except ValueError, e:
+                        pass
+                    except SyntaxError, e:
+                        pass
+
+                    # Import params.pkl
+                    if utils.filer.is_file(_path):
+                        utils.update_config('file_unpickle', _path, 'command-line', tags=['path'], silence=False)
+
+                    else:
+                        raise ValueError("Invalid path '%s' to import." % argv)
+
+                    opts.remove((opt, argv))
+
+                else:
+                    pass
+
+            for opt, argv in opts:
+                if argv != '':
+                    try:
+                        argv = utils.literal_eval(argv)
+                    except ValueError, e:
+                        pass
+
+                # Manual configs will override imported configs
+                if opt in ("-c", "--config"):
+                    if isinstance(argv, dict):
+                        for key, value in argv.items():
+                            utils.update_config(key, value, 'command-line', silence=False)
+                    else:
+                        raise ValueError("The configuration must be a dictionary.")
+
+                    SocialLSTM._validate_config_()
+
+                elif opt in ("-t", "--tag"):
+                    key = 'tag'
+                    utils.update_config(key, argv, 'command-line', silence=False)
+
+                else:
+                    raise ValueError("Unknown option '%s'." % opt)
+
+            if len(unknowns) > 0:
+                raise ValueError("Unknown option(s) %s." % unknowns)
+
+        except:
+            raise
+
+    @staticmethod
+    def _validate_config_():
+        try:
+            # Validate path formats
+            for key, content in utils.filter_config('path').iteritems():
+                original = content['value']
+                if original is not None:
+                    validated = utils.filer.validate_path_format(original)
+                    if validated != original:
+                        utils.update_config(key, validated, source=content['source'])
+
+            # Validate numeric configs
+            trainset = utils.get_config('trainset')
+            utils.assertor.assert_type(trainset, [float, int])
+            if not trainset >= 0:
+                raise ValueError("Configuration 'trainset' must be positive or 0.")
+            num_epoch = utils.get_config('num_epoch')
+            if trainset == 0 \
+                    and num_epoch > 0:
+                raise ValueError("Configuration 'trainset' must be positive when 'num_epoch' > 0.")
+
+            adaptive_learning_rate = utils.get_config('adaptive_learning_rate')
+            if adaptive_learning_rate is not None:
+                utils.assertor.assert_type(adaptive_learning_rate, [float])
+                if not (-1 < adaptive_learning_rate < 0
+                        or 0 < adaptive_learning_rate < 1):
+                    raise ValueError("Configuration 'adaptive_learning_rate' must belong to (-1, 0) or (0, 1).")
+
+            adaptive_grad_clip = utils.get_config('adaptive_grad_clip')
+            if adaptive_grad_clip is not None:
+                utils.assertor.assert_type(adaptive_grad_clip, [int])
+                if not adaptive_grad_clip < 0:
+                    raise ValueError("Configuration 'adaptive_grad_clip' must be negative.")
+
+            unreliable_input = utils.get_config('unreliable_input')
+            length_sequence_input = utils.get_config('length_sequence_input')
+            if unreliable_input is not False:
+                utils.assertor.assert_type(unreliable_input, [int])
+                if not 0 < unreliable_input < length_sequence_input:
+                    raise ValueError("Configuration 'unreliable_input' must be among (0, %d)." % length_sequence_input)
+
+            expected_hitrate = utils.get_config('expected_hitrate')
+            if expected_hitrate is not None and \
+                    (not utils.assertor.assert_type(expected_hitrate, [int, float], raising=False)
+                     or not 0 < expected_hitrate <= 100):
+                raise ValueError("Configuration 'expected_hitrate' must be among (0, 100].")
+
+        except:
+            raise
+        pass
 
     @staticmethod
     def bivar_norm(x1, x2, mu1, mu2, sigma1, sigma2, rho):
@@ -1582,7 +1699,6 @@ class SocialLSTM:
 
     def _init_params_(self):
         try:
-            timer = utils.Timer(prefix=' in ')
             if self.params_all is None:
                 self.params_all = self.func_train.get_shared()
                 self.param_names = [param.name for param in self.params_all]
@@ -1599,7 +1715,6 @@ class SocialLSTM:
 
             # export initial param values for record
             self.export_params(filename=picklename)
-            utils.xprint('done%s.' % timer.stop(), newline=True)
 
         except:
             raise
@@ -1686,10 +1801,11 @@ class SocialLSTM:
             utils.xprint('Importing given parameters ... ')
             self.reset_params(params)
 
-            utils.xprint('done%s.' % timer.stop(), newline=True)
-
         except:
             raise
+        else:
+            utils.xprint('%d parameters are imported ... ' % len(params))
+            utils.xprint('done%s.' % timer.stop(), newline=True)
 
     def set_param_values(self, values):
         """
@@ -1853,9 +1969,10 @@ class SocialLSTM:
         self.logger.complete()
 
     @staticmethod
-    def test():
-
+    def demo():
         try:
+            SocialLSTM.process_command_line_args(utils.get_sys_args()[1:])
+            SocialLSTM._validate_config_()
 
             # Select certain nodes if requested
             nodes = utils.get_config('nodes') if utils.has_config('nodes') else None
@@ -1877,7 +1994,8 @@ class SocialLSTM:
             params_unpickled = utils.filer.load_from_file(file_unpickle) if file_unpickle is not None else None
 
             # Define the model
-            model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range, params=params_unpickled)
+            model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range,
+                               params=params_unpickled)
             ask = utils.get_config('ask')
 
             try:
@@ -1896,7 +2014,8 @@ class SocialLSTM:
                     try:
 
                         while True:
-                            _losses, _deviations = model.train(sampler_trainset, num_epoch=utils.get_config('tryout_frequency'))
+                            _losses, _deviations = model.train(sampler_trainset,
+                                                               num_epoch=utils.get_config('tryout_frequency'))
                             train_losses = numpy.append(train_losses, _losses)
                             train_deviations = numpy.append(train_deviations, _deviations)
                             if model.stop:
@@ -1908,7 +2027,8 @@ class SocialLSTM:
                                 break
                             if model.entry_epoch >= model.num_epoch:
                                 if ask:
-                                    more = utils.ask("Try more epochs?", code_quit=None, interpreter=utils.interpret_confirm)
+                                    more = utils.ask("Try more epochs?", code_quit=None,
+                                                     interpreter=utils.interpret_confirm)
 
                                     if more:
                                         num_more = utils.ask("How many?", interpreter=utils.interpret_positive_int)
@@ -1942,6 +2062,24 @@ class SocialLSTM:
                 raise
             finally:
                 model.complete()
+
+        except Exception, e:
+            raise
+
+    @staticmethod
+    def test():
+
+        try:
+
+            def test_args():
+                try:
+                    args = ["-c", "{'num_epoch': 10, 'tag': 'x'}", "-t", "xxx"]
+                    SocialLSTM.process_command_line_args(args)
+                    SocialLSTM.process_command_line_args(args=["-c", "{'unknown-key': None, 'tag': 'x'}", "-t", "xxx"])
+                except ValueError, e:
+                    pass
+
+            test_args()
 
         except Exception, e:
             raise

@@ -632,9 +632,13 @@
 
 - ADD: Enable to auto-exit once reaching expected hitrate configured with key 'expected_hitrate';
 
-#### 2018-01-19
+#### [2018-01-19](e01630a397e9f9adb973fd87c9abfd17f522f25b)
 
 - RFCT: for configuration validation;
+
+#### 2018-02-01
+
+- RFCT: Major refactoring for `utils.py` & `config.py`;
 
 
 ## To-do List

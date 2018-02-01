@@ -1,5 +1,7 @@
 # coding:utf-8
 
+import cPickle
+import shutil
 import time
 import traceback
 import sys
@@ -7,10 +9,9 @@ import getopt
 import ast
 import os
 import win32file
-import win32con
-import shutil
+
 import numpy
-import cPickle
+import win32con
 
 import config
 
@@ -23,6 +24,9 @@ __all__ = [
     "match",
     "flush",
     "xprint",
+    "get_sys_args",
+    "get_opt",
+    "literal_eval",
     "warn",
     "handle",
     "sleep",
@@ -337,6 +341,19 @@ class Logger:
                 string += "},\n"
             string += "}"
             self.log(string, name='config')
+
+        except:
+            raise
+
+    def log_args(self, args):
+        try:
+            if isinstance(args, list) \
+                    and len(args):
+                self._validate_log_path_()
+
+                self.remove_log('args')
+                self.register(name='args')
+                self.log("%s\n" % args, name='args')
 
         except:
             raise
@@ -929,6 +946,27 @@ def xprint(what, newline=False, logger=None, error=False):
         raise
 
 
+def get_sys_args():
+    try:
+        return sys.argv
+    except:
+        raise
+
+
+def get_opt(args, shortopts, longopts=[]):
+    try:
+        return getopt.getopt(args, shortopts, longopts=longopts)
+    except:
+        raise
+
+
+def literal_eval(node_or_string):
+    try:
+        return ast.literal_eval(node_or_string)
+    except:
+        raise
+
+
 def warn(info):
     try:
         xprint("[Warning] %s" % info, error=True)
@@ -1169,57 +1207,6 @@ def get_sublogger():
     return sub_logger
 
 
-def _validate_config_():
-    try:
-        # Validate path formats
-        for key, content in config.filter_config('path').iteritems():
-            original = content['value']
-            if original is not None:
-                validated = Filer.validate_path_format(original)
-                if validated != original:
-                    config.update_config(key, validated, source=content['source'])
-
-        # Validate numeric configs
-        trainset = get_config('trainset')
-        assertor.assert_type(trainset, [float, int])
-        if not trainset >= 0:
-            raise ValueError("Configuration 'trainset' must be positive or 0.")
-        num_epoch = get_config('num_epoch')
-        if trainset == 0 \
-                and num_epoch > 0:
-            raise ValueError("Configuration 'trainset' must be positive when 'num_epoch' > 0.")
-
-        adaptive_learning_rate = get_config('adaptive_learning_rate')
-        if adaptive_learning_rate is not None:
-            assertor.assert_type(adaptive_learning_rate, [float])
-            if not (-1 < adaptive_learning_rate < 0
-                    or 0 < adaptive_learning_rate < 1):
-                raise ValueError("Configuration 'adaptive_learning_rate' must belong to (-1, 0) or (0, 1).")
-
-        adaptive_grad_clip = get_config('adaptive_grad_clip')
-        if adaptive_grad_clip is not None:
-            assertor.assert_type(adaptive_grad_clip, [int])
-            if not adaptive_grad_clip < 0:
-                raise ValueError("Configuration 'adaptive_grad_clip' must be negative.")
-
-        unreliable_input = get_config('unreliable_input')
-        length_sequence_input = get_config('length_sequence_input')
-        if unreliable_input is not False:
-            assertor.assert_type(unreliable_input, [int])
-            if not 0 < unreliable_input < length_sequence_input:
-                raise ValueError("Configuration 'unreliable_input' must be among (0, %d)." % length_sequence_input)
-
-        expected_hitrate = get_config('expected_hitrate')
-        if expected_hitrate is not None and \
-                (not assertor.assert_type(expected_hitrate, [int, float], raising=False)
-                 or not 0 < expected_hitrate <= 100):
-            raise ValueError("Configuration 'expected_hitrate' must be among (0, 100].")
-
-    except:
-        raise
-    pass
-
-
 """
 Wrap methods in config.py to apply validation
 """
@@ -1235,6 +1222,7 @@ def has_config(key, ignore_none=True):
 
 get_config = config.get_config
 remove_config = config.remove_config
+filter_config = config.filter_config
 
 
 def update_config(key, value, source, tags=None, silence=True, strict=True):
@@ -1259,78 +1247,6 @@ def update_config(key, value, source, tags=None, silence=True, strict=True):
         raise
 
 
-def process_command_line_args(args=None):
-    """
-    e.g. test.py [-c | --config <dict-config>] [-t | --tag <tag-for-logging>] [-i | --import <import-path>]
-    :return:
-    """
-    try:
-        args = sys.argv[1:] if args is None else args
-
-        # log command line args to file args.log
-        if args != '' \
-                and get_sublogger() is not None:
-            get_sublogger().register('args')
-            get_sublogger().log("%s\n" % args, name='args')
-
-        # short-opts: "ha:i" means opt '-h' & '-i' don't take arg, '-a' does take arg
-        # long-opts: ["--help", "--add="] means opt '--add' does take arg
-        opts, unknowns = getopt.getopt(args, "c:t:i:", longopts=["config=", "tag=", "import="])
-
-        # handle importing first
-        for opt, argv in opts:
-            if opt in ("-i", "--import"):
-                _path = filer.validate_path_format(argv)
-                try:
-                    _path = ast.literal_eval(_path)
-                except ValueError, e:
-                    pass
-                except SyntaxError, e:
-                    pass
-
-                # Import params.pkl
-                if Filer.is_file(_path):
-                    update_config('file_unpickle', _path, 'command-line', tags=['path'], silence=False)
-
-                else:
-                    raise ValueError("Invalid path '%s' to import." % argv)
-
-                opts.remove((opt, argv))
-
-            else:
-                pass
-
-        for opt, argv in opts:
-            if argv != '':
-                try:
-                    argv = ast.literal_eval(argv)
-                except ValueError, e:
-                    pass
-
-            # Manual configs will override imported configs
-            if opt in ("-c", "--config"):
-                if isinstance(argv, dict):
-                    for key, value in argv.items():
-                        update_config(key, value, 'command-line', silence=False)
-                else:
-                    raise ValueError("The configuration must be a dictionary.")
-
-                _validate_config_()
-
-            elif opt in ("-t", "--tag"):
-                key = 'tag'
-                update_config(key, argv, 'command-line', silence=False)
-
-            else:
-                raise ValueError("Unknown option '%s'." % opt)
-
-        if len(unknowns) > 0:
-            raise ValueError("Unknown option(s) %s." % unknowns)
-
-    except:
-        raise
-
-
 def test():
     try:
 
@@ -1348,13 +1264,7 @@ def test():
             xprint(format_time_string(222.2), newline=True)
             xprint(format_time_string(7777.7), newline=True)
 
-        def test_args():
-            process_command_line_args()
-            process_command_line_args(args=[])
-            args = ["-c", "{'num_epoch': 10, 'tag': 'x'}", "-t", "xxx"]
-            process_command_line_args(args=args)
-
-        def test_exception():
+        def test_keyboard_interrupt():
 
             # import thread
             # import win32api
@@ -1453,26 +1363,21 @@ def test():
             except TypeError, e:
                 pass
 
-        def test_unknown_config():
-            try:
-                process_command_line_args(args=["-c", "{'unknown-key': None, 'tag': 'x'}", "-t", "xxx"])
-            except ValueError, e:
-                pass
+        print "Testing utils ..."
 
-        # test_hiding()
-        # test_formatting()
+        test_hiding()
+        test_formatting()
         test_ask()
-        # test_pickling()
-        # test_register()
+        test_pickling()
+        test_register()
 
-        # test_warn()
-        # test_args()
-        # test_exception()
-        # test_ask()
-        # test_ask_menu()
-        # Timer.test()
-        # test_abstract()
-        # test_unknown_config()
+        test_warn()
+        # test_keyboard_interrupt()
+        test_ask_menu()
+        Timer.test()
+        test_abstract()
+
+        print "Fine"
 
     except:
         raise

@@ -6,29 +6,29 @@ __all__ = [
     "has_config",
     "get_config",
     "remove_config",
+    "filter_config",
     "test"
 ]
 
 default_config_groups = {}
-PATH_DEFAULT_CONFIG_GROUPS = "default.config"
 
 
-def init_config_pool():
+def init_config_pool(path):
     """
 
     :return: Echo message
     """
     try:
         global default_config_groups
-        pfile = open(PATH_DEFAULT_CONFIG_GROUPS, 'r')
+        pfile = open(path, 'r')
         content = pfile.read()
         default_config_groups = ast.literal_eval(content)
-        return "Load default configuration groups from '%s'." % PATH_DEFAULT_CONFIG_GROUPS
+        return "Load default configuration groups from '%s'." % path
 
     except IOError:
-        raise IOError("Cannot find default configuration file '%s'." % PATH_DEFAULT_CONFIG_GROUPS)
+        raise IOError("Cannot find default configuration file '%s'." % path)
     except ValueError:
-        raise ValueError("Invalid configuration format in '%s'" % PATH_DEFAULT_CONFIG_GROUPS)
+        raise ValueError("Invalid configuration format in '%s'" % path)
     except:
         raise
 
@@ -141,7 +141,7 @@ def update_config_from_pool(group='default'):
     try:
         if group is not None:
             _update_(_get_config_group_(group=group), source=group)
-            return "Update configurations in group '%s'." % group
+            return "Update configurations according to group '%s'." % group
     except:
         raise
 
@@ -195,6 +195,8 @@ def test():
     try:
         print 'Testing config ... ',
 
+        import lstm
+
         debug = _get_config_group_(group='debug')
         try:
             invalid = _get_config_group_(group='invalid-key')
@@ -221,9 +223,6 @@ def test():
         except KeyError, e:
             pass
 
-        # test new key
-        update_config('new-key', None, 'test')
-        _value = get_config('new-key')
         print 'Fine'
 
     except:

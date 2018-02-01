@@ -47,13 +47,15 @@ def _set_handler_():
 
 _set_handler_()
 
+PATH_DEFAULT_CONFIG_GROUPS = "lstm/default.config"
+
 
 def _init_config_():
     """
     Initialize for global variables in config module.
     """
     try:
-        echo = config.init_config_pool()
+        echo = config.init_config_pool(PATH_DEFAULT_CONFIG_GROUPS)
         utils.xprint(echo, newline=True)
 
         echo = config.update_config_from_pool(group='default')
@@ -90,6 +92,5 @@ _init_config_()
 _init_logger_()
 
 
-utils.process_command_line_args()
 utils.sub_logger.log_config()
 
