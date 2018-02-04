@@ -1970,101 +1970,99 @@ class SocialLSTM:
 
     @staticmethod
     def demo():
+        SocialLSTM.process_command_line_args(utils.get_sys_args()[1:])
+        SocialLSTM._validate_config_()
+
+        # Select certain nodes if requested
+        nodes = utils.get_config('nodes') if utils.has_config('nodes') else None
+
+        # Build sampler
+        sampler = Sampler(path=utils.get_config('path_trace'), nodes=nodes, keep_positive=True)
+        sample_gridding = utils.get_config('sample_gridding')
+        if sample_gridding is True:
+            sampler.map_to_grid(grid_system=GridSystem(utils.get_config('scale_grid')))
+        # Divide into train set & test set
+        trainset = utils.get_config('trainset')
+        sampler_trainset, sampler_testset = sampler.divide(trainset)
+        # sampler_testset.with_target = False
+        utils.xprint("Use %d samples as train set, %d samples as test set."
+                     % (sampler_trainset.length(), sampler_testset.length()), newline=True)
+
+        # Import previously pickled parameters if requested
+        file_unpickle = utils.get_config('file_unpickle') if utils.has_config('file_unpickle') else None
+        params_unpickled = utils.filer.load_from_file(file_unpickle) if file_unpickle is not None else None
+
+        # Define the model
+        model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range,
+                           params=params_unpickled)
+        ask = utils.get_config('ask')
+
         try:
-            SocialLSTM.process_command_line_args(utils.get_sys_args()[1:])
-            SocialLSTM._validate_config_()
+            # Build & compile the model
+            model.build_network()
+            model.compute_and_compile()
 
-            # Select certain nodes if requested
-            nodes = utils.get_config('nodes') if utils.has_config('nodes') else None
+            if params_unpickled is not None:
+                model.tryout(sampler_testset)
 
-            # Build sampler
-            sampler = Sampler(path=utils.get_config('path_trace'), nodes=nodes, keep_positive=True)
-            sample_gridding = utils.get_config('sample_gridding')
-            if sample_gridding is True:
-                sampler.map_to_grid(grid_system=GridSystem(utils.get_config('scale_grid')))
-            # Divide into train set & test set
-            trainset = utils.get_config('trainset')
-            sampler_trainset, sampler_testset = sampler.divide(trainset)
-            # sampler_testset.with_target = False
-            utils.xprint("Use %d samples as train set, %d samples as test set."
-                         % (sampler_trainset.length(), sampler_testset.length()), newline=True)
+            train_losses = numpy.zeros((0,))
+            train_deviations = numpy.zeros((0,))
 
-            # Import previously pickled parameters if requested
-            file_unpickle = utils.get_config('file_unpickle') if utils.has_config('file_unpickle') else None
-            params_unpickled = utils.filer.load_from_file(file_unpickle) if file_unpickle is not None else None
+            if model.num_epoch > 0:
+                # Do training
+                try:
 
-            # Define the model
-            model = SocialLSTM(node_identifiers=sampler.node_identifiers, motion_range=sampler.motion_range,
-                               params=params_unpickled)
-            ask = utils.get_config('ask')
+                    while True:
+                        _losses, _deviations = model.train(sampler_trainset,
+                                                           num_epoch=utils.get_config('tryout_frequency'))
+                        train_losses = numpy.append(train_losses, _losses)
+                        train_deviations = numpy.append(train_deviations, _deviations)
+                        if model.stop:
+                            break
 
-            try:
-                # Build & compile the model
-                model.build_network()
-                model.compute_and_compile()
+                        model.tryout(sampler_testset)
 
-                if params_unpickled is not None:
-                    model.tryout(sampler_testset)
+                        if model.stop:
+                            break
+                        if model.entry_epoch >= model.num_epoch:
+                            if ask:
+                                more = utils.ask("Try more epochs?", code_quit=None,
+                                                 interpreter=utils.interpret_confirm)
 
-                train_losses = numpy.zeros((0,))
-                train_deviations = numpy.zeros((0,))
+                                if more:
+                                    num_more = utils.ask("How many?", interpreter=utils.interpret_positive_int)
 
-                if model.num_epoch > 0:
-                    # Do training
-                    try:
-
-                        while True:
-                            _losses, _deviations = model.train(sampler_trainset,
-                                                               num_epoch=utils.get_config('tryout_frequency'))
-                            train_losses = numpy.append(train_losses, _losses)
-                            train_deviations = numpy.append(train_deviations, _deviations)
-                            if model.stop:
-                                break
-
-                            model.tryout(sampler_testset)
-
-                            if model.stop:
-                                break
-                            if model.entry_epoch >= model.num_epoch:
-                                if ask:
-                                    more = utils.ask("Try more epochs?", code_quit=None,
-                                                     interpreter=utils.interpret_confirm)
-
-                                    if more:
-                                        num_more = utils.ask("How many?", interpreter=utils.interpret_positive_int)
-
-                                        # quit means no more epochs
-                                        if num_more is not None \
-                                                and num_more > 0:
-                                            model.num_epoch += num_more
-                                            utils.update_config('num_epoch', model.num_epoch, 'runtime', silence=False)
-                                        else:
-                                            break
-                                    else:  # stop if no more
+                                    # quit means no more epochs
+                                    if num_more is not None \
+                                            and num_more > 0:
+                                        model.num_epoch += num_more
+                                        utils.update_config('num_epoch', model.num_epoch, 'runtime', silence=False)
+                                    else:
                                         break
-                                else:  # stop if not ask
+                                else:  # stop if no more
                                     break
-                            else:
-                                continue
+                            else:  # stop if not ask
+                                break
+                        else:
+                            continue
 
-                    except Exception, e:
-                        utils.handle(e)
-                    else:
-                        pass
-
-                    finally:
-                        pass
-
-                else:  # tryout only
+                except Exception, e:
+                    utils.handle(e)
+                else:
                     pass
 
-            except:
-                raise
-            finally:
-                model.complete()
+                finally:
+                    pass
 
-        except Exception, e:
+            else:  # tryout only
+                pass
+
+        except:
             raise
+        finally:
+            model.complete()
+
+    # todo add test_repeatable()
 
     @staticmethod
     def test():

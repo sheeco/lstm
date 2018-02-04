@@ -636,9 +636,14 @@
 
 - RFCT: for configuration validation;
 
-#### 2018-02-01
+#### [2018-02-01](997d94124ffa306ff7c5dce14d73f4bc8cd7de37)
 
 - RFCT: Major refactoring for `utils.py` & `config.py`;
+
+#### 2018-02-04
+
+- RFCT: More refactoring for `utils.py` & `config.py` (`config.default_config_groups` is removed. Configs are loaded directly
+  from files; Configs are separated into 2 files. Global configs & loggers are initialized in `utils.__init__()`);
 
 
 ## To-do List

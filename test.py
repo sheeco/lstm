@@ -15,7 +15,8 @@ if __name__ == '__main__':
 
         lstm.model.SocialLSTM.demo()
 
-        exit("Exit Successfully.")
-
     except Exception, e:
         utils.handle(e, exiting=True)
+    else:
+        exit("Exit Successfully.")
+

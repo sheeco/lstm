@@ -10,40 +10,6 @@ __all__ = [
     "test"
 ]
 
-default_config_groups = {}
-
-
-def init_config_pool(path):
-    """
-
-    :return: Echo message
-    """
-    try:
-        global default_config_groups
-        pfile = open(path, 'r')
-        content = pfile.read()
-        default_config_groups = ast.literal_eval(content)
-        return "Load default configuration groups from '%s'." % path
-
-    except IOError:
-        raise IOError("Cannot find default configuration file '%s'." % path)
-    except ValueError:
-        raise ValueError("Invalid configuration format in '%s'" % path)
-    except:
-        raise
-
-
-def _get_config_group_(group='default'):
-    try:
-        if group not in default_config_groups:
-            available_keys = default_config_groups.keys()
-            raise ValueError("Invalid group '%s'. Must choose from %s." % (group, available_keys))
-
-        return default_config_groups[group]
-
-    except:
-        raise
-
 
 global_configuration = {}
 
@@ -132,16 +98,30 @@ def filter_config(tag, config=None):
         raise
 
 
-def update_config_from_pool(group='default'):
+def update_config_from_file(path, group='default'):
     """
 
-    :param group: The config group key in the config pool.
+    :param path: Path of config file
+    :param group: The keyword of desired config group.
     :return: Echo message
     """
     try:
-        if group is not None:
-            _update_(_get_config_group_(group=group), source=group)
-            return "Update configurations according to group '%s'." % group
+        pfile = open(path, 'r')
+        content = pfile.read()
+        config_groups = ast.literal_eval(content)
+        if not isinstance(config_groups, dict):
+            return "Load default configuration groups from '%s'." % path
+
+        if group not in config_groups:
+            raise KeyError("Cannot find configuration group '%s'. Must choose among %s." % (group, config_groups.keys()))
+        _update_(config_groups[group], source='%s:%s' % (path, group))
+        return "Update configurations according to group '%s' in '%s'." % (group, path)
+
+
+    except IOError:
+        raise IOError("Cannot find default configuration file '%s'." % path)
+    except ValueError:
+        raise ValueError("Invalid configuration format in '%s'" % path)
     except:
         raise
 
@@ -197,13 +177,7 @@ def test():
 
         import lstm
 
-        debug = _get_config_group_(group='debug')
-        try:
-            invalid = _get_config_group_(group='invalid-key')
-        except ValueError, e:
-            pass
-
-        update_config_from_pool(group='run')
+        update_config_from_file(path='lstm.config', group='run')
 
         update_config('num_epoch', 0, 'test', tags=['int'])
         # test arg `tags`
@@ -223,7 +197,7 @@ def test():
         except KeyError, e:
             pass
 
-        print 'Fine'
+        print 'Fine.'
 
     except:
         raise

@@ -59,6 +59,27 @@ __all__ = [
 root_logger = None
 sub_logger = None
 
+PATH_CONFIG = "default.config"
+
+
+def __init__():
+
+    global root_logger
+    global sub_logger
+
+    echo = config.update_config_from_file(PATH_CONFIG, group='default')
+    xprint(echo, newline=True)
+
+    root_logger = Logger()
+
+    timestamp = get_timestamp()
+    identifier = '[%s]%s' % (get_config('tag'), timestamp) if has_config('tag') else timestamp
+    sub_logger = Logger(identifier=identifier, bound=True)
+    sub_logger.register_console()
+    update_config('identifier', identifier, 'runtime', silence=False)
+
+    sub_logger.log_config()
+
 
 class Timer:
     def __init__(self, formatted=True, prefix=None, start=True):
@@ -164,7 +185,7 @@ class Timer:
     @staticmethod
     def test():
         try:
-            print "Testing timer ...",
+            print "Testing timer ..."
             prefix = '[prefix]'
             timer = Timer(start=False, prefix=prefix)
             elapse = timer.get_elapse()
@@ -179,7 +200,7 @@ class Timer:
                 # duplicate stop
                 elapse = timer.stop()
             except RuntimeError, e:
-                print "exception correctly caught: '%s'..." % e.message,
+                print """Exception correctly caught: "%s"...""" % e.message
             else:
                 raise AssertionError("fail to raise exception correctly.")
 
@@ -197,7 +218,7 @@ class Timer:
                 # duplicate pause
                 timer.pause()
             except RuntimeError, e:
-                print "exception correctly caught: '%s'..." % e.message,
+                print """Exception correctly caught: "%s"...""" % e.message
             else:
                 raise AssertionError("Fail to raise exception correctly.")
 
@@ -206,7 +227,7 @@ class Timer:
                 # duplicate resume
                 timer.resume()
             except RuntimeError, e:
-                print "exception correctly caught: '%s'..." % e.message,
+                print """Exception correctly caught: "%s"...""" % e.message
             else:
                 raise AssertionError("Fail to raise exception correctly.")
 
@@ -225,7 +246,7 @@ class Timer:
             int_elapse = timer.get_elapse(formatted=False)
             print "unformatted elapse checked: %d..." % int_elapse,
 
-            print "Fine"
+            print "Fine."
         except:
             raise
 
@@ -237,9 +258,9 @@ class Logger:
         :param path:
         :param identifier:
         :param tag:
-        :param bound: <bool> Whether to bound to config.
+        :param bound: <bool> Whether to bound to config. Name of log folder will get checked frequently if bounded.
         """
-        self.root_path = path if path is not None else config.get_config('path_log')
+        self.root_path = path if path is not None else config.get_config('path_logroot')
         if not Filer.if_exists(self.root_path):
             Filer.create_path(self.root_path)
         if not (self.root_path[-1] == '/'
@@ -304,7 +325,7 @@ class Logger:
         """
         try:
             # Ignore unbound loggers
-            if not self.bound:
+            if not self. bound:
                 return
 
             if (has_config('identifier')
@@ -472,7 +493,6 @@ class Logger:
                 self.logs[name] = (overwritable, content)
 
                 filepath = filer.format_subpath(self.log_path, '%s.log' % name)
-                pfile = open(filepath, 'a')
                 title = '# '
                 hastag = False
                 for tag in columns:
@@ -480,9 +500,7 @@ class Logger:
                         hastag = True
                         title += '%s\t' % tag
                 if hastag:
-                    pfile.write('%s\n' % title)
-                pfile.flush()
-                pfile.close()
+                    filer.write(filepath, '%s\n' % title)
 
         except:
             raise
@@ -509,7 +527,6 @@ class Logger:
                 registry = self.logs[name]
                 columns = registry[1]
             path = '%s%s.log' % (self.log_path, name)
-            pfile = open(path, 'a')
 
             if isinstance(content, dict):
                 dict_content = content.copy()
@@ -528,8 +545,8 @@ class Logger:
                     raise ValueError("Cannot find tag %s in log registry. " % dict_content.keys())
 
                 for column in columns:
-                    pfile.write('%s\t' % column[1][-1])
-                pfile.write('\n')
+                    filer.write(path, '%s\t' % column[1][-1])
+                filer.write(path, '\n')
 
             elif isinstance(content, str):
                 column0 = columns[0]
@@ -541,13 +558,10 @@ class Logger:
                     raise ValueError("A tag among %s is requested. " % [column[0] for column in columns])
 
                 rows0 += [content]
-                pfile.write(content)
+                filer.write(path, content)
 
             else:
                 Assertor.assert_unreachable()
-
-            pfile.flush()
-            pfile.close()
 
         except:
             raise
@@ -634,7 +648,7 @@ class Assertor:
         return True
 
     @staticmethod
-    def assert_not_none(var, message, raising=True):
+    def assert_not_none(var, message=None, raising=True):
         """
 
         :param var:
@@ -645,7 +659,22 @@ class Assertor:
         fine = True if var is not None else False
         if raising \
                 and not fine:
-            raise AssertionError(message)
+            raise AssertionError(message if message is not None else "None type is not acceptable.")
+        return fine
+
+    @staticmethod
+    def assert_nonempty_str(var, message=None, raising=True):
+        """
+
+        :param var:
+        :param message: Message to form exception if assertion is not True.
+        :param raising:
+        :return:
+        """
+        fine = True if isinstance(var, str) and var != '' else False
+        if raising \
+                and not fine:
+            raise AssertionError(message if message is not None else "Empty string is not acceptable.")
         return fine
 
     @staticmethod
@@ -681,13 +710,6 @@ class Assertor:
                     raise IOError("'%s' does not exists." % path)
                 else:
                     raise IOError("'%s' already exists." % path)
-                    # else:
-                    # if assertion is True:
-                    #     warn("filer.assert_exists: "
-                    #          "'%s' does not exists." % path)
-                    # else:
-                    #     warn("filer.assert_exists: "
-                    #          "'%s' already exists." % path)
             return False
         else:
             return True
@@ -855,6 +877,28 @@ class Filer:
             lines = pfile.readlines()
             pfile.close()
             return lines
+        except:
+            raise
+
+    @staticmethod
+    def write(path, what):
+        try:
+            filer.create_path(filer.split_path(path)[0])
+
+            pfile = open(path, 'a')
+            pfile.write(what)
+            pfile.close()
+        except:
+            raise
+
+    @staticmethod
+    def write_lines(path, what):
+        try:
+            filer.create_path(filer.split_path(path)[0])
+
+            pfile = open(path, 'a')
+            pfile.writelines(what)
+            pfile.close()
         except:
             raise
 
@@ -1183,7 +1227,7 @@ def sorted_items(dictionary):
     Return a sorted map for given dict.
     """
     keys = sorted_keys(dictionary)
-    return map(dictionary.get, keys)
+    return [(key, dictionary[key]) for key in keys]
 
 
 def format_time_string(seconds):
@@ -1301,7 +1345,7 @@ def test():
             print "return %d" % _test()
 
         def test_hiding():
-            path = config.get_config('path_log')
+            path = config.get_config('path_logroot')
             _hidden = Filer.is_hidden(path)
             Filer.hide_path(path)
             Filer.unhide_path(path)
@@ -1377,7 +1421,10 @@ def test():
         Timer.test()
         test_abstract()
 
-        print "Fine"
+        print "Fine."
 
     except:
         raise
+
+
+__init__()

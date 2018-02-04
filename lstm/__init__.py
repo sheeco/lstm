@@ -47,7 +47,7 @@ def _set_handler_():
 
 _set_handler_()
 
-PATH_DEFAULT_CONFIG_GROUPS = "lstm/default.config"
+PATH_CONFIG = "lstm/lstm.config"
 
 
 def _init_config_():
@@ -55,42 +55,19 @@ def _init_config_():
     Initialize for global variables in config module.
     """
     try:
-        echo = config.init_config_pool(PATH_DEFAULT_CONFIG_GROUPS)
-        utils.xprint(echo, newline=True)
-
-        echo = config.update_config_from_pool(group='default')
+        echo = config.update_config_from_file(PATH_CONFIG, group='default')
         utils.xprint(echo, newline=True)
         if __debug__:
-            echo = config.update_config_from_pool(group='debug')
+            echo = config.update_config_from_file(PATH_CONFIG, group='debug')
             utils.xprint(echo, newline=True)
         else:
-            echo = config.update_config_from_pool(group='run')
+            echo = config.update_config_from_file(PATH_CONFIG, group='run')
             utils.xprint(echo, newline=True)
-
-    except:
-        raise
-
-
-def _init_logger_():
-    """
-    Initialize for global logger variables in utils module.
-    """
-    try:
-        utils.root_logger = utils.Logger()
-
-        timestamp = utils.get_timestamp()
-        identifier = '[%s]%s' % (utils.get_config('tag'), timestamp) if utils.has_config('tag') else timestamp
-        utils.sub_logger = utils.Logger(identifier=identifier, bound=True)
-        utils.sub_logger.register_console()
-        utils.update_config('identifier', identifier, 'runtime', silence=False)
 
     except:
         raise
 
 
 _init_config_()
-_init_logger_()
-
-
 utils.sub_logger.log_config()
 
