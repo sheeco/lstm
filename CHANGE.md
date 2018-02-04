@@ -640,10 +640,15 @@
 
 - RFCT: Major refactoring for `utils.py` & `config.py`;
 
-#### 2018-02-04
+#### [2018-02-04](6c8653c0e2065262cb96f9fec0db02b746c4fe40)
 
 - RFCT: More refactoring for `utils.py` & `config.py` (`config.default_config_groups` is removed. Configs are loaded directly
   from files; Configs are separated into 2 files. Global configs & loggers are initialized in `utils.__init__()`);
+
+#### 2018-02-04
+
+- ADD: Enable to dump predictions of desired epoch from previous execution into trace files;
+- [ ] ADD: Enable to dump pickled parameters from previous execution;
 
 
 ## To-do List
