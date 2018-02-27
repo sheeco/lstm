@@ -645,14 +645,17 @@
 - RFCT: More refactoring for `utils.py` & `config.py` (`config.default_config_groups` is removed. Configs are loaded directly
   from files; Configs are separated into 2 files. Global configs & loggers are initialized in `utils.__init__()`);
 
-#### 2018-02-04
+#### [2018-02-04](2aae8ad8ff786b4f94f72d1e04ba0d50e716e414)
 
 - ADD: Enable to dump predictions of desired epoch from previous execution into trace files;
-- [ ] ADD: Enable to dump pickled parameters from previous execution;
 
+#### 2018-02-27
+
+- OPT: for prediction dumping;
 
 ## To-do List
 
+- [ ] ADD: Enable to dump pickled parameters from previous execution;
 - [ ] OPT: Keep sampler dividing compatibale with previous version?
 - [ ] RFCT: Move `SocialLSTM.test()` into `test.py`?
 - [ ] RFCT: Change to built-in `logger`;

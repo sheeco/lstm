@@ -9,6 +9,7 @@ import getopt
 import ast
 import os
 import win32file
+import re
 
 import numpy
 import win32con
@@ -27,6 +28,8 @@ __all__ = [
     "get_sys_args",
     "get_opt",
     "literal_eval",
+    "regex_compile",
+    "regex_match",
     "warn",
     "handle",
     "sleep",
@@ -1011,6 +1014,25 @@ def literal_eval(node_or_string):
         raise
 
 
+def regex_compile(pattern):
+    try:
+        return re.compile(r'%s' % pattern)
+    except:
+        raise
+
+
+def regex_match(pattern, string):
+    try:
+        res = pattern.match(string)
+
+        if res:
+            return res.groups()
+        else:
+            return None
+    except:
+        raise
+
+
 def warn(info):
     try:
         xprint("[Warning] %s" % info, error=True)
@@ -1409,6 +1431,14 @@ def test():
 
         print "Testing utils ..."
 
+        def test_regex():
+            try:
+                pattern = regex_compile('\d{4}')
+                found = regex_match(pattern, '19.0.201800')
+                assert found == '2018'
+            except:
+                raise
+
         test_hiding()
         test_formatting()
         test_ask()
@@ -1420,6 +1450,8 @@ def test():
         test_ask_menu()
         Timer.test()
         test_abstract()
+
+        test_regex()
 
         print "Fine."
 
