@@ -649,9 +649,15 @@
 
 - ADD: Enable to dump predictions of desired epoch from previous execution into trace files;
 
-#### 2018-02-27
+#### [2018-02-27](548ee3f597a0914147579db973a6ce368886a7ba)
 
 - OPT: for prediction dumping;
+
+#### 2018-02-28
+
+- ADD: Enable to dump panning rule for trace of desired node into pan files;
+- RFCT: for `dump.py`;
+
 
 ## To-do List
 

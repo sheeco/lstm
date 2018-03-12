@@ -344,6 +344,7 @@ class Sampler:
                 self.dict_traces[inode][sec][-2:] = self.dict_traces[inode][sec][-2:] + stride
 
         self._update_traces_()
+        return stride
 
     def map_to_grid(self, grid_system=None):
 

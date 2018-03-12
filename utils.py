@@ -765,10 +765,24 @@ class Filer:
             raise
 
     @staticmethod
-    def list_directory(path):
+    def list_directory(path, pattern=None):
         Assertor.assert_exists(path)
         try:
-            return os.listdir(path)
+            dirs = os.listdir(path)
+
+            if pattern is None:
+                return dirs
+            else:
+                pattern = regex_compile(pattern)
+                matches = []
+                for subpath in dirs:
+                    match = regex_match(pattern, subpath)
+                    if match is not None:
+                        matches += [subpath]
+                        # matches += [filer.format_subpath(path, subpath=matches[0])]
+
+                return matches
+
         except:
             raise
 
@@ -884,22 +898,22 @@ class Filer:
             raise
 
     @staticmethod
-    def write(path, what):
+    def write(path, what, mode='a'):
         try:
             filer.create_path(filer.split_path(path)[0])
 
-            pfile = open(path, 'a')
+            pfile = open(path, mode)
             pfile.write(what)
             pfile.close()
         except:
             raise
 
     @staticmethod
-    def write_lines(path, what):
+    def write_lines(path, what, mode='a'):
         try:
             filer.create_path(filer.split_path(path)[0])
 
-            pfile = open(path, 'a')
+            pfile = open(path, mode)
             pfile.writelines(what)
             pfile.close()
         except:
