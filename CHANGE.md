@@ -653,10 +653,14 @@
 
 - OPT: for prediction dumping;
 
-#### 2018-02-28
+#### [2018-02-28](2ae41342e35220bc2d5882bb0281fe2dc9b65a86)
 
 - ADD: Enable to dump panning rule for trace of desired node into pan files;
 - RFCT: for `dump.py`;
+
+#### 2018-03-29
+
+- OPT: Update LSTM configs to smaller dimensions;
 
 
 ## To-do List
