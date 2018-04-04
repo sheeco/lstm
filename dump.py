@@ -34,8 +34,8 @@ class DumpPrediction:
     @staticmethod
     def save_triples_to_file(triples, path):
         try:
-            sorted = utils.sorted_items(triples)
-            lines = ['%s\t%s\t%s\n' % (sec, xy[0], xy[1]) for sec, xy in sorted]
+            sorted_triples = utils.sorted_items(triples)
+            lines = ['%s\t%s\t%s\n' % (sec, xy[0], xy[1]) for sec, xy in sorted_triples]
             utils.filer.write_lines(path, lines)
         except:
             raise
@@ -81,17 +81,17 @@ class DumpPrediction:
     @staticmethod
     def dump_predictions(rootpath, frompath, epoch, dumpname, topath=None):
         """
-		Find predictions of given epoch in training & testing logs, and dump them to given topath.
-		:param rootpath:
-		:param frompath: Log folder / the identifier of an execution
-		:param epoch: <int> epoch entry
-		:param dumpname: Filename for dumped files e.g. node id
-		:param topath: Destination path for dumping
-		"""
+        Find predictions of given epoch in training & testing logs, and dump them to given topath.
+        :param rootpath:
+        :param frompath: Log folder / the identifier of an execution
+        :param epoch: <int> epoch entry
+        :param dumpname: Filename for dumped files e.g. node id
+        :param topath: Destination path for dumping
+        """
         try:
             frompath = DumpPrediction.find_logpath(rootpath, frompath)
             frompath = utils.filer.format_subpath(frompath, subpath=utils.get_config('path_compare'), isfile=False)
-            topath = utils.get_sublogger().log_path if topath is None else topath
+            # utils.filer.create_path(topath)
 
             logname_train = 'train-epoch%d.log' % epoch
             logname_test = 'test-epoch%d.log' % epoch
@@ -125,9 +125,9 @@ class DumpPrediction:
                     utils.filer.write(dumpname_full, utils.filer.read(dumpname_train))
                     utils.filer.write(dumpname_full, utils.filer.read(dumpname_test))
                     utils.xprint(
-                            "Full predictions in '%s' & '%s' are dumped to '%s'." % (
-                                path_train, path_test, dumpname_full),
-                            newline=True)
+                        "Full predictions in '%s' & '%s' are dumped to '%s'." % (
+                            path_train, path_test, dumpname_full),
+                        newline=True)
 
             # Both are unavailable
             elif pred_train is None:
@@ -142,23 +142,23 @@ class DumpPrediction:
     @staticmethod
     def process_command_line_args(args):
         """
-        e.g. dump.py [-r | --root <root-log-folder>] [-f | --from <log-folder|identifier>] [-e | --epoch <iepoch>]
-        [-n | --name <dump-filename>] [-t | --to <dump-folder>]
+        e.g. dump.py [-p | --path <path-log-folders>] [-f | --from <folder-name-log|identifier>] [-e | --epoch <iepoch>]
+        [-n | --name <filename-dump>] [-t | --to <foler-name-dump>]
         :return:
         """
         try:
             # short-opts: "ha:i" means opt '-h' & '-i' don't take arg, '-a' does take arg
             # long-opts: ["help", "add="] means opt '--add' does take arg
-            pairs, unknowns = utils.get_opt(args, "r:f:e:n:t:c:",
-                                            longopts=["root=", "from=", "epoch=", "name=", "to=", "config="])
+            pairs, unknowns = utils.get_opt(args, "p:f:e:n:t:c:",
+                                            longopts=["path=", "from=", "epoch=", "name=", "to=", "config="])
 
             arg_root, arg_from, arg_epoch, arg_name, arg_to = None, None, None, None, None
-            mandatory_args = [('-r', '--root'),
+            mandatory_args = [('-p', '--path'),
                               ('-f', '--from'),
                               ('-e', '--epoch'),
-                              ('-n', '--name')]
-            optional_args = [('-t', '--to'),
-                             ('-c', '--config')]
+                              ('-n', '--name'),
+                              ('-t', '--to')]
+            optional_args = [('-c', '--config')]
 
             opts = [each_pair[0] for each_pair in pairs]
             for some_arg in mandatory_args:
@@ -167,7 +167,7 @@ class DumpPrediction:
                     raise ValueError("Argument '%s|%s' is mandatory." % some_arg)
 
             for opt, val in pairs:
-                if opt in ('-r', '--root'):
+                if opt in ('-p', '--path'):
                     try:
                         val = utils.literal_eval(val)
                     except ValueError, e:
@@ -248,9 +248,9 @@ class DumpPrediction:
         utils.xprint("Test arg processing ...", newline=True)
         try:
             DumpPrediction.process_command_line_args(
-                    ["-f", "'[case]2018-01-18-20-53-10'", "-e", "1", "-n", "'demo'", "-t", "'res/dump/demo'"])
+                ["-f", "'[case]2018-01-18-20-53-10'", "-e", "1", "-n", "'demo'", "-t", "'res/dump/demo'"])
             DumpPrediction.process_command_line_args(
-                    ["-f", "'[case]2018-01-18-20-53-10'", "-e", "1", "-n", "'demo'"])
+                ["-f", "'[case]2018-01-18-20-53-10'", "-e", "1", "-n", "'demo'"])
         except:
             raise
         try:
@@ -259,7 +259,7 @@ class DumpPrediction:
             utils.xprint("""Exception correctly caught: "%s"...""" % e.message, newline=True)
         try:
             DumpPrediction.process_command_line_args(
-                    ["-f", "'[case]2018-01-18-20-53-10'", "-e", "invalid-epoch", "-n", "'demo'"])
+                ["-f", "'[case]2018-01-18-20-53-10'", "-e", "invalid-epoch", "-n", "'demo'"])
         except ValueError, e:
             utils.xprint("""Exception correctly caught: "%s"...""" % e.message, newline=True)
 
@@ -388,31 +388,39 @@ class DumpPan:
             raise
 
 
-def demo():
-    args = utils.get_sys_args()[1:]
-    utils.get_sublogger().log_args(args)
-
-    if len(args) < 1:
-        raise ValueError("No command is provided.")
-
-    elif args[0] == 'prediction':
-        DumpPrediction(args[1:])
-
-    elif args[0] == 'pan':
-        DumpPan(args[1:])
-
-    else:
-        raise ValueError("Unknown command: '%s'" % args[0])
-
-
-if __name__ == '__main__':
+def init_logger():
     try:
         timestamp = utils.get_timestamp()
         utils.sub_logger = utils.Logger(identifier=timestamp)
         utils.get_sublogger().register_console()
+    except:
+        raise
 
-        # DumpPrediction.test()
-        demo()
+
+def test():
+    init_logger()
+
+    DumpPrediction.test()
+    pass
+
+
+if __name__ == '__main__':
+    try:
+        init_logger()
+
+        args = utils.get_sys_args()[1:]
+        utils.get_sublogger().log_args(args)
+        if len(args) < 1:
+            raise ValueError("No command is provided.")
+
+        elif args[0] == 'prediction':
+            DumpPrediction(args[1:])
+
+        elif args[0] == 'pan':
+            DumpPan(args[1:])
+
+        else:
+            raise ValueError("Unknown command: '%s'" % args[0])
 
     except Exception, e:
         utils.handle(e, exiting=True)
