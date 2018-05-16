@@ -662,9 +662,13 @@
 
 - OPT: Update LSTM configs to smaller dimensions;
 
-#### 2018-04-04
+#### [2018-04-04](6cb689ea54fee37f990a232e605383c601dd8982)
 
 - OPT: for prediction dumping;
+
+#### 2018-05-17
+
+- MNT: Update `README.md`;
 
 
 ## To-do List

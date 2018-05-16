@@ -1,6 +1,6 @@
 # lstm
 
-An LSTM-RNN network for multi-node trajectory predicting.
+An LSTM-RNN network for trajectory predicting.
 
 ## Dependency
 
@@ -11,7 +11,7 @@ An LSTM-RNN network for multi-node trajectory predicting.
 ## Platform
 
 - Windows 10, 64 bit
-- PyCharm Community Edition 2016.3
+- IntelliJ IDEA 2017.2.6
 
 
 ## Files
@@ -21,13 +21,14 @@ File                  | Description
 CHANGE.md             | Change log by each commit.
 default.config        | Default execution configurations as a `dict` string (plain text).
 test.py               | A demo script running default test.
+config.py             | Methods involving configuration processing.
+utils.py              | Utility methods including file operations, assertions, logging, interactions...
+dump.py               | Methods for prediction results dumping & panning rule dumping.
 lstm/\_\_init__.py    | Init file for the `lstm` module.
-lstm/config.py        | Methods involving global configuration access. (Since it's imported in each of the other files, one **MUST NOT** import any of the other in this file.)
-lstm/utils.py         | Utility methods including file operations, assertions, logging, interactions...
 lstm/sampler.py       | Class `Sampler` designed for trace sample reading, loading, saving and updating.
 lstm/model.py         | Class `SocialLSTM` that implemented the network.
 res/trace/*           | Trajectory dataset files should be put under this directory as resources. The path could be configured with keyword 'path_trace'.
-log/*                 | Log files would be stored under this folder, identified by timestamp of each execution.
+log/*                 | Log files would be generated under this folder, identified by timestamp of each execution.
 
 
 ## Usage
@@ -48,18 +49,42 @@ e.g.
 
 ### Command Line Arguments
 
+For trace prediction: (test.py)
+
 `python -O test.py [-c | --config] [-t | --tag] [-i | --import]`
 
 Short Opt   | Long Opt   | Value                                                          | Example
 ---------   | --------   | -----                                                          | -------
 `-c`        | `--config` | A wrapped `dict` string of configurations to update            | `-c "{'nodes': ['1', '2'], 'ask': False}"`
-`-t`        | `--tag`    | A string to attach to execution timestamp                      | `-t debug`
+`-t`        | `--tag`    | A string to attach to execution timestamp                      | `-t demo`
 `-i`        | `--import` | A wrapped path string of the parameter pickling file to import | `-i "log\[debug]2017-11-21-16-52-29\pickle\params-init.pkl"` 
+
+For prediction dumping: (dump.py)
+
+`python -O dump.py prediction [-p | --path <path-log-folders>] [-f | --from <folder-name-log|identifier>] 
+                              [-e | --epoch <iepoch>] [-n | --name <filename-dump>] [-t | --to <folder-name-dump>]`
+
+Short Opt   | Long Opt   | Value                                                                | Example
+---------   | --------   | -----                                                                | -------
+`-p`        | `--path`   | Where is the `log` folder?                                           | `-p ./res/log`
+`-f`        | `--from`   | Dump from which log folder? Provide folder name or timestamp string. | `-f 2018-02-01-20-45-14`
+`-e`        | `--epoch`  | Dump predictions of which epoch?                                     | `-e 108`
+`-n`        | `--name`   | Name of the output file?                                             | `-n node1`
+`-t`        | `--to`     | Dump output files to which folder?                                   | `-t ./res/dump`
+
+For panning rule dumping: (dump.py)
+
+`python -O dump.py pan [-f | --from <log-folder|identifier>] [-n | --name <dump-filename>]`
+
+Short Opt   | Long Opt   | Value                                                                | Example
+---------   | --------   | -----                                                                | -------
+`-f`        | `--from`   | Dump from which log folder? Provide folder name or timestamp string. | `-f 2018-02-01-20-45-14`
+`-n`        | `--name`   | Name of the output file?                                             | `-n node1`
 
 
 ### Configurations
 
-Configurations are pre-defined in `default.config`, with descriptions provided in the comments. 
+Configurations are pre-defined in `default.config` & `lstm/default.config`, with descriptions provided in the comments. 
 
 e.g.
 	{
@@ -108,6 +133,7 @@ Plain text files functioned as execution reports, stored under `log/`, identifie
 
 File                         | Description
 ----                         | -----------
+config.log                   | Backup for the configurations used during execution.
 args.log                     | Backup for the command line arguments.
 console.log                  | Backup for console output during execution.
 (train/test)-hitrate.log     | Hit rate percent (for multiple hit ranges) recorded by each epoch during training/testing. (the briefest level)
@@ -122,7 +148,8 @@ Also, most of the logs provide a set of column descriptions at its very first li
 
 ### Export & Import of Network Parameters
 
-Parameter values of the LSTM network could be exported or re-imported. They are extracted from (and could be re-assigned to) the network using interfaces provided by Lasagne, 
+Parameter values of the LSTM network could be exported or re-imported. 
+They are extracted from (and could be re-assigned to) the network using interfaces provided by theano, 
 and are serialized to disk files using the python serialization library `pickle`.
 
 #### Export

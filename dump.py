@@ -143,7 +143,7 @@ class DumpPrediction:
     def process_command_line_args(args):
         """
         e.g. dump.py [-p | --path <path-log-folders>] [-f | --from <folder-name-log|identifier>] [-e | --epoch <iepoch>]
-        [-n | --name <filename-dump>] [-t | --to <foler-name-dump>]
+        [-n | --name <filename-dump>] [-t | --to <folder-name-dump>]
         :return:
         """
         try:
